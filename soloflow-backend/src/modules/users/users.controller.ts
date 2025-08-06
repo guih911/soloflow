@@ -17,17 +17,20 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { AssignSectorDto } from './dto/assign-sector.dto';
+import { CreateUserCompanyDto } from './dto/create-user-company.dto';
+
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Post()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
-  }
+@Post()
+@Roles(UserRole.ADMIN, UserRole.MANAGER)
+create(@Body() createUserDto: CreateUserCompanyDto) {
+  return this.usersService.create(createUserDto);
+}
 
   @Get()
   findAll(@Request() req, @Query('companyId') companyId?: string) {
@@ -35,7 +38,7 @@ export class UsersController {
     if (req.user.role !== UserRole.ADMIN && companyId !== req.user.companyId) {
       companyId = req.user.companyId;
     }
-    return this.usersService.findAll(companyId);
+    return this.usersService.findAll(companyId!);
   }
 
   @Get('me')
@@ -59,4 +62,7 @@ export class UsersController {
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
   }
+  
+
+
 }

@@ -9,227 +9,8 @@ datasource db {
   url      = "file:./workflow.db"
 }
 
-model Company {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  cnpj      String   @unique
-  email     String?
-  phone     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relações
-  users        User[]
-  sectors      Sector[]
-  processTypes ProcessType[]
-
-  @@map("companies")
-}
-
-model Sector {
-  id        String   @id @default(uuid())
-  name      String
-  description String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relações
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id])
-  users     User[]
-  assignedSteps Step[]
-  stepExecutions StepExecution[]
-
-  @@unique([companyId, name])
-  @@map("sectors")
-}
-
-model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      UserRole @default(USER)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relações
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id])
-  
-  sectorId  String?
-  sector    Sector? @relation(fields: [sectorId], references: [id])
-  
-  assignedSteps Step[]
-  processInstances ProcessInstance[]
-  stepExecutions StepExecution[]
-  notifications Notification[]
-  attachments Attachment[]
-
-  @@map("users")
-}
-
-model ProcessType {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relações
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id])
-  
-  steps     Step[]
-  instances ProcessInstance[]
-  
-  // Campos customizados (JSON)
-  customFields Json?
-
-  @@unique([companyId, name])
-  @@map("process_types")
-}
-
-model Step {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  type        StepType
-  order       Int
-  
-  // Configurações
-  allowAttachment    Boolean @default(false)
-  requiresSignature  Boolean @default(false)
-  actions           Json?   // ["approve", "reject", "forward"]
-  conditions        Json?   // Condições para avançar
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relações
-  processTypeId String
-  processType   ProcessType @relation(fields: [processTypeId], references: [id])
-  
-  // Atribuição (usuário OU setor)
-  assignedToUserId   String?
-  assignedToUser     User?   @relation(fields: [assignedToUserId], references: [id])
-  
-  assignedToSectorId String?
-  assignedToSector   Sector? @relation(fields: [assignedToSectorId], references: [id])
-  
-  executions StepExecution[]
-
-  @@unique([processTypeId, order])
-  @@map("steps")
-}
-
-model ProcessInstance {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  priority    Priority @default(MEDIUM)
-  status      ProcessStatus @default(OPEN)
-  
-  // Dados do formulário customizado
-  formData    Json?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  completedAt DateTime?
-
-  // Relações
-  processTypeId String
-  processType   ProcessType @relation(fields: [processTypeId], references: [id])
-  
-  createdById   String
-  createdBy     User @relation(fields: [createdById], references: [id])
-  
-  currentStepId String?
-  
-  stepExecutions StepExecution[]
-  notifications  Notification[]
-
-  @@map("process_instances")
-}
-
-model StepExecution {
-  id          String   @id @default(uuid())
-  status      StepStatus @default(PENDING)
-  action      String?  // "approved", "rejected", etc
-  comment     String?
-  
-  executedAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relações
-  processInstanceId String
-  processInstance   ProcessInstance @relation(fields: [processInstanceId], references: [id])
-  
-  stepId String
-  step   Step @relation(fields: [stepId], references: [id])
-  
-  executorId String?
-  executor   User? @relation(fields: [executorId], references: [id])
-  
-  sectorId   String?
-  sector     Sector? @relation(fields: [sectorId], references: [id])
-  
-  attachments Attachment[]
-  
-  // Assinatura
-  signedPdfPath String?
-  signedAt      DateTime?
-  signatureData Json?     // Dados da assinatura (hash, IP, etc)
-
-  @@map("step_executions")
-}
-
-model Attachment {
-  id          String   @id @default(uuid())
-  filename    String
-  originalName String
-  mimeType    String
-  size        Int      // em bytes
-  path        String
-  
-  createdAt   DateTime @default(now())
-
-  // Relações
-  stepExecutionId String
-  stepExecution   StepExecution @relation(fields: [stepExecutionId], references: [id])
-  
-  uploadedById String
-  uploadedBy   User @relation(fields: [uploadedById], references: [id])
-
-  @@map("attachments")
-}
-
-model Notification {
-  id          String   @id @default(uuid())
-  type        NotificationType
-  title       String
-  message     String
-  read        Boolean  @default(false)
-  readAt      DateTime?
-  
-  createdAt   DateTime @default(now())
-
-  // Relações
-  userId String
-  user   User @relation(fields: [userId], references: [id])
-  
-  processInstanceId String?
-  processInstance   ProcessInstance? @relation(fields: [processInstanceId], references: [id])
-
-  @@map("notifications")
-}
-
 // Enums
+
 enum UserRole {
   ADMIN
   MANAGER
@@ -237,42 +18,266 @@ enum UserRole {
 }
 
 enum StepType {
-  INPUT      // Entrada de dados
-  APPROVAL   // Aprovação/Rejeição
-  UPLOAD     // Upload de arquivo
-  REVIEW     // Revisão
-  SIGNATURE  // Assinatura
-  NOTIFICATION // Notificação apenas
+  INPUT
+  APPROVAL
+  UPLOAD
+  REVIEW
+  SIGNATURE
 }
 
 enum ProcessStatus {
-  OPEN
+  DRAFT
   IN_PROGRESS
   COMPLETED
   CANCELLED
   REJECTED
 }
 
-enum StepStatus {
+enum StepExecutionStatus {
   PENDING
   IN_PROGRESS
   COMPLETED
-  SKIPPED
   REJECTED
+  SKIPPED
 }
 
-enum Priority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
+enum FieldType {
+  TEXT
+  NUMBER
+  DATE
+  EMAIL
+  CPF
+  CNPJ
+  PHONE
+  DROPDOWN
+  CHECKBOX
+  TEXTAREA
+  CURRENCY
+  FILE
 }
 
-enum NotificationType {
-  TASK_ASSIGNED
-  TASK_COMPLETED
-  PROCESS_COMPLETED
-  COMMENT_ADDED
-  ATTACHMENT_ADDED
-  SIGNATURE_REQUIRED
+// Models
+
+model Company {
+  id                String           @id @default(uuid())
+  name              String           @unique
+  cnpj              String           @unique
+  email             String?
+  phone             String?
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  // Relações
+  userCompanies     UserCompany[]
+  sectors           Sector[]
+  processTypes      ProcessType[]
+  processInstances  ProcessInstance[]
+
+  @@map("companies")
+}
+
+model User {
+  id              String           @id @default(uuid())
+  name            String
+  email           String           @unique
+  password        String
+  role            UserRole         @default(USER)
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relações
+  userCompanies    UserCompany[]
+  createdProcesses ProcessInstance[]
+  executedSteps    StepExecution[]
+  assignedSteps    Step[]           @relation("StepAssignedToUser")
+
+  @@map("users")
+}
+
+model UserCompany {
+  id              String     @id @default(uuid())
+  role            UserRole   @default(USER)
+  isDefault       Boolean    @default(false)
+  lastAccessedAt  DateTime   @default(now())
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id])
+
+  sectorId  String?
+  sector    Sector?   @relation(fields: [sectorId], references: [id])
+
+  @@unique([userId, companyId])
+  @@map("user_companies")
+}
+
+model Sector {
+  id             String           @id @default(uuid())
+  name           String
+  description    String?
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  companyId      String
+  company        Company          @relation(fields: [companyId], references: [id])
+
+  userCompanies  UserCompany[]
+  assignedSteps  Step[]           @relation("StepAssignedToSector")
+  stepExecutions StepExecution[]
+
+  @@unique([companyId, name])
+  @@map("sectors")
+}
+
+model ProcessType {
+  id           String         @id @default(uuid())
+  name         String
+  description  String?
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  companyId    String
+  company      Company        @relation(fields: [companyId], references: [id])
+
+  steps        Step[]
+  formFields   FormField[]
+  instances    ProcessInstance[]
+
+  @@unique([companyId, name])
+  @@map("process_types")
+}
+
+model FormField {
+  id            String    @id @default(uuid())
+  name          String
+  label         String
+  type          FieldType
+  placeholder   String?
+  required      Boolean   @default(false)
+  order         Int
+  options       Json?
+  validations   Json?
+  defaultValue  String?
+  helpText      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  processTypeId String
+  processType   ProcessType @relation(fields: [processTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([processTypeId, order])
+  @@map("form_fields")
+}
+
+model Step {
+  id                String     @id @default(uuid())
+  name              String
+  description       String?
+  type              StepType   @default(INPUT)
+  order             Int
+  allowAttachment   Boolean    @default(false)
+  requiresSignature Boolean    @default(false)
+  requireAttachment Boolean    @default(false)
+  minAttachments    Int?
+  maxAttachments    Int?
+  allowedFileTypes  Json?
+  actions           Json       @default("[]")
+  conditions        Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  processTypeId     String
+  processType       ProcessType @relation(fields: [processTypeId], references: [id], onDelete: Cascade)
+
+  assignedToUserId   String?
+  assignedToUser     User?     @relation("StepAssignedToUser", fields: [assignedToUserId], references: [id])
+
+  assignedToSectorId String?
+  assignedToSector   Sector?   @relation("StepAssignedToSector", fields: [assignedToSectorId], references: [id])
+
+  executions         StepExecution[]
+
+  @@unique([processTypeId, order])
+  @@map("steps")
+}
+
+model ProcessInstance {
+  id               String        @id @default(uuid())
+  code             String        @unique
+  title            String?
+  description      String?
+  status           ProcessStatus @default(IN_PROGRESS)
+  currentStepOrder Int           @default(1)
+  formData         Json?
+  metadata         Json?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  completedAt      DateTime?
+
+  processTypeId    String
+  processType      ProcessType   @relation(fields: [processTypeId], references: [id])
+
+  createdById      String
+  createdBy        User          @relation(fields: [createdById], references: [id])
+
+  companyId        String
+  company          Company       @relation(fields: [companyId], references: [id])
+
+  stepExecutions   StepExecution[]
+
+  @@map("process_instances")
+}
+
+model StepExecution {
+  id               String              @id @default(uuid())
+  status           StepExecutionStatus @default(PENDING)
+  action           String?
+  comment          String?
+  metadata         Json?
+  signedAt         DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  completedAt      DateTime?
+
+  processInstanceId String
+  processInstance   ProcessInstance @relation(fields: [processInstanceId], references: [id])
+
+  stepId            String
+  step              Step @relation(fields: [stepId], references: [id])
+
+  executorId        String?
+  executor          User? @relation(fields: [executorId], references: [id])
+
+  sectorId          String?
+  sector            Sector? @relation(fields: [sectorId], references: [id])
+
+  attachments       Attachment[]
+
+  @@map("step_executions")
+}
+
+model Attachment {
+  id                String   @id @default(uuid())
+  filename          String
+  originalName      String
+  mimeType          String
+  size              Int
+  path              String
+  isSigned          Boolean  @default(false)
+  signedPath        String?
+  signatureData     String?  // JSON
+  createdAt         DateTime @default(now())
+
+  stepExecutionId   String
+  stepExecution     StepExecution @relation(fields: [stepExecutionId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
 }

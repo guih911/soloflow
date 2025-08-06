@@ -150,15 +150,16 @@ const companyRules = [
 
 onMounted(async () => {
   try {
-    // Por enquanto, usar empresa padrão
+    // Temporariamente, buscar empresas sem autenticação
+    // Em produção, você pode ter um endpoint público para isso
+    const response = await api.get('/companies')
+    companies.value = response.data
+  } catch (error) {
+    console.error('Erro ao carregar empresas:', error)
+    // Usar empresa padrão se falhar
     companies.value = [
       { id: '1', name: 'Empresa Demo' }
     ]
-    // Quando a API estiver pronta:
-    // await companyStore.fetchCompanies()
-    // companies.value = companyStore.companies
-  } catch (error) {
-    console.error('Erro ao carregar empresas:', error)
   }
 })
 

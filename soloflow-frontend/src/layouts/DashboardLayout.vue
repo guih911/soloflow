@@ -3,14 +3,12 @@
     <!-- App Bar -->
     <v-app-bar
       color="primary"
-      elevation="0"
-      class="app-bar"
+      elevation="2"
+      app
+      height="64"
     >
-      <v-app-bar-nav-icon
-        @click="drawer = !drawer"
-        class="d-lg-none"
-      />
-
+      <v-app-bar-nav-icon @click="drawer = !drawer" />
+      
       <v-app-bar-title class="font-weight-bold">
         SoloFlow
       </v-app-bar-title>
@@ -20,165 +18,216 @@
       <!-- User Menu -->
       <v-menu offset-y>
         <template v-slot:activator="{ props }">
-          <v-btn
-            v-bind="props"
-            variant="text"
-            class="text-none"
-          >
-            <v-avatar size="32" class="mr-2">
-              <v-icon>mdi-account-circle</v-icon>
+          <v-btn v-bind="props" variant="text" class="text-none">
+            <v-avatar size="32" class="mr-2" color="white">
+              <span class="text-primary font-weight-bold">U</span>
             </v-avatar>
             <span class="d-none d-sm-inline">{{ user?.name }}</span>
-            <v-icon right>mdi-menu-down</v-icon>
+            <v-icon end>mdi-chevron-down</v-icon>
           </v-btn>
         </template>
 
-        <v-list>
-          <v-list-item @click="profile">
+        <v-list min-width="200">
+          <v-list-item>
+            <v-list-item-title class="text-caption text-medium-emphasis">
+               {{ user?.email }}
+            </v-list-item-title>
+          </v-list-item>
+          
+          <v-divider class="my-1" />
+          
+          <v-list-item @click="goToProfile">
             <template v-slot:prepend>
-              <v-icon>mdi-account</v-icon>
+              <v-icon color="primary" size="small">mdi-account</v-icon>
             </template>
             <v-list-item-title>Meu Perfil</v-list-item-title>
           </v-list-item>
           
-          <v-divider />
-          
-          <v-list-item @click="logout">
+          <v-list-item @click="goToSettings">
             <template v-slot:prepend>
-              <v-icon>mdi-logout</v-icon>
+              <v-icon color="primary" size="small">mdi-cog</v-icon>
             </template>
-            <v-list-item-title>Sair</v-list-item-title>
+            <v-list-item-title>Configurações</v-list-item-title>
+          </v-list-item>
+          
+          <v-divider class="my-1" />
+          
+          <v-list-item @click="handleLogout" class="text-error">
+            <template v-slot:prepend>
+              <v-icon color="error" size="small">mdi-logout</v-icon>
+            </template>
+            <v-list-item-title>Sair do Sistema</v-list-item-title>
           </v-list-item>
         </v-list>
       </v-menu>
     </v-app-bar>
 
     <!-- Navigation Drawer -->
-    <v-navigation-drawer
-      v-model="drawer"
-      :rail="rail"
-      permanent
-      @click="rail = false"
-      class="navigation-drawer"
+    <v-navigation-drawer 
+      v-model="drawer" 
+      app 
+      :width="250"
+      style="top: 64px !important; height: calc(100vh - 64px) !important;"
     >
-      <v-list nav density="comfortable">
-        <v-list-item
-          v-for="item in visibleMenuItems"
-          :key="item.title"
-          :to="item.to"
-          :prepend-icon="item.icon"
-          :title="item.title"
-          color="primary"
+      <v-list nav density="compact" class="pt-4">
+        <!-- Dashboard -->
+        <v-list-item 
+          @click="goTo('/dashboard')"
+          class="mx-3 my-1"
           rounded="xl"
-          class="mx-2 my-1"
-        />
-      </v-list>
+        >
+          <template v-slot:prepend>
+            <v-icon size="20">mdi-view-dashboard</v-icon>
+          </template>
+          <v-list-item-title class="text-body-2">Dashboard</v-list-item-title>
+        </v-list-item>
 
-      <template v-slot:append>
-        <div class="pa-2">
-          <v-btn
-            block
-            @click="rail = !rail"
-            variant="text"
-            class="d-none d-lg-flex"
-          >
-            <v-icon>
-              {{ rail ? 'mdi-menu' : 'mdi-menu-open' }}
-            </v-icon>
-          </v-btn>
-        </div>
-      </template>
+          <!-- Processos -->
+        <v-list-item 
+          @click="goTo('/processes')"
+          class="mx-3 my-1"
+          rounded="xl"
+        >
+          <template v-slot:prepend>
+            <v-icon size="20">mdi-clipboard-list</v-icon>
+          </template>
+          <v-list-item-title class="text-body-2">Processos</v-list-item-title>
+        </v-list-item>
+
+
+        <!-- Gerenciar Processos -->
+        <v-list-item 
+          @click="goTo('/manageprocesses')"
+          class="mx-3 my-1"
+          rounded="xl"
+        >
+          <template v-slot:prepend>
+            <v-icon size="20">mdi-clipboard-edit</v-icon>
+          </template>
+          <v-list-item-title class="text-body-2">Gerenciar Processos</v-list-item-title>
+        </v-list-item>
+
+        <!-- Tipos de Processo -->
+        <v-list-item 
+          @click="goTo('/process-types')"
+          class="mx-3 my-1"
+          rounded="xl"
+        >
+          <template v-slot:prepend>
+            <v-icon size="20">mdi-file-cog</v-icon>
+          </template>
+          <v-list-item-title class="text-body-2">Tipos de Processo</v-list-item-title>
+        </v-list-item>
+
+        <!-- Tasks -->
+        <v-list-item 
+          @click="goTo('/mytasks')"
+          class="mx-3 my-1"
+          rounded="xl"
+        >
+          <template v-slot:prepend>
+            <v-icon size="20">mdi-clipboard-text</v-icon>
+          </template>
+          <v-list-item-title class="text-body-2">Minhas Tarefas</v-list-item-title>
+        </v-list-item>
+
+
+        <!-- Setores -->
+        <v-list-item 
+          @click="goTo('/sectors')"
+          class="mx-3 my-1"
+          rounded="xl"
+        >
+          <template v-slot:prepend>
+            <v-icon size="20">mdi-office-building</v-icon>
+          </template>
+          <v-list-item-title class="text-body-2">Setores</v-list-item-title>
+        </v-list-item>
+
+        <!-- Usuários -->
+        <v-list-item 
+          @click="goTo('/users')"
+          class="mx-3 my-1"
+          rounded="xl"
+        >
+          <template v-slot:prepend>
+            <v-icon size="20">mdi-account-group</v-icon>
+          </template>
+          <v-list-item-title class="text-body-2">Usuários</v-list-item-title>
+        </v-list-item>
+
+        <!-- Empresas -->
+        <v-list-item 
+          @click="goTo('/companies')"
+          class="mx-3 my-1"
+          rounded="xl"
+        >
+          <template v-slot:prepend>
+            <v-icon size="20">mdi-domain</v-icon>
+          </template>
+          <v-list-item-title class="text-body-2">Empresas</v-list-item-title>
+        </v-list-item>
+      </v-list>
     </v-navigation-drawer>
 
     <!-- Main Content -->
-    <v-main class="main-content">
-      <v-container fluid class="pa-4">
-        <transition name="fade" mode="out-in">
-          <router-view />
-        </transition>
-      </v-container>
+    <v-main style="padding-top: 64px !important;">
+      <div style="padding: 24px;">
+        <router-view />
+      </div>
     </v-main>
   </v-app>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { ref,computed } from 'vue'
 
-const router = useRouter()
 const authStore = useAuthStore()
-
 const drawer = ref(true)
-const rail = ref(false)
-
 const user = computed(() => authStore.user)
 
-const menuItems = [
-  {
-    title: 'Dashboard',
-    icon: 'mdi-view-dashboard',
-    to: '/dashboard',
-    roles: ['ADMIN', 'MANAGER', 'USER']
-  },
-  {
-    title: 'Processos',
-    icon: 'mdi-file-document-multiple',
-    to: '/processes',
-    roles: ['ADMIN', 'MANAGER', 'USER']
-  },
-  {
-    title: 'Tipos de Processo',
-    icon: 'mdi-file-cog',
-    to: '/process-types',
-    roles: ['ADMIN', 'MANAGER']
-  },
-  {
-    title: 'Usuários',
-    icon: 'mdi-account-group',
-    to: '/users',
-    roles: ['ADMIN', 'MANAGER']
-  },
-  {
-    title: 'Empresas',
-    icon: 'mdi-domain',
-    to: '/companies',
-    roles: ['ADMIN']
+// Função simples de navegação
+function goTo(path) {
+  console.log('Indo para:', path)
+  try {
+    window.location.href = path
+  } catch (error) {
+    console.error('Erro na navegação:', error)
   }
-]
-
-const visibleMenuItems = computed(() => {
-  const userRole = authStore.userRole
-  return menuItems.filter(item => item.roles.includes(userRole))
-})
-
-onMounted(() => {
-  // Ajustar drawer baseado no tamanho da tela
-  if (window.innerWidth < 1280) {
-    drawer.value = false
-  }
-})
-
-function profile() {
-  router.push('/profile')
 }
 
-function logout() {
-  authStore.logout()
+// Funções do menu do usuário
+function goToProfile() {
+  console.log('Ir para perfil')
+  goTo('/profile')
+}
+
+function goToSettings() {
+  console.log('Ir para configurações')
+  goTo('/settings')
+}
+
+function handleLogout() {
+  
+  
+
+    // Limpar dados
+    localStorage.clear()
+    sessionStorage.clear()
+    
+    // Redirecionar
+    window.location.href = '/login'
+  
 }
 </script>
 
 <style scoped>
-.app-bar {
-  z-index: 1000 !important;
+.v-list-item {
+  cursor: pointer !important;
 }
 
-.navigation-drawer {
-  padding-top: 64px;
-}
-
-.main-content {
-  background-color: #f5f5f5;
-  min-height: 100vh;
+.v-list-item:hover {
+  background-color: rgba(var(--v-theme-primary), 0.08) !important;
 }
 </style>

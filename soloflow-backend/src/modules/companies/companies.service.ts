@@ -39,28 +39,38 @@ export class CompaniesService {
     });
   }
 
-  async findOne(id: string): Promise<Company> {
-    const company = await this.prisma.company.findUnique({
-      where: { id },
-      include: {
-        users: {
-          where: { isActive: true },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
+  async findOne(id: string): Promise<Company & { users: any[] }> {
+  const company = await this.prisma.company.findUnique({
+    where: { id },
+    include: {
+      userCompanies: {
+        where: { user: { isActive: true } },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            },
           },
         },
       },
-    });
+    },
+  });
 
-    if (!company) {
-      throw new NotFoundException('Empresa não encontrada');
-    }
-
-    return company;
+  if (!company) {
+    throw new NotFoundException('Empresa não encontrada');
   }
+
+  // Para manter a compatibilidade e retornar users diretamente
+  const users = company.userCompanies.map(uc => uc.user);
+
+  return {
+    ...company,
+    users,
+  };
+}
 
   async update(id: string, updateCompanyDto: UpdateCompanyDto): Promise<Company> {
     await this.findOne(id); // Verifica se existe

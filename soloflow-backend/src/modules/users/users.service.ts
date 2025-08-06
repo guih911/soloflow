@@ -1,15 +1,16 @@
 import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserCompanyDto } from './dto/create-user-company.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from '@prisma/client';
+import { AssignUserCompanyDto } from './dto/assign-user-company.dto';
+import { User, UserCompany, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createUserDto: CreateUserDto): Promise<Omit<User, 'password'>> {
+  async create(createUserDto: CreateUserCompanyDto): Promise<any> {
     // Verificar se email já existe
     const existingUser = await this.prisma.user.findUnique({
       where: { email: createUserDto.email },
@@ -28,50 +29,95 @@ export class UsersService {
       throw new BadRequestException('Empresa não encontrada');
     }
 
+    // Se especificou setor, verificar se existe e pertence à empresa
+    if (createUserDto.sectorId) {
+      const sector = await this.prisma.sector.findFirst({
+        where: {
+          id: createUserDto.sectorId,
+          companyId: createUserDto.companyId,
+        },
+      });
+
+      if (!sector) {
+        throw new BadRequestException('Setor não encontrado ou não pertence à empresa');
+      }
+    }
+
     // Hash da senha
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-    const user = await this.prisma.user.create({
-      data: {
-        ...createUserDto,
-        password: hashedPassword,
-      },
-      include: {
-        company: true,
-      },
+    // Criar usuário e vínculo com empresa em transação
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: createUserDto.name,
+          email: createUserDto.email,
+          password: hashedPassword,
+        },
+      });
+
+      const userCompany = await tx.userCompany.create({
+        data: {
+          userId: user.id,
+          companyId: createUserDto.companyId,
+          role: createUserDto.role,
+          sectorId: createUserDto.sectorId,
+          isDefault: createUserDto.isDefault ?? true,
+        },
+        include: {
+          company: true,
+          sector: true,
+        },
+      });
+
+      return {
+        ...user,
+        company: userCompany.company,
+        role: userCompany.role,
+        sector: userCompany.sector,
+      };
     });
 
     // Remover senha do retorno
-    const { password, ...result } = user;
-    return result;
+    const { password, ...userWithoutPassword } = result;
+    return userWithoutPassword;
   }
 
-  async findAll(companyId?: string): Promise<Omit<User, 'password'>[]> {
-    const users = await this.prisma.user.findMany({
+  async findAll(companyId: string): Promise<any[]> {
+    const userCompanies = await this.prisma.userCompany.findMany({
       where: {
-        isActive: true,
-        ...(companyId && { companyId }),
+        companyId,
+        user: { isActive: true },
       },
       include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        user: true,
+        sector: true,
       },
-      orderBy: { name: 'asc' },
+      orderBy: { user: { name: 'asc' } },
     });
 
-    // Remover senhas
-    return users.map(({ password, ...user }) => user);
+    return userCompanies.map(uc => ({
+      id: uc.user.id,
+      name: uc.user.name,
+      email: uc.user.email,
+      role: uc.role,
+      sector: uc.sector,
+      isActive: uc.user.isActive,
+      createdAt: uc.user.createdAt,
+    }));
   }
 
-  async findOne(id: string): Promise<Omit<User, 'password'>> {
+  async findOne(id: string, companyId?: string): Promise<any> {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        company: true,
+        userCompanies: {
+          where: companyId ? { companyId } : undefined,
+          include: {
+            company: true,
+            sector: true,
+          },
+        },
       },
     });
 
@@ -86,21 +132,15 @@ export class UsersService {
   async findByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({
       where: { email },
-      include: {
-        company: true,
-      },
     });
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<Omit<User, 'password'>> {
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<any> {
     await this.findOne(id);
 
     const user = await this.prisma.user.update({
       where: { id },
       data: updateUserDto,
-      include: {
-        company: true,
-      },
     });
 
     const { password, ...result } = user;
@@ -123,6 +163,141 @@ export class UsersService {
     await this.prisma.user.update({
       where: { id },
       data: { isActive: false },
+    });
+  }
+
+  async assignUserToCompany(assignDto: AssignUserCompanyDto): Promise<UserCompany> {
+    // Verificar se usuário existe
+    const user = await this.prisma.user.findUnique({
+      where: { id: assignDto.userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    // Verificar se empresa existe
+    const company = await this.prisma.company.findUnique({
+      where: { id: assignDto.companyId },
+    });
+
+    if (!company) {
+      throw new NotFoundException('Empresa não encontrada');
+    }
+
+    // Verificar se já existe vínculo
+    const existingLink = await this.prisma.userCompany.findUnique({
+      where: {
+        userId_companyId: {
+          userId: assignDto.userId,
+          companyId: assignDto.companyId,
+        },
+      },
+    });
+
+    if (existingLink) {
+      throw new ConflictException('Usuário já está vinculado a esta empresa');
+    }
+
+    // Se especificou setor, verificar se existe e pertence à empresa
+    if (assignDto.sectorId) {
+      const sector = await this.prisma.sector.findFirst({
+        where: {
+          id: assignDto.sectorId,
+          companyId: assignDto.companyId,
+        },
+      });
+
+      if (!sector) {
+        throw new BadRequestException('Setor não encontrado ou não pertence à empresa');
+      }
+    }
+
+    // Se é o primeiro vínculo, definir como padrão
+    const userCompanyCount = await this.prisma.userCompany.count({
+      where: { userId: assignDto.userId },
+    });
+
+    return this.prisma.userCompany.create({
+      data: {
+        userId: assignDto.userId,
+        companyId: assignDto.companyId,
+        role: assignDto.role,
+        sectorId: assignDto.sectorId,
+        isDefault: assignDto.isDefault ?? userCompanyCount === 0,
+      },
+      include: {
+        company: true,
+        sector: true,
+      },
+    });
+  }
+
+  async updateUserCompany(
+    userId: string,
+    companyId: string,
+    data: { role?: UserRole; sectorId?: string | null }
+  ): Promise<UserCompany> {
+    const userCompany = await this.prisma.userCompany.findUnique({
+      where: {
+        userId_companyId: { userId, companyId },
+      },
+    });
+
+    if (!userCompany) {
+      throw new NotFoundException('Vínculo não encontrado');
+    }
+
+    // Se está atualizando setor, verificar se pertence à empresa
+    if (data.sectorId !== undefined && data.sectorId !== null) {
+      const sector = await this.prisma.sector.findFirst({
+        where: {
+          id: data.sectorId,
+          companyId,
+        },
+      });
+
+      if (!sector) {
+        throw new BadRequestException('Setor não encontrado ou não pertence à empresa');
+      }
+    }
+
+    return this.prisma.userCompany.update({
+      where: {
+        userId_companyId: { userId, companyId },
+      },
+      data,
+      include: {
+        company: true,
+        sector: true,
+      },
+    });
+  }
+
+  async removeUserFromCompany(userId: string, companyId: string): Promise<void> {
+    const userCompany = await this.prisma.userCompany.findUnique({
+      where: {
+        userId_companyId: { userId, companyId },
+      },
+    });
+
+    if (!userCompany) {
+      throw new NotFoundException('Vínculo não encontrado');
+    }
+
+    // Verificar se não é o único vínculo
+    const count = await this.prisma.userCompany.count({
+      where: { userId },
+    });
+
+    if (count === 1) {
+      throw new BadRequestException('Usuário deve estar vinculado a pelo menos uma empresa');
+    }
+
+    await this.prisma.userCompany.delete({
+      where: {
+        userId_companyId: { userId, companyId },
+      },
     });
   }
 }

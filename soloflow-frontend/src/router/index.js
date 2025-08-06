@@ -5,14 +5,42 @@ import { useAuthStore } from '@/stores/auth'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import DashboardLayout from '@/layouts/DashboardLayout.vue'
 
-// Views
+// Views - Auth
 import Login from '@/views/auth/Login.vue'
 import Register from '@/views/auth/Register.vue'
+
+// Views - Dashboard
 import Dashboard from '@/views/Dashboard.vue'
+
+// Views - Companies
 import Companies from '@/views/companies/Companies.vue'
+
+// Views - Users
 import Users from '@/views/users/Users.vue'
+
+// Views - Sectors
+import Sectors from '@/views/sectors/Sectors.vue'
+
+// Views - Process Types
 import ProcessTypes from '@/views/processes/ProcessTypes.vue'
+import ProcessTypeEditor from '@/views/processes/ProcessTypeEditor.vue'
+
+// Views - Processes
 import Processes from '@/views/processes/Processes.vue'
+import ProcessDetail from '@/views/processes/ProcessDetail.vue'
+import StepExecution from '@/views/processes/StepExecution.vue'
+
+
+// Views - Tasks
+import MyTasks from '@/views/tasks/MyTasks.vue'
+
+// Views - ManageProcesses
+import ManageProcesses from '@/views/processes/ManageProcesses.vue'
+
+
+// Outras importações
+import path from 'path'
+import { components } from 'vuetify/dist/vuetify.js'
 
 const routes = [
   {
@@ -53,29 +81,94 @@ const routes = [
         name: 'Dashboard',
         component: Dashboard,
       },
+      // Companies
       {
         path: '/companies',
         name: 'Companies',
         component: Companies,
-        meta: { requiresRole: ['ADMIN'] },
+        
       },
+      // Users
       {
         path: '/users',
         name: 'Users',
         component: Users,
-        meta: { requiresRole: ['ADMIN', 'MANAGER'] },
+   
       },
+      // Sectors
+      {
+        path: '/sectors',
+        name: 'Sectors',
+        component: Sectors,
+      
+      },
+      //CreateProcess
+         {
+        path: '/sectors',
+        name: 'Sectors',
+        component: Sectors,
+      
+      },
+      // Types Process
       {
         path: '/process-types',
         name: 'ProcessTypes',
         component: ProcessTypes,
-        meta: { requiresRole: ['ADMIN', 'MANAGER'] },
+       
       },
+
+      // Manage Processes
+         {
+        path: '/manageprocesses',
+        name: 'ManageProcesses',
+        component: ManageProcesses,
+       
+      },
+
+
+      // Process Types
+      {
+        path: '/process-types',
+        name: 'ProcessTypes',
+        component: ProcessTypes,
+       
+      },
+      {
+        path: '/process-types/new',
+        name: 'ProcessTypeNew',
+        component: ProcessTypeEditor,
+        
+      },
+      {
+        path: '/process-types/:id/edit',
+        name: 'ProcessTypeEdit',
+        component: ProcessTypeEditor,
+        
+      },
+      
+      // Processes
       {
         path: '/processes',
         name: 'Processes',
         component: Processes,
       },
+      {
+        path: '/processes/:id',
+        name: 'ProcessDetail',
+        component: ProcessDetail,
+      },
+      {
+        path: '/processes/:id/execute/:stepId',
+        name: 'StepExecution',
+        component: StepExecution,
+      },
+
+      //Tasks
+      {
+        path: '/mytasks',
+        name: 'mytasks',
+        component: MyTasks
+      }
     ],
   },
   {
