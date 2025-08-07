@@ -5,6 +5,7 @@ import { ExecuteStepDto } from './dto/execute-step.dto';
 import { ValidateSignatureDto } from './dto/validate-signature.dto';
 import { ProcessInstance, StepExecution, ProcessStatus, StepExecutionStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ProcessesService {
@@ -21,15 +22,23 @@ export class ProcessesService {
 
     if (!processType) throw new NotFoundException('Tipo de processo não encontrado');
 
+    // Buscar companyId do usuário
+    const userCompany = await this.prisma.userCompany.findFirst({
+      where: { userId },
+      include: { company: true },
+    });
+
+    if (!userCompany) throw new BadRequestException('Usuário não está vinculado a nenhuma empresa');
+
     const createdInstance = await this.prisma.processInstance.create({
       data: {
         processTypeId: createDto.processTypeId,
         createdById: userId,
-        companyId: processType.companyId,
+        companyId: userCompany.companyId,
         title: createDto.title,
         description: createDto.description,
         formData: createDto.formData ?? undefined,
-        metadata: createDto['metadata'] ?? undefined,
+        metadata: createDto.metadata ?? undefined,
         code: await this.generateProcessCode(),
       },
     });
@@ -42,7 +51,290 @@ export class ProcessesService {
       })),
     });
 
-    return createdInstance;
+    return this.findOne(createdInstance.id, userId);
+  }
+
+  // ✅ NOVO: Listar todos os processos da empresa
+async findAll(companyId: string, userId: string, filters: any = {}) {
+  const andConditions: Prisma.ProcessInstanceWhereInput[] = [];
+
+  if (filters.status) {
+    andConditions.push({ status: filters.status });
+  }
+
+  if (filters.processTypeId) {
+    andConditions.push({ processTypeId: filters.processTypeId });
+  }
+
+  if (filters.search) {
+    andConditions.push({
+      OR: [
+        { code: { contains: filters.search}},
+        { title: { contains: filters.search} },
+        { description: { contains: filters.search} },
+      ],
+    });
+  }
+
+  const where: Prisma.ProcessInstanceWhereInput = {
+    companyId,
+    ...(andConditions.length > 0 && { AND: andConditions }),
+  };
+
+  const processes = await this.prisma.processInstance.findMany({
+    where,
+    include: {
+      processType: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+        },
+      },
+      createdBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      stepExecutions: {
+        include: {
+          step: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              order: true,
+            },
+          },
+          attachments: {
+            select: {
+              id: true,
+              originalName: true,
+              isSigned: true,
+            },
+          },
+        },
+        orderBy: { step: { order: 'asc' } },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return processes;
+}
+
+
+  // ✅ NOVO: Buscar processo específico
+  async findOne(processId: string, userId: string) {
+    const process = await this.prisma.processInstance.findUnique({
+      where: { id: processId },
+      include: {
+        processType: {
+          include: {
+            steps: { orderBy: { order: 'asc' } },
+            formFields: { orderBy: { order: 'asc' } },
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        stepExecutions: {
+          include: {
+            step: {
+              include: {
+                assignedToUser: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+                assignedToSector: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+            executor: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            attachments: {
+              select: {
+                id: true,
+                filename: true,
+                originalName: true,
+                mimeType: true,
+                size: true,
+                isSigned: true,
+                createdAt: true,
+              },
+            },
+          },
+          orderBy: { step: { order: 'asc' } },
+        },
+      },
+    });
+
+    if (!process) throw new NotFoundException('Processo não encontrado');
+
+    // Verificar permissão
+    await this.checkViewPermission(process, userId);
+
+    return process;
+  }
+
+  // ✅ NOVO: Buscar tarefas do usuário logado
+  async getMyTasks(userId: string, companyId: string) {
+    // Buscar setor do usuário
+    const userCompany = await this.prisma.userCompany.findFirst({
+      where: { userId, companyId },
+      include: { sector: true },
+    });
+
+    const tasks = await this.prisma.stepExecution.findMany({
+      where: {
+        status: 'IN_PROGRESS',
+        processInstance: { companyId },
+        OR: [
+          { step: { assignedToUserId: userId } },
+          { step: { assignedToSectorId: userCompany?.sectorId } },
+        ],
+      },
+      include: {
+        step: {
+          include: {
+            assignedToUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            assignedToSector: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        processInstance: {
+          include: {
+            processType: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        attachments: {
+          select: {
+            id: true,
+            originalName: true,
+            isSigned: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return tasks;
+  }
+
+  // ✅ NOVO: Buscar processos criados pelo usuário
+  async getCreatedByUser(userId: string, companyId: string) {
+    return this.prisma.processInstance.findMany({
+      where: {
+        createdById: userId,
+        companyId,
+      },
+      include: {
+        processType: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        stepExecutions: {
+          select: {
+            id: true,
+            status: true,
+            step: {
+              select: {
+                name: true,
+                order: true,
+              },
+            },
+          },
+          orderBy: { step: { order: 'asc' } },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ✅ NOVO: Estatísticas para dashboard
+  async getDashboardStats(userId: string, companyId: string) {
+    const [
+      totalProcesses,
+      activeProcesses,
+      completedProcesses,
+      myTasks,
+      recentProcesses,
+    ] = await Promise.all([
+      // Total de processos
+      this.prisma.processInstance.count({
+        where: { companyId },
+      }),
+      // Processos ativos
+      this.prisma.processInstance.count({
+        where: { companyId, status: 'IN_PROGRESS' },
+      }),
+      // Processos concluídos
+      this.prisma.processInstance.count({
+        where: { companyId, status: 'COMPLETED' },
+      }),
+      // Minhas tarefas pendentes
+      this.getMyTasks(userId, companyId),
+      // Processos recentes
+      this.prisma.processInstance.findMany({
+        where: { companyId },
+        include: {
+          processType: { select: { name: true } },
+          createdBy: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+    ]);
+
+    return {
+      totalProcesses,
+      activeProcesses,
+      completedProcesses,
+      pendingTasks: myTasks.length,
+      recentProcesses,
+    };
   }
 
   async executeStep(executeDto: ExecuteStepDto, userId: string): Promise<StepExecution> {
@@ -72,7 +364,9 @@ export class ProcessesService {
     }
 
     if (stepExecution.step.requireAttachment) {
-      const attachmentCount = await this.prisma.attachment.count({ where: { stepExecutionId: executeDto.stepExecutionId } });
+      const attachmentCount = await this.prisma.attachment.count({ 
+        where: { stepExecutionId: executeDto.stepExecutionId } 
+      });
       const minAttachments = stepExecution.step.minAttachments || 1;
       if (attachmentCount < minAttachments)
         throw new BadRequestException(`Esta etapa requer no mínimo ${minAttachments} anexo(s)`);
@@ -167,7 +461,11 @@ export class ProcessesService {
       data: { isSigned: true, signedPath: `signed-${attachment.filename}` },
     });
 
-    await this.prisma.stepExecution.update({ where: { id: stepExecutionId }, data: { signedAt: new Date() } });
+    await this.prisma.stepExecution.update({ 
+      where: { id: stepExecutionId }, 
+      data: { signedAt: new Date() } 
+    });
+    
     return { attachment: updatedAttachment };
   }
 
@@ -188,12 +486,16 @@ export class ProcessesService {
   }
 
   private async checkViewPermission(instance: any, userId: string): Promise<void> {
-    const userCompany = await this.prisma.userCompany.findFirst({ where: { userId, companyId: instance.processType.companyId } });
+    const userCompany = await this.prisma.userCompany.findFirst({ 
+      where: { userId, companyId: instance.companyId } 
+    });
     if (!userCompany) throw new ForbiddenException('Sem permissão para visualizar este processo');
   }
 
   private async checkExecutePermission(stepExecution: any, userId: string): Promise<void> {
-    const userCompany = await this.prisma.userCompany.findFirst({ where: { userId, companyId: stepExecution.processInstance.companyId } });
+    const userCompany = await this.prisma.userCompany.findFirst({ 
+      where: { userId, companyId: stepExecution.processInstance.companyId } 
+    });
     if (!userCompany) throw new ForbiddenException('Sem permissão');
 
     const step = stepExecution.step;
@@ -213,33 +515,51 @@ export class ProcessesService {
       if (value !== undefined && value !== null && value !== '') {
         switch (field.type) {
           case 'EMAIL':
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw new BadRequestException(`Campo "${field.label}" deve ser um email válido`);
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) 
+              throw new BadRequestException(`Campo "${field.label}" deve ser um email válido`);
             break;
           case 'CPF':
-            if (!/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(value)) throw new BadRequestException(`Campo "${field.label}" deve ser um CPF válido`);
+            if (!/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(value)) 
+              throw new BadRequestException(`Campo "${field.label}" deve ser um CPF válido`);
             break;
           case 'CNPJ':
-            if (!/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(value)) throw new BadRequestException(`Campo "${field.label}" deve ser um CNPJ válido`);
+            if (!/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(value)) 
+              throw new BadRequestException(`Campo "${field.label}" deve ser um CNPJ válido`);
             break;
           case 'NUMBER':
-            if (isNaN(Number(value))) throw new BadRequestException(`Campo "${field.label}" deve ser um número`);
+            if (isNaN(Number(value))) 
+              throw new BadRequestException(`Campo "${field.label}" deve ser um número`);
             break;
           case 'DATE':
-            if (isNaN(Date.parse(value))) throw new BadRequestException(`Campo "${field.label}" deve ser uma data válida`);
+            if (isNaN(Date.parse(value))) 
+              throw new BadRequestException(`Campo "${field.label}" deve ser uma data válida`);
             break;
         }
         if (field.validations) {
-          const validations = typeof field.validations === 'string' ? JSON.parse(field.validations) : field.validations;
+          const validations = typeof field.validations === 'string' 
+            ? JSON.parse(field.validations) 
+            : field.validations;
+          
           if (validations.minLength && value.length < validations.minLength)
-            throw new BadRequestException(validations.customMessage || `Campo "${field.label}" deve ter no mínimo ${validations.minLength} caracteres`);
+            throw new BadRequestException(
+              validations.customMessage || `Campo "${field.label}" deve ter no mínimo ${validations.minLength} caracteres`
+            );
           if (validations.maxLength && value.length > validations.maxLength)
-            throw new BadRequestException(validations.customMessage || `Campo "${field.label}" deve ter no máximo ${validations.maxLength} caracteres`);
+            throw new BadRequestException(
+              validations.customMessage || `Campo "${field.label}" deve ter no máximo ${validations.maxLength} caracteres`
+            );
           if (validations.min && Number(value) < validations.min)
-            throw new BadRequestException(validations.customMessage || `Campo "${field.label}" deve ser maior ou igual a ${validations.min}`);
+            throw new BadRequestException(
+              validations.customMessage || `Campo "${field.label}" deve ser maior ou igual a ${validations.min}`
+            );
           if (validations.max && Number(value) > validations.max)
-            throw new BadRequestException(validations.customMessage || `Campo "${field.label}" deve ser menor ou igual a ${validations.max}`);
+            throw new BadRequestException(
+              validations.customMessage || `Campo "${field.label}" deve ser menor ou igual a ${validations.max}`
+            );
           if (validations.pattern && !new RegExp(validations.pattern).test(value))
-            throw new BadRequestException(validations.customMessage || `Campo "${field.label}" não está no formato correto`);
+            throw new BadRequestException(
+              validations.customMessage || `Campo "${field.label}" não está no formato correto`
+            );
         }
       }
     }

@@ -15,12 +15,52 @@
 
       <v-spacer />
 
+      <!-- ✅ NOVO: Seletor de Empresa -->
+      <v-menu 
+        v-if="user?.companies?.length > 1"
+        offset-y
+        class="mr-4"
+      >
+        <template v-slot:activator="{ props }">
+          <v-btn v-bind="props" variant="text" class="text-none">
+            <v-icon start>mdi-domain</v-icon>
+            {{ currentCompany?.name }}
+            <v-icon end>mdi-chevron-down</v-icon>
+          </v-btn>
+        </template>
+
+        <v-list min-width="250">
+          <v-list-subheader>Trocar empresa</v-list-subheader>
+          <v-list-item
+            v-for="company in user.companies"
+            :key="company.id"
+            @click="switchCompany(company.id)"
+            :active="company.id === currentCompany?.id"
+          >
+            <template v-slot:prepend>
+              <v-icon :color="company.id === currentCompany?.id ? 'primary' : 'grey'">
+                mdi-domain
+              </v-icon>
+            </template>
+            <v-list-item-title>{{ company.name }}</v-list-item-title>
+            <v-list-item-subtitle>{{ company.role }}</v-list-item-subtitle>
+            <template v-slot:append>
+              <v-icon v-if="company.id === currentCompany?.id" color="primary">
+                mdi-check
+              </v-icon>
+            </template>
+          </v-list-item>
+        </v-list>
+      </v-menu>
+
       <!-- User Menu -->
       <v-menu offset-y>
         <template v-slot:activator="{ props }">
           <v-btn v-bind="props" variant="text" class="text-none">
             <v-avatar size="32" class="mr-2" color="white">
-              <span class="text-primary font-weight-bold">U</span>
+              <span class="text-primary font-weight-bold">
+                {{ getUserInitials(user?.name) }}
+              </span>
             </v-avatar>
             <span class="d-none d-sm-inline">{{ user?.name }}</span>
             <v-icon end>mdi-chevron-down</v-icon>
@@ -32,6 +72,9 @@
             <v-list-item-title class="text-caption text-medium-emphasis">
                {{ user?.email }}
             </v-list-item-title>
+            <v-list-item-subtitle class="text-caption">
+              {{ currentCompany?.name }} - {{ getRoleText(currentCompany?.role) }}
+            </v-list-item-subtitle>
           </v-list-item>
           
           <v-divider class="my-1" />
@@ -43,7 +86,7 @@
             <v-list-item-title>Meu Perfil</v-list-item-title>
           </v-list-item>
           
-          <v-list-item @click="goToSettings">
+          <v-list-item @click="goToSettings" v-if="user?.role === 'ADMIN'">
             <template v-slot:prepend>
               <v-icon color="primary" size="small">mdi-cog</v-icon>
             </template>
@@ -72,7 +115,7 @@
       <v-list nav density="compact" class="pt-4">
         <!-- Dashboard -->
         <v-list-item 
-          @click="goTo('/dashboard')"
+          :to="{ name: 'Dashboard' }"
           class="mx-3 my-1"
           rounded="xl"
         >
@@ -82,22 +125,22 @@
           <v-list-item-title class="text-body-2">Dashboard</v-list-item-title>
         </v-list-item>
 
-          <!-- Processos -->
+        <!-- Processos -->
         <v-list-item 
-          @click="goTo('/processes')"
+          :to="{ name: 'Processes' }"
           class="mx-3 my-1"
           rounded="xl"
         >
           <template v-slot:prepend>
             <v-icon size="20">mdi-clipboard-list</v-icon>
           </template>
-          <v-list-item-title class="text-body-2">Processos</v-list-item-title>
+          <v-list-item-title class="text-body-2">Criar Processo</v-list-item-title>
         </v-list-item>
-
 
         <!-- Gerenciar Processos -->
         <v-list-item 
-          @click="goTo('/manageprocesses')"
+          v-if="canAccess(['ADMIN', 'MANAGER'])"
+          :to="{ name: 'ManageProcesses' }"
           class="mx-3 my-1"
           rounded="xl"
         >
@@ -107,21 +150,9 @@
           <v-list-item-title class="text-body-2">Gerenciar Processos</v-list-item-title>
         </v-list-item>
 
-        <!-- Tipos de Processo -->
+        <!-- Minhas Tarefas -->
         <v-list-item 
-          @click="goTo('/process-types')"
-          class="mx-3 my-1"
-          rounded="xl"
-        >
-          <template v-slot:prepend>
-            <v-icon size="20">mdi-file-cog</v-icon>
-          </template>
-          <v-list-item-title class="text-body-2">Tipos de Processo</v-list-item-title>
-        </v-list-item>
-
-        <!-- Tasks -->
-        <v-list-item 
-          @click="goTo('/mytasks')"
+          :to="{ name: 'MyTasks' }"
           class="mx-3 my-1"
           rounded="xl"
         >
@@ -131,10 +162,42 @@
           <v-list-item-title class="text-body-2">Minhas Tarefas</v-list-item-title>
         </v-list-item>
 
+        <!-- ✅ NOVO: Assinaturas Pendentes -->
+        <v-list-item 
+          :to="{ name: 'PendingSignatures' }"
+          class="mx-3 my-1"
+          rounded="xl"
+        >
+          <template v-slot:prepend>
+            <v-icon size="20">mdi-draw-pen</v-icon>
+          </template>
+          <v-list-item-title class="text-body-2">Assinaturas Pendentes</v-list-item-title>
+        </v-list-item>
+
+        <v-divider class="my-3" />
+
+        <!-- Configurações (apenas para ADMIN/MANAGER) -->
+        <v-list-subheader v-if="canAccess(['ADMIN', 'MANAGER'])">
+          CONFIGURAÇÕES
+        </v-list-subheader>
+
+        <!-- Tipos de Processo -->
+        <v-list-item 
+          v-if="canAccess(['ADMIN', 'MANAGER'])"
+          :to="{ name: 'ProcessTypes' }"
+          class="mx-3 my-1"
+          rounded="xl"
+        >
+          <template v-slot:prepend>
+            <v-icon size="20">mdi-file-cog</v-icon>
+          </template>
+          <v-list-item-title class="text-body-2">Tipos de Processo</v-list-item-title>
+        </v-list-item>
 
         <!-- Setores -->
         <v-list-item 
-          @click="goTo('/sectors')"
+          v-if="canAccess(['ADMIN', 'MANAGER'])"
+          :to="{ name: 'Sectors' }"
           class="mx-3 my-1"
           rounded="xl"
         >
@@ -146,7 +209,8 @@
 
         <!-- Usuários -->
         <v-list-item 
-          @click="goTo('/users')"
+          v-if="canAccess(['ADMIN', 'MANAGER'])"
+          :to="{ name: 'Users' }"
           class="mx-3 my-1"
           rounded="xl"
         >
@@ -158,7 +222,8 @@
 
         <!-- Empresas -->
         <v-list-item 
-          @click="goTo('/companies')"
+          v-if="canAccess(['ADMIN'])"
+          :to="{ name: 'Companies' }"
           class="mx-3 my-1"
           rounded="xl"
         >
@@ -176,49 +241,101 @@
         <router-view />
       </div>
     </v-main>
+
+    <!-- ✅ Snackbar Global -->
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      :timeout="3000"
+      location="top right"
+    >
+      {{ snackbar.message }}
+      <template v-slot:actions>
+        <v-btn
+          variant="text"
+          @click="snackbar.show = false"
+        >
+          Fechar
+        </v-btn>
+      </template>
+    </v-snackbar>
   </v-app>
 </template>
 
 <script setup>
+import { ref, computed, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { ref,computed } from 'vue'
 
+const router = useRouter()
 const authStore = useAuthStore()
+
 const drawer = ref(true)
 const user = computed(() => authStore.user)
+const currentCompany = computed(() => authStore.activeCompany)
 
-// Função simples de navegação
-function goTo(path) {
-  console.log('Indo para:', path)
-  try {
-    window.location.href = path
-  } catch (error) {
-    console.error('Erro na navegação:', error)
-  }
+// ✅ Snackbar global
+const snackbar = reactive({
+  show: false,
+  message: '',
+  color: 'success'
+})
+
+// Expor método global para mostrar snackbar
+window.showSnackbar = (message, color = 'success') => {
+  snackbar.message = message
+  snackbar.color = color
+  snackbar.show = true
 }
 
-// Funções do menu do usuário
+// ✅ Métodos corrigidos usando Vue Router
 function goToProfile() {
-  console.log('Ir para perfil')
-  goTo('/profile')
+  router.push({ name: 'Profile' })
 }
 
 function goToSettings() {
-  console.log('Ir para configurações')
-  goTo('/settings')
+  router.push({ name: 'Settings' })
 }
 
-function handleLogout() {
-  
-  
+async function switchCompany(companyId) {
+  try {
+    await authStore.switchCompany(companyId)
+    // A página será recarregada automaticamente
+  } catch (error) {
+    window.showSnackbar?.('Erro ao trocar empresa', 'error')
+  }
+}
 
-    // Limpar dados
+async function handleLogout() {
+  try {
+    await authStore.logout()
+    router.push('/login')
+  } catch (error) {
+    // Forçar logout mesmo se der erro
     localStorage.clear()
     sessionStorage.clear()
-    
-    // Redirecionar
-    window.location.href = '/login'
-  
+    router.push('/login')
+  }
+}
+
+// ✅ Métodos auxiliares
+function getUserInitials(name) {
+  if (!name) return 'U'
+  return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
+}
+
+function getRoleText(role) {
+  const roles = {
+    ADMIN: 'Administrador',
+    MANAGER: 'Gerente',
+    USER: 'Usuário'
+  }
+  return roles[role] || role
+}
+
+function canAccess(requiredRoles) {
+  const userRole = authStore.userRole
+  return requiredRoles.includes(userRole)
 }
 </script>
 
@@ -229,5 +346,10 @@ function handleLogout() {
 
 .v-list-item:hover {
   background-color: rgba(var(--v-theme-primary), 0.08) !important;
+}
+
+.v-list-item--active {
+  background-color: rgba(var(--v-theme-primary), 0.12) !important;
+  color: rgb(var(--v-theme-primary)) !important;
 }
 </style>

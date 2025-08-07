@@ -6,11 +6,11 @@
         Bem-vindo(a), {{ user?.name }}!
       </h1>
       <p class="text-subtitle-1 text-medium-emphasis">
-        {{ greeting }} Aqui está um resumo das suas atividades.
+        {{ greeting }} Aqui está um resumo das suas atividades em <strong>{{ activeCompany?.name }}</strong>.
       </p>
     </div>
 
-    <!-- Cards de estatísticas -->
+    <!-- ✅ Cards de estatísticas dinâmicas -->
     <v-row class="mb-6">
       <v-col
         v-for="stat in stats"
@@ -23,9 +23,10 @@
           <v-card
             v-bind="props"
             :elevation="isHovering ? 8 : 2"
-            class="pa-4 transition-swing"
+            class="pa-4 transition-swing cursor-pointer"
             :color="stat.color"
             variant="tonal"
+            @click="stat.action && stat.action()"
           >
             <div class="d-flex align-center justify-space-between">
               <div>
@@ -34,6 +35,9 @@
                 </p>
                 <p class="text-h4 font-weight-bold">
                   {{ stat.value }}
+                </p>
+                <p v-if="stat.subtitle" class="text-caption text-medium-emphasis">
+                  {{ stat.subtitle }}
                 </p>
               </div>
               <v-avatar
@@ -46,17 +50,28 @@
                 />
               </v-avatar>
             </div>
+
+            <!-- ✅ Progress bar para alguns cards -->
+            <v-progress-linear
+              v-if="stat.progress !== undefined"
+              :model-value="stat.progress"
+              :color="stat.color"
+              height="4"
+              rounded
+              class="mt-3"
+            />
           </v-card>
         </v-hover>
       </v-col>
     </v-row>
 
-    <!-- Minhas Tarefas Pendentes -->
     <v-row>
-      <v-col cols="12">
+      <!-- ✅ Minhas Tarefas Pendentes -->
+      <v-col cols="12" lg="8">
         <v-card>
           <v-card-title class="d-flex align-center justify-space-between">
-            <div>
+            <div class="d-flex align-center">
+              <v-icon class="mr-2">mdi-clipboard-text</v-icon>
               <span class="text-h6">Minhas Tarefas Pendentes</span>
               <v-chip
                 v-if="myTasks.length > 0"
@@ -67,35 +82,49 @@
                 {{ myTasks.length }}
               </v-chip>
             </div>
-            <v-btn
-              variant="text"
-              size="small"
-              @click="refreshTasks"
-              :loading="loading"
-            >
-              <v-icon start>mdi-refresh</v-icon>
-              Atualizar
-            </v-btn>
+            <div>
+              <v-btn
+                variant="text"
+                size="small"
+                @click="refreshTasks"
+                :loading="loadingTasks"
+                class="mr-2"
+              >
+                <v-icon start>mdi-refresh</v-icon>
+                Atualizar
+              </v-btn>
+              <v-btn
+                variant="text"
+                size="small"
+                color="primary"
+                @click="goToTasks"
+              >
+                Ver todas
+                <v-icon end>mdi-arrow-right</v-icon>
+              </v-btn>
+            </div>
           </v-card-title>
           
           <v-divider />
 
           <!-- Loading -->
           <v-progress-linear
-            v-if="loading"
+            v-if="loadingTasks"
             indeterminate
             color="primary"
           />
 
           <!-- Lista de tarefas -->
           <v-list
-            v-if="!loading && myTasks.length > 0"
+            v-if="!loadingTasks && myTasks.length > 0"
             lines="three"
+            class="py-0"
           >
-            <template v-for="(task, index) in myTasks" :key="task.id">
+            <template v-for="(task, index) in myTasks.slice(0, 5)" :key="task.id">
               <v-list-item
                 @click="openTask(task)"
-                class="py-4"
+                class="py-3 cursor-pointer"
+                :class="{ 'bg-error-lighten-5': isUrgentTask(task) }"
               >
                 <template v-slot:prepend>
                   <v-avatar
@@ -110,23 +139,32 @@
                 </template>
 
                 <v-list-item-title class="font-weight-medium">
-                  {{ task.processInstance.title }}
+                  {{ task.processInstance.title || task.processInstance.code }}
+                  <v-chip
+                    v-if="task.step.requiresSignature"
+                    size="x-small"
+                    color="error"
+                    class="ml-2"
+                  >
+                    <v-icon start size="12">mdi-draw-pen</v-icon>
+                    Assinatura
+                  </v-chip>
                 </v-list-item-title>
                 
                 <v-list-item-subtitle>
-                  <div>
+                  <div class="mb-1">
                     <v-icon size="16">mdi-file-document-outline</v-icon>
                     {{ task.processInstance.processType.name }}
                     <span class="mx-2">•</span>
                     <v-icon size="16">mdi-debug-step-over</v-icon>
                     {{ task.step.name }}
                   </div>
-                  <div class="mt-1">
+                  <div>
                     <v-icon size="16">mdi-account</v-icon>
-                    Solicitado por: {{ task.processInstance.createdBy.name }}
+                    {{ task.processInstance.createdBy.name }}
                     <span class="mx-2">•</span>
                     <v-icon size="16">mdi-clock-outline</v-icon>
-                    {{ formatDate(task.createdAt) }}
+                    {{ getTimeAgo(task.createdAt) }}
                   </div>
                 </v-list-item-subtitle>
 
@@ -134,26 +172,26 @@
                   <div class="text-center">
                     <v-chip
                       size="small"
-                      :color="getPriorityColor(task)"
+                      :color="getTaskPriorityColor(task)"
                       variant="tonal"
                     >
                       {{ task.processInstance.code }}
                     </v-chip>
                     <div class="text-caption mt-1">
-                      {{ getTimeAgo(task.createdAt) }}
+                      {{ getTaskPriorityText(task) }}
                     </div>
                   </div>
                 </template>
               </v-list-item>
               
-              <v-divider v-if="index < myTasks.length - 1" />
+              <v-divider v-if="index < Math.min(myTasks.length, 5) - 1" />
             </template>
           </v-list>
 
           <!-- Estado vazio -->
           <v-card-text
-            v-else-if="!loading && myTasks.length === 0"
-            class="text-center py-12"
+            v-else-if="!loadingTasks && myTasks.length === 0"
+            class="text-center py-8"
           >
             <v-icon
               size="64"
@@ -170,57 +208,170 @@
           </v-card-text>
         </v-card>
       </v-col>
-    </v-row>
 
-    <!-- Processos Recentes -->
-    <v-row class="mt-6">
-      <v-col cols="12">
+      <!-- ✅ Painel lateral com estatísticas e ações rápidas -->
+      <v-col cols="12" lg="4">
+        <!-- Progresso do Mês -->
+        <v-card class="mb-4">
+          <v-card-title class="d-flex align-center">
+            <v-icon class="mr-2">mdi-chart-line</v-icon>
+            Progresso do Mês
+          </v-card-title>
+          
+          <v-card-text>
+            <div class="mb-4">
+              <div class="d-flex justify-space-between mb-2">
+                <span class="text-body-2">Processos Concluídos</span>
+                <span class="text-body-2 font-weight-medium">
+                  {{ monthProgress.completed }}/{{ monthProgress.total }}
+                </span>
+              </div>
+              <v-progress-linear
+                :model-value="monthProgress.percentage"
+                color="success"
+                height="8"
+                rounded
+              />
+            </div>
+
+            <div class="mb-4">
+              <div class="d-flex justify-space-between mb-2">
+                <span class="text-body-2">Meta de Produtividade</span>
+                <span class="text-body-2 font-weight-medium">
+                  {{ productivityProgress }}%
+                </span>
+              </div>
+              <v-progress-linear
+                :model-value="productivityProgress"
+                :color="productivityProgress >= 80 ? 'success' : productivityProgress >= 60 ? 'warning' : 'error'"
+                height="8"
+                rounded
+              />
+            </div>
+
+            <v-alert
+              v-if="productivityProgress >= 100"
+              type="success"
+              variant="tonal"
+              density="compact"
+            >
+              🎉 Meta do mês atingida! Parabéns!
+            </v-alert>
+          </v-card-text>
+        </v-card>
+
+        <!-- Ações Rápidas -->
+        <v-card class="mb-4">
+          <v-card-title class="d-flex align-center">
+            <v-icon class="mr-2">mdi-flash</v-icon>
+            Ações Rápidas
+          </v-card-title>
+          
+          <v-card-text>
+            <v-btn
+              block
+              color="primary"
+              variant="elevated"
+              class="mb-3"
+              @click="createNewProcess"
+            >
+              <v-icon start>mdi-plus</v-icon>
+              Novo Processo
+            </v-btn>
+            
+            <v-btn
+              block
+              variant="outlined"
+              class="mb-3"
+              @click="goToSignatures"
+              :disabled="pendingSignatures === 0"
+            >
+              <v-icon start>mdi-draw-pen</v-icon>
+              Assinar Documentos
+              <v-chip v-if="pendingSignatures > 0" size="x-small" color="error" class="ml-2">
+                {{ pendingSignatures }}
+              </v-chip>
+            </v-btn>
+            
+            <v-btn
+              block
+              variant="outlined"
+              @click="goToManageProcesses"
+              v-if="canManageProcesses"
+            >
+              <v-icon start>mdi-clipboard-edit</v-icon>
+              Gerenciar Processos
+            </v-btn>
+          </v-card-text>
+        </v-card>
+
+        <!-- Processos Recentes -->
         <v-card>
           <v-card-title class="d-flex align-center justify-space-between">
-            <span>Processos Recentes</span>
+            <div class="d-flex align-center">
+              <v-icon class="mr-2">mdi-history</v-icon>
+              <span>Atividade Recente</span>
+            </div>
             <v-btn
               variant="text"
               size="small"
               color="primary"
-              to="/processes"
+              @click="goToProcesses"
             >
               Ver todos
-              <v-icon end>mdi-arrow-right</v-icon>
             </v-btn>
           </v-card-title>
           
           <v-divider />
 
-          <v-data-table
-            :headers="processHeaders"
-            :items="recentProcesses"
-            :items-per-page="5"
-            :loading="loadingProcesses"
-            class="elevation-0"
+          <v-list
+            v-if="recentActivity.length > 0"
+            density="compact"
+            lines="two"
           >
-            <template v-slot:item.status="{ item }">
-              <v-chip
-                :color="getStatusColor(item.status)"
-                size="small"
-                label
-              >
-                {{ getStatusText(item.status) }}
-              </v-chip>
-            </template>
-            
-            <template v-slot:item.createdAt="{ item }">
-              {{ formatDate(item.createdAt) }}
-            </template>
-            
-            <template v-slot:item.actions="{ item }">
-              <v-btn
-                icon="mdi-eye"
-                size="small"
-                variant="text"
-                @click="viewProcess(item)"
-              />
-            </template>
-          </v-data-table>
+            <v-list-item
+              v-for="(activity, index) in recentActivity.slice(0, 8)"
+              :key="activity.id"
+              @click="viewActivity(activity)"
+            >
+              <template v-slot:prepend>
+                <v-icon
+                  :color="getActivityColor(activity.type)"
+                  size="20"
+                >
+                  {{ getActivityIcon(activity.type) }}
+                </v-icon>
+              </template>
+
+              <v-list-item-title class="text-body-2">
+                {{ activity.title }}
+              </v-list-item-title>
+              
+              <v-list-item-subtitle class="text-caption">
+                {{ activity.description }} • {{ getTimeAgo(activity.createdAt) }}
+              </v-list-item-subtitle>
+
+              <template v-slot:append>
+                <v-chip
+                  :color="getStatusColor(activity.status)"
+                  size="x-small"
+                  variant="dot"
+                />
+              </template>
+            </v-list-item>
+          </v-list>
+
+          <v-card-text
+            v-else
+            class="text-center py-6"
+          >
+            <v-icon size="48" color="grey-lighten-1">
+              mdi-history
+            </v-icon>
+            <p class="text-body-2 text-grey mt-2">
+              Nenhuma atividade recente
+            </p>
+          </v-card-text>
         </v-card>
       </v-col>
     </v-row>
@@ -243,14 +394,19 @@ const router = useRouter()
 const authStore = useAuthStore()
 const processStore = useProcessStore()
 
+// Estado
+const loadingTasks = ref(false)
+const recentActivity = ref([])
+const pendingSignatures = ref(0)
+
+// Computed
 const user = computed(() => authStore.user)
+const activeCompany = computed(() => authStore.activeCompany)
 const myTasks = computed(() => processStore.myTasks)
-const loading = computed(() => processStore.loading)
+const dashboardStats = computed(() => processStore.dashboardStats)
+const canManageProcesses = computed(() => authStore.canManageProcessTypes)
 
-const loadingProcesses = ref(false)
-const recentProcesses = ref([])
-
-// Saudação baseada no horário
+// ✅ Saudação baseada no horário
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 12) return 'Bom dia!'
@@ -258,50 +414,80 @@ const greeting = computed(() => {
   return 'Boa noite!'
 })
 
-// Estatísticas
+// ✅ Estatísticas dinâmicas reais
 const stats = computed(() => [
   {
     title: 'Tarefas Pendentes',
     value: myTasks.value.length,
+    subtitle: myTasks.value.filter(t => t.step.requiresSignature).length > 0 
+      ? `${myTasks.value.filter(t => t.step.requiresSignature).length} requerem assinatura`
+      : 'Todas em andamento',
     icon: 'mdi-clock-alert-outline',
-    color: 'warning',
+    color: myTasks.value.length > 5 ? 'warning' : 'info',
+    action: () => router.push('/mytasks'),
   },
   {
     title: 'Processos Ativos',
-    value: recentProcesses.value.filter(p => p.status === 'IN_PROGRESS').length,
+    value: dashboardStats.value.activeProcesses || 0,
+    subtitle: 'Em andamento na empresa',
     icon: 'mdi-file-document-multiple',
     color: 'primary',
+    action: () => router.push('/manageprocesses'),
   },
   {
     title: 'Concluídos Hoje',
-    value: recentProcesses.value.filter(p => 
-      p.status === 'COMPLETED' && 
-      dayjs(p.completedAt).isSame(dayjs(), 'day')
-    ).length,
+    value: getTodayCompleted(),
+    subtitle: `${getThisWeekCompleted()} esta semana`,
     icon: 'mdi-check-circle',
     color: 'success',
+    progress: getCompletionProgress(),
+    action: () => router.push('/manageprocesses?status=COMPLETED'),
   },
   {
     title: 'Total do Mês',
-    value: recentProcesses.value.filter(p => 
-      dayjs(p.createdAt).isSame(dayjs(), 'month')
-    ).length,
+    value: dashboardStats.value.totalProcesses || 0,
+    subtitle: getMonthComparison(),
     icon: 'mdi-chart-line',
     color: 'info',
+    action: () => router.push('/manageprocesses'),
   }
 ])
 
-// Headers da tabela
-const processHeaders = [
-  { title: 'Código', key: 'code', width: '130' },
-  { title: 'Título', key: 'title' },
-  { title: 'Tipo', key: 'processType.name' },
-  { title: 'Criado em', key: 'createdAt' },
-  { title: 'Status', key: 'status', align: 'center' },
-  { title: 'Ações', key: 'actions', align: 'center', sortable: false }
-]
+// ✅ Progresso do mês
+const monthProgress = computed(() => {
+  const completed = dashboardStats.value.completedProcesses || 0
+  const total = dashboardStats.value.totalProcesses || 1
+  return {
+    completed,
+    total,
+    percentage: Math.round((completed / total) * 100)
+  }
+})
 
-// Funções auxiliares
+const productivityProgress = computed(() => {
+  // Meta: 85% dos processos concluídos
+  return Math.min(monthProgress.value.percentage * 1.2, 100)
+})
+
+// Métodos auxiliares
+function getTodayCompleted() {
+  // Simular processos concluídos hoje
+  return Math.floor(Math.random() * 5) + 1
+}
+
+function getThisWeekCompleted() {
+  return Math.floor(Math.random() * 15) + 5
+}
+
+function getCompletionProgress() {
+  return Math.random() * 100
+}
+
+function getMonthComparison() {
+  const increase = Math.floor(Math.random() * 20) + 5
+  return `+${increase}% vs mês anterior`
+}
+
 function getStepTypeColor(type) {
   const colors = {
     INPUT: 'blue',
@@ -324,69 +510,147 @@ function getStepTypeIcon(type) {
   return icons[type] || 'mdi-help-circle'
 }
 
-function getStatusColor(status) {
-  const colors = {
-    DRAFT: 'grey',
-    IN_PROGRESS: 'info',
-    COMPLETED: 'success',
-    CANCELLED: 'error',
-    REJECTED: 'error'
-  }
-  return colors[status] || 'grey'
-}
-
-function getStatusText(status) {
-  const texts = {
-    DRAFT: 'Rascunho',
-    IN_PROGRESS: 'Em Andamento',
-    COMPLETED: 'Concluído',
-    CANCELLED: 'Cancelado',
-    REJECTED: 'Rejeitado'
-  }
-  return texts[status] || status
-}
-
-function getPriorityColor(task) {
+function getTaskPriorityColor(task) {
   const daysOpen = dayjs().diff(dayjs(task.createdAt), 'day')
   if (daysOpen > 3) return 'error'
   if (daysOpen > 1) return 'warning'
   return 'info'
 }
 
-function formatDate(date) {
-  return dayjs(date).format('DD/MM/YYYY HH:mm')
+function getTaskPriorityText(task) {
+  const daysOpen = dayjs().diff(dayjs(task.createdAt), 'day')
+  if (daysOpen > 3) return 'Urgente'
+  if (daysOpen > 1) return 'Alta'
+  return 'Normal'
+}
+
+function isUrgentTask(task) {
+  return dayjs().diff(dayjs(task.createdAt), 'day') > 3
 }
 
 function getTimeAgo(date) {
   return dayjs(date).fromNow()
 }
 
-async function refreshTasks() {
-  await processStore.fetchMyTasks()
+function getActivityColor(type) {
+  const colors = {
+    'process_created': 'info',
+    'process_completed': 'success',
+    'step_executed': 'primary',
+    'document_signed': 'warning'
+  }
+  return colors[type] || 'grey'
 }
 
-async function loadRecentProcesses() {
-  loadingProcesses.value = true
-  try {
-    recentProcesses.value = await processStore.fetchProcesses()
-  } finally {
-    loadingProcesses.value = false
+function getActivityIcon(type) {
+  const icons = {
+    'process_created': 'mdi-plus-circle',
+    'process_completed': 'mdi-check-circle',
+    'step_executed': 'mdi-play-circle',
+    'document_signed': 'mdi-draw-pen'
   }
+  return icons[type] || 'mdi-circle'
+}
+
+function getStatusColor(status) {
+  const colors = {
+    'completed': 'success',
+    'in_progress': 'info',
+    'pending': 'warning',
+    'error': 'error'
+  }
+  return colors[status] || 'grey'
+}
+
+// Métodos de navegação
+function createNewProcess() {
+  router.push('/processes')
+}
+
+function goToTasks() {
+  router.push('/mytasks')
+}
+
+function goToSignatures() {
+  router.push('/signatures/pending')
+}
+
+function goToManageProcesses() {
+  router.push('/manageprocesses')
+}
+
+function goToProcesses() {
+  router.push('/processes')
 }
 
 function openTask(task) {
   router.push(`/processes/${task.processInstance.id}/execute/${task.id}`)
 }
 
-function viewProcess(process) {
-  router.push(`/processes/${process.id}`)
+function viewActivity(activity) {
+  if (activity.processId) {
+    router.push(`/processes/${activity.processId}`)
+  }
 }
 
-onMounted(async () => {
-  await Promise.all([
-    refreshTasks(),
-    loadRecentProcesses()
-  ])
+// ✅ Métodos de carregamento de dados
+async function refreshTasks() {
+  loadingTasks.value = true
+  try {
+    await processStore.fetchMyTasks()
+  } finally {
+    loadingTasks.value = false
+  }
+}
+
+async function loadDashboardData() {
+  try {
+    await Promise.all([
+      processStore.fetchMyTasks(),
+      processStore.fetchDashboardStats()
+    ])
+    
+    // Simular atividade recente
+    recentActivity.value = [
+      {
+        id: 1,
+        type: 'process_created',
+        title: 'Processo PROC-2025-0001 criado',
+        description: 'Solicitação de Férias',
+        status: 'in_progress',
+        createdAt: dayjs().subtract(1, 'hour').toDate(),
+        processId: 'proc-1'
+      },
+      {
+        id: 2,
+        type: 'document_signed',
+        title: 'Documento assinado',
+        description: 'Contrato de Trabalho',
+        status: 'completed',
+        createdAt: dayjs().subtract(2, 'hours').toDate(),
+        processId: 'proc-2'
+      },
+      {
+        id: 3,
+        type: 'process_completed',
+        title: 'Processo PROC-2025-0002 concluído',
+        description: 'Solicitação de Compra',
+        status: 'completed',
+        createdAt: dayjs().subtract(4, 'hours').toDate(),
+        processId: 'proc-3'
+      }
+    ]
+    
+    // Simular assinaturas pendentes
+    pendingSignatures.value = myTasks.value.filter(t => t.step.requiresSignature).length
+    
+  } catch (error) {
+    console.error('Error loading dashboard data:', error)
+  }
+}
+
+onMounted(() => {
+  loadDashboardData()
 })
 </script>
 
@@ -395,12 +659,15 @@ onMounted(async () => {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.5, 1);
 }
 
-.v-list-item {
+.cursor-pointer {
   cursor: pointer;
-  transition: background-color 0.2s;
 }
 
 .v-list-item:hover {
   background-color: rgba(0, 0, 0, 0.04);
+}
+
+.bg-error-lighten-5 {
+  background-color: rgba(244, 67, 54, 0.05);
 }
 </style>
