@@ -15,9 +15,9 @@
 
       <v-spacer />
 
-      <!-- ✅ NOVO: Seletor de Empresa -->
+      <!-- Seletor de Empresa -->
       <v-menu 
-        v-if="user?.companies?.length > 1"
+        v-if="companies.length > 1"
         offset-y
         class="mr-4"
       >
@@ -32,20 +32,20 @@
         <v-list min-width="250">
           <v-list-subheader>Trocar empresa</v-list-subheader>
           <v-list-item
-            v-for="company in user.companies"
-            :key="company.id"
-            @click="switchCompany(company.id)"
-            :active="company.id === currentCompany?.id"
+            v-for="company in companies"
+            :key="company.companyId"
+            @click="switchCompany(company.companyId)"
+            :active="company.companyId === currentCompany?.companyId"
           >
             <template v-slot:prepend>
-              <v-icon :color="company.id === currentCompany?.id ? 'primary' : 'grey'">
+              <v-icon :color="company.companyId === currentCompany?.companyId ? 'primary' : 'grey'">
                 mdi-domain
               </v-icon>
             </template>
             <v-list-item-title>{{ company.name }}</v-list-item-title>
-            <v-list-item-subtitle>{{ company.role }}</v-list-item-subtitle>
+            <v-list-item-subtitle>{{ getRoleText(company.role) }}</v-list-item-subtitle>
             <template v-slot:append>
-              <v-icon v-if="company.id === currentCompany?.id" color="primary">
+              <v-icon v-if="company.companyId === currentCompany?.companyId">
                 mdi-check
               </v-icon>
             </template>
@@ -70,7 +70,7 @@
         <v-list min-width="200">
           <v-list-item>
             <v-list-item-title class="text-caption text-medium-emphasis">
-               {{ user?.email }}
+              {{ user?.email }}
             </v-list-item-title>
             <v-list-item-subtitle class="text-caption">
               {{ currentCompany?.name }} - {{ getRoleText(currentCompany?.role) }}
@@ -125,7 +125,7 @@
           <v-list-item-title class="text-body-2">Dashboard</v-list-item-title>
         </v-list-item>
 
-        <!-- Processos -->
+        <!-- Criar Processo -->
         <v-list-item 
           :to="{ name: 'Processes' }"
           class="mx-3 my-1"
@@ -162,7 +162,7 @@
           <v-list-item-title class="text-body-2">Minhas Tarefas</v-list-item-title>
         </v-list-item>
 
-        <!-- ✅ NOVO: Assinaturas Pendentes -->
+        <!-- Assinaturas Pendentes -->
         <v-list-item 
           :to="{ name: 'PendingSignatures' }"
           class="mx-3 my-1"
@@ -242,7 +242,7 @@
       </div>
     </v-main>
 
-    <!-- ✅ Snackbar Global -->
+    <!-- Snackbar Global -->
     <v-snackbar
       v-model="snackbar.show"
       :color="snackbar.color"
@@ -273,8 +273,9 @@ const authStore = useAuthStore()
 const drawer = ref(true)
 const user = computed(() => authStore.user)
 const currentCompany = computed(() => authStore.activeCompany)
+const companies = computed(() => authStore.companies)
 
-// ✅ Snackbar global
+// Snackbar global
 const snackbar = reactive({
   show: false,
   message: '',
@@ -288,7 +289,7 @@ window.showSnackbar = (message, color = 'success') => {
   snackbar.show = true
 }
 
-// ✅ Métodos corrigidos usando Vue Router
+// Métodos de navegação
 function goToProfile() {
   router.push({ name: 'Profile' })
 }
@@ -300,7 +301,6 @@ function goToSettings() {
 async function switchCompany(companyId) {
   try {
     await authStore.switchCompany(companyId)
-    // A página será recarregada automaticamente
   } catch (error) {
     window.showSnackbar?.('Erro ao trocar empresa', 'error')
   }
@@ -311,25 +311,20 @@ async function handleLogout() {
     await authStore.logout()
     router.push('/login')
   } catch (error) {
-    // Forçar logout mesmo se der erro
     localStorage.clear()
     sessionStorage.clear()
     router.push('/login')
   }
 }
 
-// ✅ Métodos auxiliares
+// Auxiliares
 function getUserInitials(name) {
   if (!name) return 'U'
   return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
 }
 
 function getRoleText(role) {
-  const roles = {
-    ADMIN: 'Administrador',
-    MANAGER: 'Gerente',
-    USER: 'Usuário'
-  }
+  const roles = { ADMIN: 'Administrador', MANAGER: 'Gerente', USER: 'Usuário' }
   return roles[role] || role
 }
 
