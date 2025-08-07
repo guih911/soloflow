@@ -11,6 +11,8 @@ export class UsersService {
   constructor(private prisma: PrismaService) {}
 
   async create(createUserDto: CreateUserCompanyDto): Promise<any> {
+    console.log('Creating user with data:', createUserDto);
+
     // Verificar se email já existe
     const existingUser = await this.prisma.user.findUnique({
       where: { email: createUserDto.email },
@@ -25,8 +27,8 @@ export class UsersService {
       where: { id: createUserDto.companyId },
     });
 
-    if (!company) {
-      throw new BadRequestException('Empresa não encontrada');
+    if (!company || !company.isActive) {
+      throw new BadRequestException('Empresa não encontrada ou inativa');
     }
 
     // Se especificou setor, verificar se existe e pertence à empresa
@@ -35,6 +37,7 @@ export class UsersService {
         where: {
           id: createUserDto.sectorId,
           companyId: createUserDto.companyId,
+          isActive: true,
         },
       });
 
@@ -46,44 +49,60 @@ export class UsersService {
     // Hash da senha
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-    // Criar usuário e vínculo com empresa em transação
-    const result = await this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          name: createUserDto.name,
-          email: createUserDto.email,
-          password: hashedPassword,
-        },
+    try {
+      // Criar usuário e vínculo com empresa em transação
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Criar usuário (sem role global)
+        const user = await tx.user.create({
+          data: {
+            name: createUserDto.name,
+            email: createUserDto.email,
+            password: hashedPassword,
+            // Removido: role global
+          },
+        });
+
+        console.log('User created:', user);
+
+        // Criar vínculo com empresa
+        const userCompany = await tx.userCompany.create({
+          data: {
+            userId: user.id,
+            companyId: createUserDto.companyId,
+            role: createUserDto.role || UserRole.USER,
+            sectorId: createUserDto.sectorId,
+            isDefault: createUserDto.isDefault ?? true,
+          },
+          include: {
+            company: true,
+            sector: true,
+          },
+        });
+
+        console.log('UserCompany created:', userCompany);
+
+        return {
+          ...user,
+          company: userCompany.company,
+          role: userCompany.role,
+          sector: userCompany.sector,
+        };
       });
 
-      const userCompany = await tx.userCompany.create({
-        data: {
-          userId: user.id,
-          companyId: createUserDto.companyId,
-          role: createUserDto.role,
-          sectorId: createUserDto.sectorId,
-          isDefault: createUserDto.isDefault ?? true,
-        },
-        include: {
-          company: true,
-          sector: true,
-        },
-      });
-
-      return {
-        ...user,
-        company: userCompany.company,
-        role: userCompany.role,
-        sector: userCompany.sector,
-      };
-    });
-
-    // Remover senha do retorno
-    const { password, ...userWithoutPassword } = result;
-    return userWithoutPassword;
+      // Remover senha do retorno
+      const { password, ...userWithoutPassword } = result;
+      return userWithoutPassword;
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw new BadRequestException('Erro ao criar usuário: ' + error.message);
+    }
   }
 
   async findAll(companyId: string): Promise<any[]> {
+    if (!companyId) {
+      throw new BadRequestException('ID da empresa é obrigatório');
+    }
+
     const userCompanies = await this.prisma.userCompany.findMany({
       where: {
         companyId,
@@ -100,7 +119,7 @@ export class UsersService {
       id: uc.user.id,
       name: uc.user.name,
       email: uc.user.email,
-      role: uc.role,
+      role: uc.role, // Role vem do UserCompany
       sector: uc.sector,
       isActive: uc.user.isActive,
       createdAt: uc.user.createdAt,

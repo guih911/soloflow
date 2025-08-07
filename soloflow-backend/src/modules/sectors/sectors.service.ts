@@ -9,11 +9,23 @@ export class SectorsService {
   constructor(private prisma: PrismaService) {}
 
   async create(createSectorDto: CreateSectorDto): Promise<Sector> {
+    console.log('Creating sector with data:', createSectorDto);
+
+    // Verificar se a empresa existe e está ativa
+    const company = await this.prisma.company.findUnique({
+      where: { id: createSectorDto.companyId },
+    });
+
+    if (!company || !company.isActive) {
+      throw new BadRequestException('Empresa não encontrada ou inativa');
+    }
+
     // Verificar se já existe setor com mesmo nome na empresa
     const existing = await this.prisma.sector.findFirst({
       where: {
         name: createSectorDto.name,
         companyId: createSectorDto.companyId,
+        isActive: true,
       },
     });
 
@@ -21,12 +33,31 @@ export class SectorsService {
       throw new ConflictException('Setor com este nome já existe nesta empresa');
     }
 
-    return this.prisma.sector.create({
-      data: createSectorDto,
-    });
+    try {
+      return await this.prisma.sector.create({
+        data: createSectorDto,
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+    } catch (error) {
+      console.error('Error creating sector:', error);
+      throw new BadRequestException('Erro ao criar setor: ' + error.message);
+    }
   }
 
   async findAll(companyId: string): Promise<any[]> {
+    if (!companyId) {
+      throw new BadRequestException('ID da empresa é obrigatório');
+    }
+
+    console.log('Finding sectors for company:', companyId);
+
     const sectors = await this.prisma.sector.findMany({
       where: {
         companyId,
@@ -34,7 +65,13 @@ export class SectorsService {
       },
       include: {
         _count: {
-          select: { userCompanies: true },
+          select: { 
+            userCompanies: {
+              where: {
+                companyId: companyId,
+              }
+            }
+          },
         },
       },
       orderBy: { name: 'asc' },
@@ -55,7 +92,13 @@ export class SectorsService {
         userCompanies: {
           where: { user: { isActive: true } },
           include: {
-            user: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
           },
         },
         company: true,
@@ -79,35 +122,52 @@ export class SectorsService {
   }
 
   async update(id: string, updateSectorDto: UpdateSectorDto): Promise<Sector> {
-    await this.findOne(id);
+    const sector = await this.findOne(id);
 
-    // Se está atualizando nome, verificar duplicidade
-    if (updateSectorDto.name) {
+    // Se está atualizando nome, verificar duplicidade na mesma empresa
+    if (updateSectorDto.name && updateSectorDto.name !== sector.name) {
       const existing = await this.prisma.sector.findFirst({
         where: {
           name: updateSectorDto.name,
-          companyId: updateSectorDto.companyId,
+          companyId: sector.companyId,
+          isActive: true,
           NOT: { id },
         },
       });
 
       if (existing) {
-        throw new ConflictException('Nome já está em uso');
+        throw new ConflictException('Nome já está em uso nesta empresa');
       }
     }
 
-    return this.prisma.sector.update({
-      where: { id },
-      data: updateSectorDto,
-    });
+    try {
+      return await this.prisma.sector.update({
+        where: { id },
+        data: updateSectorDto,
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+    } catch (error) {
+      console.error('Error updating sector:', error);
+      throw new BadRequestException('Erro ao atualizar setor: ' + error.message);
+    }
   }
 
   async remove(id: string): Promise<Sector> {
-    await this.findOne(id);
+    const sector = await this.findOne(id);
 
     // Verificar se há usuários no setor
     const usersCount = await this.prisma.userCompany.count({
-      where: { sectorId: id },
+      where: { 
+        sectorId: id,
+        companyId: sector.companyId,
+      },
     });
 
     if (usersCount > 0) {

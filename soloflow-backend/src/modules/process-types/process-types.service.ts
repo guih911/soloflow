@@ -16,55 +16,127 @@ import { ProcessType, Step, FormField } from '@prisma/client';
 export class ProcessTypesService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createProcessTypeDto: CreateProcessTypeDto): Promise<ProcessType> {
-    const { steps, formFields, ...processTypeData } = createProcessTypeDto;
+ async create(createProcessTypeDto: CreateProcessTypeDto): Promise<ProcessType> {
+  console.log('Creating process type with data:', createProcessTypeDto);
 
-    const existing = await this.prisma.processType.findFirst({
-      where: {
-        name: processTypeData.name,
-        companyId: processTypeData.companyId,
-      },
-    });
+  const { steps, formFields, ...processTypeData } = createProcessTypeDto;
 
-    if (existing) {
-      throw new ConflictException('Tipo de processo com este nome já existe');
-    }
+  // Verificar se a empresa existe e está ativa
+  const company = await this.prisma.company.findUnique({
+    where: { id: processTypeData.companyId },
+  });
 
-    await this.validateSteps(steps, processTypeData.companyId);
-
-    return this.prisma.processType.create({
-      data: {
-        ...processTypeData,
-        steps: {
-          create: steps.map((step) => ({
-            ...step,
-            actions: step.actions ? step.actions : [],
-            conditions: step.conditions ?? undefined,
-            allowedFileTypes: step.allowedFileTypes ?? undefined,
-          })),
-        },
-        formFields: formFields
-          ? {
-              create: formFields.map((field) => ({
-                ...field,
-                options: field.options ?? undefined,
-                validations: field.validations ?? undefined,
-              })),
-            }
-          : undefined,
-      },
-      include: {
-        steps: { orderBy: { order: 'asc' } },
-        formFields: { orderBy: { order: 'asc' } },
-      },
-    });
+  if (!company || !company.isActive) {
+    throw new BadRequestException('Empresa não encontrada ou inativa');
   }
 
+  // Verificar se já existe tipo de processo com mesmo nome na empresa
+  const existing = await this.prisma.processType.findFirst({
+    where: {
+      name: processTypeData.name,
+      companyId: processTypeData.companyId,
+    },
+  });
+
+  if (existing) {
+    throw new ConflictException('Tipo de processo com este nome já existe nesta empresa');
+  }
+
+  // Validar etapas se fornecidas
+  if (steps && steps.length > 0) {
+    await this.validateSteps(steps, processTypeData.companyId);
+  }
+
+  try {
+    return await this.prisma.$transaction(async (tx) => {
+      // Criar o tipo de processo
+      const processType = await tx.processType.create({
+        data: processTypeData,
+      });
+
+      console.log('ProcessType created:', processType);
+
+      // Criar etapas se fornecidas
+      if (steps && steps.length > 0) {
+        for (let i = 0; i < steps.length; i++) {
+          const step = steps[i];
+          await tx.step.create({
+            data: {
+              ...step,
+              processTypeId: processType.id,
+              order: step.order || (i + 1),
+              actions: step.actions || [],
+              conditions: step.conditions ?? undefined,
+              allowedFileTypes: step.allowedFileTypes ?? undefined,
+            },
+          });
+        }
+      }
+
+      // Criar campos do formulário se fornecidos
+      if (formFields && formFields.length > 0) {
+        for (let i = 0; i < formFields.length; i++) {
+          const field = formFields[i];
+          await tx.formField.create({
+            data: {
+              ...field,
+              processTypeId: processType.id,
+              order: field.order || (i + 1),
+              options: field.options ?? undefined,
+              validations: field.validations ?? undefined,
+            },
+          });
+        }
+      }
+
+      // Buscar o tipo de processo completo para retornar
+      const fullProcessType = await tx.processType.findUnique({
+        where: { id: processType.id },
+        include: {
+          steps: { orderBy: { order: 'asc' } },
+          formFields: { orderBy: { order: 'asc' } },
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (!fullProcessType) {
+        throw new NotFoundException('Erro ao recuperar tipo de processo recém-criado');
+      }
+
+      return fullProcessType;
+    });
+  } catch (error) {
+    console.error('Error creating process type:', error);
+    throw new BadRequestException('Erro ao criar tipo de processo: ' + error.message);
+  }
+}
+
+
   async findAll(companyId: string): Promise<ProcessType[]> {
+    if (!companyId) {
+      throw new BadRequestException('ID da empresa é obrigatório');
+    }
+
+    console.log('Finding process types for company:', companyId);
+
     return this.prisma.processType.findMany({
-      where: { companyId, isActive: true },
+      where: { 
+        companyId, 
+        isActive: true 
+      },
       include: {
-        steps: { orderBy: { order: 'asc' } },
+        steps: { 
+          orderBy: { order: 'asc' },
+          include: {
+            assignedToUser: { select: { id: true, name: true, email: true } },
+            assignedToSector: { select: { id: true, name: true } },
+          },
+        },
         formFields: { orderBy: { order: 'asc' } },
         _count: { select: { instances: true } },
       },
@@ -88,108 +160,139 @@ export class ProcessTypesService {
       },
     });
 
-    if (!processType) throw new NotFoundException('Tipo de processo não encontrado');
+    if (!processType) {
+      throw new NotFoundException('Tipo de processo não encontrado');
+    }
+
     return processType;
   }
 
- async update(
-  id: string,
-  dto: UpdateProcessTypeDto,
-): Promise<ProcessType> {
-  await this.findOne(id);
+  async update(
+    id: string,
+    dto: UpdateProcessTypeDto,
+  ): Promise<ProcessType> {
+    const processType = await this.findOne(id);
 
-  const { companyId, formFields, ...safeDto } = dto;
+    // Remover campos que não devem ser atualizados diretamente
+    const { companyId, formFields, ...safeDto } = dto;
 
-  return this.prisma.processType.update({
-    where: { id },
-    data: {
-      ...safeDto,
-      ...(formFields && {
-        formFields: {
-          create: formFields.map((field) => ({
-            ...field,
-            options: field.options
-              ? JSON.parse(JSON.stringify(field.options))
-              : undefined,
-            validations: field.validations
-              ? JSON.parse(JSON.stringify(field.validations))
-              : undefined,
-          })),
+    try {
+      return await this.prisma.processType.update({
+        where: { id },
+        data: safeDto,
+        include: {
+          steps: { orderBy: { order: 'asc' } },
+          formFields: { orderBy: { order: 'asc' } },
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         },
-      }),
-    },
-    include: {
-      steps: { orderBy: { order: 'asc' } },
-      formFields: { orderBy: { order: 'asc' } },
-    },
-  });
-}
-
+      });
+    } catch (error) {
+      console.error('Error updating process type:', error);
+      throw new BadRequestException('Erro ao atualizar tipo de processo: ' + error.message);
+    }
+  }
 
   async addFormField(processTypeId: string, dto: CreateFormFieldDto): Promise<FormField> {
+    const processType = await this.findOne(processTypeId);
+
+    // Reordenar campos existentes se necessário
     await this.prisma.formField.updateMany({
       where: { processTypeId, order: { gte: dto.order } },
       data: { order: { increment: 1 } },
     });
 
-    return this.prisma.formField.create({
-      data: {
-        ...dto,
-        processTypeId,
-        options: dto.options ?? undefined,
-        validations: dto.validations ?? undefined,
-      },
-    });
+    try {
+      return await this.prisma.formField.create({
+        data: {
+          ...dto,
+          processTypeId,
+          options: dto.options ?? undefined,
+          validations: dto.validations ?? undefined,
+        },
+      });
+    } catch (error) {
+      console.error('Error adding form field:', error);
+      throw new BadRequestException('Erro ao adicionar campo: ' + error.message);
+    }
   }
 
   async updateFormField(fieldId: string, dto: UpdateFormFieldDto): Promise<FormField> {
     const field = await this.prisma.formField.findUnique({ where: { id: fieldId } });
-    if (!field) throw new NotFoundException('Campo não encontrado');
+    if (!field) {
+      throw new NotFoundException('Campo não encontrado');
+    }
 
-    return this.prisma.formField.update({
-      where: { id: fieldId },
-      data: {
-        ...dto,
-        options: dto.options ?? undefined,
-        validations: dto.validations ?? undefined,
-      },
-    });
+    try {
+      return await this.prisma.formField.update({
+        where: { id: fieldId },
+        data: {
+          ...dto,
+          options: dto.options ?? undefined,
+          validations: dto.validations ?? undefined,
+        },
+      });
+    } catch (error) {
+      console.error('Error updating form field:', error);
+      throw new BadRequestException('Erro ao atualizar campo: ' + error.message);
+    }
   }
 
   async removeFormField(fieldId: string): Promise<void> {
     const field = await this.prisma.formField.findUnique({ where: { id: fieldId } });
-    if (!field) throw new NotFoundException('Campo não encontrado');
+    if (!field) {
+      throw new NotFoundException('Campo não encontrado');
+    }
 
-    await this.prisma.$transaction([
-      this.prisma.formField.delete({ where: { id: fieldId } }),
-      this.prisma.formField.updateMany({
-        where: {
-          processTypeId: field.processTypeId,
-          order: { gt: field.order },
-        },
-        data: { order: { decrement: 1 } },
-      }),
-    ]);
+    try {
+      await this.prisma.$transaction([
+        this.prisma.formField.delete({ where: { id: fieldId } }),
+        this.prisma.formField.updateMany({
+          where: {
+            processTypeId: field.processTypeId,
+            order: { gt: field.order },
+          },
+          data: { order: { decrement: 1 } },
+        }),
+      ]);
+    } catch (error) {
+      console.error('Error removing form field:', error);
+      throw new BadRequestException('Erro ao remover campo: ' + error.message);
+    }
   }
 
   async addStep(processTypeId: string, dto: CreateStepDto): Promise<Step> {
     const processType = await this.findOne(processTypeId);
     await this.validateSteps([dto], processType.companyId);
 
+    // Reordenar etapas existentes se necessário
     await this.prisma.step.updateMany({
       where: { processTypeId, order: { gte: dto.order } },
       data: { order: { increment: 1 } },
     });
 
-    return this.prisma.step.create({
-      data: {
-        ...dto,
-        processTypeId,
-        actions: dto.actions ?? [],
-        conditions: dto.conditions ?? undefined,
-        allowedFileTypes: dto.allowedFileTypes ?? undefined,
-      },
-    });
+    try {
+      return await this.prisma.step.create({
+        data: {
+          ...dto,
+          processTypeId,
+          actions: dto.actions ?? [],
+          conditions: dto.conditions ?? undefined,
+          allowedFileTypes: dto.allowedFileTypes ?? undefined,
+        },
+        include: {
+          assignedToUser: { select: { id: true, name: true, email: true } },
+          assignedToSector: { select: { id: true, name: true } },
+        },
+      });
+    } catch (error) {
+      console.error('Error adding step:', error);
+      throw new BadRequestException('Erro ao adicionar etapa: ' + error.message);
+    }
   }
 
   async updateStep(stepId: string, dto: Partial<CreateStepDto>): Promise<Step> {
@@ -197,68 +300,118 @@ export class ProcessTypesService {
       where: { id: stepId },
       include: { processType: true },
     });
-    if (!step) throw new NotFoundException('Etapa não encontrada');
 
+    if (!step) {
+      throw new NotFoundException('Etapa não encontrada');
+    }
+
+    // Validar responsáveis se estiverem sendo atualizados
     if (dto.assignedToUserId || dto.assignedToSectorId) {
       await this.validateSteps([dto as CreateStepDto], step.processType.companyId);
     }
 
-    return this.prisma.step.update({
-      where: { id: stepId },
-      data: {
-        ...dto,
-        actions: dto.actions ?? undefined,
-        conditions: dto.conditions ?? undefined,
-        allowedFileTypes: dto.allowedFileTypes ?? undefined,
-      },
-    });
+    try {
+      return await this.prisma.step.update({
+        where: { id: stepId },
+        data: {
+          ...dto,
+          actions: dto.actions ?? undefined,
+          conditions: dto.conditions ?? undefined,
+          allowedFileTypes: dto.allowedFileTypes ?? undefined,
+        },
+        include: {
+          assignedToUser: { select: { id: true, name: true, email: true } },
+          assignedToSector: { select: { id: true, name: true } },
+        },
+      });
+    } catch (error) {
+      console.error('Error updating step:', error);
+      throw new BadRequestException('Erro ao atualizar etapa: ' + error.message);
+    }
   }
 
   async removeStep(stepId: string): Promise<void> {
     const step = await this.prisma.step.findUnique({ where: { id: stepId } });
-    if (!step) throw new NotFoundException('Etapa não encontrada');
+    if (!step) {
+      throw new NotFoundException('Etapa não encontrada');
+    }
 
+    // Verificar se a etapa tem execuções
     const executions = await this.prisma.stepExecution.count({ where: { stepId } });
-    if (executions > 0) throw new BadRequestException('Não é possível remover etapa com execuções');
+    if (executions > 0) {
+      throw new BadRequestException('Não é possível remover etapa com execuções');
+    }
 
-    await this.prisma.$transaction([
-      this.prisma.step.delete({ where: { id: stepId } }),
-      this.prisma.step.updateMany({
-        where: { processTypeId: step.processTypeId, order: { gt: step.order } },
-        data: { order: { decrement: 1 } },
-      }),
-    ]);
+    try {
+      await this.prisma.$transaction([
+        this.prisma.step.delete({ where: { id: stepId } }),
+        this.prisma.step.updateMany({
+          where: { 
+            processTypeId: step.processTypeId, 
+            order: { gt: step.order } 
+          },
+          data: { order: { decrement: 1 } },
+        }),
+      ]);
+    } catch (error) {
+      console.error('Error removing step:', error);
+      throw new BadRequestException('Erro ao remover etapa: ' + error.message);
+    }
   }
 
   private async validateSteps(steps: CreateStepDto[], companyId: string): Promise<void> {
+    console.log('Validating steps for company:', companyId);
+
     for (const step of steps) {
+      // Verificar se tem pelo menos um responsável
       if (!step.assignedToUserId && !step.assignedToSectorId) {
-        throw new BadRequestException(`Etapa "${step.name}" deve ter um responsável`);
+        throw new BadRequestException(`Etapa "${step.name}" deve ter um responsável (usuário ou setor)`);
       }
 
+      // Não pode ter usuário E setor ao mesmo tempo
       if (step.assignedToUserId && step.assignedToSectorId) {
-        throw new BadRequestException(`Etapa "${step.name}" não pode ter usuário E setor`);
+        throw new BadRequestException(`Etapa "${step.name}" não pode ter usuário E setor responsável simultaneamente`);
       }
 
+      // Validar usuário responsável
       if (step.assignedToUserId) {
         const userCompany = await this.prisma.userCompany.findFirst({
-          where: { userId: step.assignedToUserId, companyId },
+          where: { 
+            userId: step.assignedToUserId, 
+            companyId,
+            user: { isActive: true }
+          },
         });
         if (!userCompany) {
-          throw new BadRequestException(`Usuário inválido na etapa "${step.name}"`);
+          throw new BadRequestException(`Usuário responsável da etapa "${step.name}" não está vinculado à empresa ou está inativo`);
         }
       }
 
+      // Validar setor responsável
       if (step.assignedToSectorId) {
-        const sector = await this.prisma.sector.findUnique({ where: { id: step.assignedToSectorId } });
-        if (!sector || sector.companyId !== companyId) {
-          throw new BadRequestException(`Setor inválido na etapa "${step.name}"`);
+        const sector = await this.prisma.sector.findFirst({
+          where: { 
+            id: step.assignedToSectorId,
+            companyId,
+            isActive: true
+          }
+        });
+        if (!sector) {
+          throw new BadRequestException(`Setor responsável da etapa "${step.name}" não existe na empresa ou está inativo`);
         }
       }
 
+      // Validar configurações de anexo
       if (step.minAttachments && step.maxAttachments && step.minAttachments > step.maxAttachments) {
-        throw new BadRequestException(`Configuração de anexos inválida na etapa "${step.name}"`);
+        throw new BadRequestException(`Configuração de anexos inválida na etapa "${step.name}": mínimo não pode ser maior que máximo`);
+      }
+
+      // Se requer anexo, deve permitir anexo
+      if (step.requireAttachment && !step.allowAttachment) {
+        throw new BadRequestException(`Configuração inválida na etapa "${step.name}": não é possível exigir anexo sem permitir anexos`);
       }
     }
+
+    console.log('Steps validation passed');
   }
 }

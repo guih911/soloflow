@@ -44,6 +44,19 @@
         </v-row>
       </v-card-text>
     </v-card>
+    <!-- Botão flutuante de atualizar -->
+    <v-btn
+      fab
+      fixed
+      bottom
+      right
+      color="primary"
+      @click="refreshTasks"
+      :loading="loading"
+      class="mb-4"
+    >
+      <v-icon>mdi-refresh</v-icon>
+    </v-btn>
 
     <!-- Lista de Tarefas -->
     <v-row v-if="!loading && filteredTasks.length > 0">
@@ -172,19 +185,7 @@
       />
     </div>
 
-    <!-- Botão flutuante de atualizar -->
-    <v-btn
-      fab
-      fixed
-      bottom
-      right
-      color="primary"
-      @click="refreshTasks"
-      :loading="loading"
-      class="mb-4"
-    >
-      <v-icon>mdi-refresh</v-icon>
-    </v-btn>
+    
   </div>
 </template>
 

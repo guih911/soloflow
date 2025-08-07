@@ -25,15 +25,26 @@ export class SectorsController {
   @Post()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   create(@Body() createSectorDto: CreateSectorDto, @Request() req) {
+    console.log('Creating sector with payload:', createSectorDto);
+    console.log('Request user:', req.user);
+
     // Se não for admin, forçar a empresa do usuário
     if (req.user.role !== UserRole.ADMIN) {
       createSectorDto.companyId = req.user.companyId;
     }
+
+    // Garantir que companyId está definido
+    if (!createSectorDto.companyId) {
+      createSectorDto.companyId = req.user.companyId;
+    }
+
     return this.sectorsService.create(createSectorDto);
   }
 
   @Get()
   findAll(@Request() req) {
+    console.log('Finding sectors for company:', req.user.companyId);
+    
     // Listar apenas setores da empresa do usuário
     const companyId = req.user.companyId;
     return this.sectorsService.findAll(companyId);
