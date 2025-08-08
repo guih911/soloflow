@@ -35,7 +35,10 @@ export class SectorsService {
 
     try {
       return await this.prisma.sector.create({
-        data: createSectorDto,
+        data: {
+          ...createSectorDto,
+          description: createSectorDto.description || undefined, // ✅ null -> undefined
+        },
         include: {
           company: {
             select: {
@@ -143,7 +146,10 @@ export class SectorsService {
     try {
       return await this.prisma.sector.update({
         where: { id },
-        data: updateSectorDto,
+        data: {
+          ...updateSectorDto,
+          description: updateSectorDto.description || undefined, // ✅ null -> undefined
+        },
         include: {
           company: {
             select: {

@@ -1,85 +1,52 @@
 <template>
   <div>
     <!-- Header -->
-    <div class="mb-6">
-      <h1 class="text-h4 font-weight-bold">Minhas Tarefas</h1>
-      <p class="text-subtitle-1 text-medium-emphasis">
-        Tarefas pendentes de sua ação
-      </p>
+    <div class="d-flex align-center justify-space-between mb-6">
+      <div>
+        <h1 class="text-h4 font-weight-bold">Minhas Tarefas</h1>
+        <p class="text-subtitle-1 text-medium-emphasis">
+          Tarefas pendentes de sua ação
+        </p>
+      </div>
+      <!-- Botão flutuante de atualizar -->
+      <v-btn variant="text" right @click="refreshTasks" :loading="loading">
+        <v-icon start>mdi-refresh</v-icon>
+        Atualizar
+      </v-btn>
+
     </div>
+
 
     <!-- Filtros -->
     <v-card class="mb-6">
       <v-card-text>
         <v-row>
           <v-col cols="12" md="4">
-            <v-text-field
-              v-model="filters.search"
-              label="Buscar tarefa"
-              prepend-inner-icon="mdi-magnify"
-              clearable
-              hide-details
-            />
+            <v-text-field v-model="filters.search" label="Buscar tarefa" prepend-inner-icon="mdi-magnify" clearable
+              hide-details />
           </v-col>
           <v-col cols="12" md="4">
-            <v-select
-              v-model="filters.processType"
-              :items="processTypes"
-              item-title="name"
-              item-value="id"
-              label="Tipo de Processo"
-              clearable
-              hide-details
-            />
+            <v-select v-model="filters.processType" :items="processTypes" item-title="name" item-value="id"
+              label="Tipo de Processo" clearable hide-details />
           </v-col>
           <v-col cols="12" md="4">
-            <v-select
-              v-model="filters.priority"
-              :items="priorityOptions"
-              label="Prioridade"
-              clearable
-              hide-details
-            />
+            <v-select v-model="filters.priority" :items="priorityOptions" label="Prioridade" clearable hide-details />
           </v-col>
         </v-row>
       </v-card-text>
     </v-card>
-    <!-- Botão flutuante de atualizar -->
-    <v-btn
-      fab
-      fixed
-      bottom
-      right
-      color="primary"
-      @click="refreshTasks"
-      :loading="loading"
-      class="mb-4"
-    >
-      <v-icon>mdi-refresh</v-icon>
-    </v-btn>
+    
+
 
     <!-- Lista de Tarefas -->
     <v-row v-if="!loading && filteredTasks.length > 0">
-      <v-col
-        v-for="task in filteredTasks"
-        :key="task.id"
-        cols="12"
-      >
-        <v-card
-          class="task-card"
-          :class="{ 'border-warning': isUrgent(task) }"
-        >
+      <v-col v-for="task in filteredTasks" :key="task.id" cols="12">
+        <v-card class="task-card" :class="{ 'border-warning': isUrgent(task) }">
           <v-card-text>
             <v-row align="center">
               <v-col cols="auto">
-                <v-avatar
-                  :color="getStepTypeColor(task.step.type)"
-                  size="56"
-                >
-                  <v-icon
-                    :icon="getStepTypeIcon(task.step.type)"
-                    size="28"
-                  />
+                <v-avatar :color="getStepTypeColor(task.step.type)" size="56">
+                  <v-icon :icon="getStepTypeIcon(task.step.type)" size="28" />
                 </v-avatar>
               </v-col>
 
@@ -88,20 +55,10 @@
                   <h3 class="text-h6 mr-2">
                     {{ task.processInstance.title || task.processInstance.code }}
                   </h3>
-                  <v-chip
-                    size="small"
-                    :color="isUrgent(task) ? 'warning' : 'info'"
-                    variant="tonal"
-                  >
+                  <v-chip size="small" :color="isUrgent(task) ? 'warning' : 'info'" variant="tonal">
                     {{ task.processInstance.code }}
                   </v-chip>
-                  <v-chip
-                    v-if="task.step.requiresSignature"
-                    size="small"
-                    color="error"
-                    variant="tonal"
-                    class="ml-2"
-                  >
+                  <v-chip v-if="task.step.requiresSignature" size="small" color="error" variant="tonal" class="ml-2">
                     <v-icon start size="16">mdi-draw-pen</v-icon>
                     Requer Assinatura
                   </v-chip>
@@ -129,10 +86,7 @@
               </v-col>
 
               <v-col cols="auto">
-                <v-btn
-                  color="primary"
-                  @click="executeTask(task)"
-                >
+                <v-btn color="primary" @click="executeTask(task)">
                   <v-icon start>mdi-play</v-icon>
                   Executar
                 </v-btn>
@@ -141,13 +95,9 @@
           </v-card-text>
 
           <v-divider v-if="task.step.description" />
-          
+
           <v-card-text v-if="task.step.description" class="pt-2">
-            <v-alert
-              type="info"
-              variant="tonal"
-              density="compact"
-            >
+            <v-alert type="info" variant="tonal" density="compact">
               {{ task.step.description }}
             </v-alert>
           </v-card-text>
@@ -156,14 +106,8 @@
     </v-row>
 
     <!-- Estado vazio -->
-    <v-card
-      v-else-if="!loading && filteredTasks.length === 0"
-      class="text-center py-12"
-    >
-      <v-icon
-        size="64"
-        color="grey-lighten-1"
-      >
+    <v-card v-else-if="!loading && filteredTasks.length === 0" class="text-center py-12">
+      <v-icon size="64" color="grey-lighten-1">
         mdi-checkbox-marked-circle-outline
       </v-icon>
       <p class="text-h6 mt-4 text-grey">
@@ -178,14 +122,10 @@
 
     <!-- Loading -->
     <div v-if="loading" class="text-center py-12">
-      <v-progress-circular
-        indeterminate
-        color="primary"
-        size="64"
-      />
+      <v-progress-circular indeterminate color="primary" size="64" />
     </div>
 
-    
+
   </div>
 </template>
 
@@ -223,7 +163,7 @@ const filteredTasks = computed(() => {
   // Filtro de busca
   if (filters.value.search) {
     const search = filters.value.search.toLowerCase()
-    tasks = tasks.filter(t => 
+    tasks = tasks.filter(t =>
       t.processInstance.code.toLowerCase().includes(search) ||
       t.processInstance.title?.toLowerCase().includes(search) ||
       t.step.name.toLowerCase().includes(search)
@@ -232,7 +172,7 @@ const filteredTasks = computed(() => {
 
   // Filtro por tipo de processo
   if (filters.value.processType) {
-    tasks = tasks.filter(t => 
+    tasks = tasks.filter(t =>
       t.processInstance.processType.id === filters.value.processType
     )
   }
@@ -251,7 +191,7 @@ const filteredTasks = computed(() => {
   }
 
   // Ordenar por data de criação (mais antigas primeiro)
-  return tasks.sort((a, b) => 
+  return tasks.sort((a, b) =>
     new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   )
 })

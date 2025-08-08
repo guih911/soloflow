@@ -678,10 +678,11 @@ function getStepTypeText(type) {
 }
 
 function getResponsibleName(step) {
-  if (step.assignedToUser) {
+  // : Verificar se as propriedades existem antes de acessar
+  if (step.assignedToUser?.name) {
     return step.assignedToUser.name
   }
-  if (step.assignedToSector) {
+  if (step.assignedToSector?.name) {
     return step.assignedToSector.name
   }
   if (step.assignedToUserId) {
@@ -694,6 +695,9 @@ function getResponsibleName(step) {
   }
   return 'Não definido'
 }
+
+// : Carregar dados com verificações de segurança
+
 
 // Métodos - Campos
 function addField() {
@@ -774,29 +778,59 @@ function removeOption(index) {
 }
 
 function saveField() {
-  if (!fieldValid.value) return
-
-  const field = {
-    ...fieldData.value,
-    tempId: editingFieldIndex.value !== null 
-      ? formData.value.formFields[editingFieldIndex.value].tempId 
-      : Date.now(),
-    order: editingFieldIndex.value !== null 
-      ? formData.value.formFields[editingFieldIndex.value].order 
-      : formData.value.formFields.length + 1
+  if (!fieldValid.value) {
+    window.showSnackbar?.('Por favor, corrija os erros no campo', 'error')
+    return
   }
 
-  // Limpar validações vazias
-  Object.keys(field.validations).forEach(key => {
-    if (!field.validations[key]) {
-      delete field.validations[key]
-    }
-  })
+  //  CORRIGIDO: Validar nome do campo único
+  const existingField = formData.value.formFields.find((field, index) => 
+    field.name === fieldData.value.name && index !== editingFieldIndex.value
+  )
+  
+  if (existingField) {
+    window.showSnackbar?.(`Nome do campo "${fieldData.value.name}" já está em uso`, 'error')
+    return
+  }
+
+  //  Criar objeto do campo com validações
+  const field = {
+    name: fieldData.value.name.trim(),
+    label: fieldData.value.label.trim(),
+    type: fieldData.value.type,
+    placeholder: fieldData.value.placeholder?.trim() || null,
+    required: Boolean(fieldData.value.required),
+    defaultValue: fieldData.value.defaultValue?.trim() || null,
+    helpText: fieldData.value.helpText?.trim() || null,
+    
+    //  Metadados temporários
+    tempId: editingFieldIndex.value !== null 
+      ? formData.value.formFields[editingFieldIndex.value].tempId 
+      : Date.now() + Math.random(),
+    order: editingFieldIndex.value !== null 
+      ? formData.value.formFields[editingFieldIndex.value].order 
+      : formData.value.formFields.length + 1,
+    
+    //  CORRIGIDO: Processar opções e validações
+    options: fieldData.value.options?.filter(opt => 
+      opt.value && opt.value.trim() && opt.label && opt.label.trim()
+    ) || [],
+    
+    validations: Object.fromEntries(
+      Object.entries(fieldData.value.validations || {}).filter(([key, value]) => 
+        value !== null && value !== undefined && value !== '' && value !== 0
+      )
+    )
+  }
+
+  console.log('💾 Saving field:', field)
 
   if (editingFieldIndex.value !== null) {
     formData.value.formFields[editingFieldIndex.value] = field
+    window.showSnackbar?.(`Campo "${field.label}" atualizado`, 'success')
   } else {
     formData.value.formFields.push(field)
+    window.showSnackbar?.(`Campo "${field.label}" adicionado`, 'success')
   }
 
   closeFieldDialog()
@@ -866,19 +900,48 @@ function closeStepDialog() {
   resetStepData()
 }
 
-function saveStep(step) {
+function saveStep(stepData) {
+  console.log('💾 Saving step:', stepData)
+  
+  //  Validações antes de salvar
+  if (!stepData.name || stepData.name.trim().length < 2) {
+    window.showSnackbar?.('Nome da etapa deve ter pelo menos 2 caracteres', 'error')
+    return
+  }
+  
+  if (!stepData.assignedToUserId && !stepData.assignedToSectorId) {
+    window.showSnackbar?.('Etapa deve ter um responsável definido', 'error')
+    return
+  }
+
+  const processedStep = {
+    ...stepData,
+    name: stepData.name.trim(),
+    description: stepData.description?.trim() || null,
+    
+    //  Metadados temporários
+    tempId: editingStepIndex.value !== null
+      ? formData.value.steps[editingStepIndex.value].tempId
+      : Date.now() + Math.random(),
+    order: editingStepIndex.value !== null
+      ? formData.value.steps[editingStepIndex.value].order
+      : formData.value.steps.length + 1,
+    
+    //  Processar arrays corretamente
+    actions: Array.isArray(stepData.actions) ? 
+      stepData.actions.filter(Boolean) : [],
+    conditions: stepData.conditions && typeof stepData.conditions === 'object' ? 
+      stepData.conditions : {},
+    allowedFileTypes: Array.isArray(stepData.allowedFileTypes) ? 
+      stepData.allowedFileTypes.filter(Boolean) : []
+  }
+
   if (editingStepIndex.value !== null) {
-    formData.value.steps[editingStepIndex.value] = {
-      ...step,
-      tempId: formData.value.steps[editingStepIndex.value].tempId,
-      order: formData.value.steps[editingStepIndex.value].order
-    }
+    formData.value.steps[editingStepIndex.value] = processedStep
+    window.showSnackbar?.(`Etapa "${processedStep.name}" atualizada`, 'success')
   } else {
-    formData.value.steps.push({
-      ...step,
-      tempId: Date.now(),
-      order: formData.value.steps.length + 1
-    })
+    formData.value.steps.push(processedStep)
+    window.showSnackbar?.(`Etapa "${processedStep.name}" adicionada`, 'success')
   }
 
   closeStepDialog()
@@ -890,68 +953,265 @@ function goBack() {
 }
 
 async function save() {
-  if (!valid.value || formData.value.steps.length === 0) return
+  if (!valid.value) {
+    window.showSnackbar?.('Por favor, corrija os erros no formulário', 'error')
+    return
+  }
+
+  if (formData.value.steps.length === 0) {
+    window.showSnackbar?.('É necessário adicionar pelo menos uma etapa', 'warning')
+    activeTab.value = 'steps' // Ir para aba de etapas
+    return
+  }
+
+  //  Validar se todas as etapas têm responsável
+  const stepsWithoutResponsible = formData.value.steps.filter(step => 
+    !step.assignedToUserId && !step.assignedToSectorId
+  )
+  
+  if (stepsWithoutResponsible.length > 0) {
+    window.showSnackbar?.(`Etapas sem responsável: ${stepsWithoutResponsible.map(s => s.name).join(', ')}`, 'error')
+    activeTab.value = 'steps'
+    return
+  }
 
   saving.value = true
   try {
+    //  CORRIGIDO: Estrutura de dados aprimorada
     const data = {
-      ...formData.value,
-      companyId: authStore.user.companyId,
-      steps: formData.value.steps.map((step, index) => ({
-        ...step,
-        order: index + 1,
-        tempId: undefined
-      })),
-      formFields: formData.value.formFields.map((field, index) => ({
-        ...field,
-        order: index + 1,
-        tempId: undefined
-      }))
+      name: formData.value.name.trim(),
+      description: formData.value.description?.trim() || null,
+      companyId: authStore.activeCompanyId, //  Usar companyId correto
+      
+      //  CORRIGIDO: Processar etapas
+      steps: formData.value.steps.map((step, index) => {
+        //  Limpar dados temporários
+        const cleanStep = { ...step }
+        delete cleanStep.tempId
+        
+        return {
+          ...cleanStep,
+          order: index + 1,
+          //  Garantir que arrays são válidos
+          actions: Array.isArray(cleanStep.actions) ? 
+            cleanStep.actions.filter(Boolean) : [],
+          conditions: cleanStep.conditions && typeof cleanStep.conditions === 'object' ? 
+            cleanStep.conditions : {},
+          allowedFileTypes: Array.isArray(cleanStep.allowedFileTypes) ? 
+            cleanStep.allowedFileTypes.filter(Boolean) : []
+        }
+      }),
+      
+      //  CORRIGIDO: Processar campos de formulário
+      formFields: formData.value.formFields.map((field, index) => {
+        //  Limpar dados temporários
+        const cleanField = { ...field }
+        delete cleanField.tempId
+        
+        return {
+          ...cleanField,
+          order: index + 1,
+          //  Garantir que arrays/objetos são válidos
+          options: Array.isArray(cleanField.options) ? 
+            cleanField.options.filter(opt => opt.value && opt.label) : [],
+          validations: cleanField.validations && typeof cleanField.validations === 'object' ? 
+            Object.fromEntries(
+              Object.entries(cleanField.validations).filter(([key, value]) => 
+                value !== null && value !== undefined && value !== ''
+              )
+            ) : {}
+        }
+      })
     }
 
+    console.log('📤 Saving process type with data:', JSON.stringify(data, null, 2))
+
+    let result
     if (isEditing.value) {
-      await processTypeStore.updateProcessType(route.params.id, data)
-      window.showSnackbar('Tipo de processo atualizado com sucesso!', 'success')
+      result = await processTypeStore.updateProcessType(route.params.id, data)
+      window.showSnackbar?.('Tipo de processo atualizado com sucesso!', 'success')
     } else {
-      await processTypeStore.createProcessType(data)
-      window.showSnackbar('Tipo de processo criado com sucesso!', 'success')
+      result = await processTypeStore.createProcessType(data)
+      window.showSnackbar?.('Tipo de processo criado com sucesso!', 'success')
     }
 
-    goBack()
+    console.log('🎉 Process type saved successfully:', result)
+
+    //  IMPORTANTE: Aguardar um momento para garantir que o backend processou
+    setTimeout(() => {
+      goBack()
+    }, 500)
+
   } catch (error) {
-    window.showSnackbar(error.message || 'Erro ao salvar', 'error')
+    console.error('❌ Error saving process type:', error)
+    
+    let errorMessage = 'Erro ao salvar tipo de processo'
+    
+    if (error.message) {
+      errorMessage = error.message
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    }
+    
+    window.showSnackbar?.(errorMessage, 'error')
+    
+    //  Se erro de validação, ir para aba relevante
+    if (errorMessage.includes('etapa') || errorMessage.includes('responsável')) {
+      activeTab.value = 'steps'
+    } else if (errorMessage.includes('campo')) {
+      activeTab.value = 'fields'
+    }
   } finally {
     saving.value = false
   }
 }
 
-async function loadData() {
-  await Promise.all([
-    sectorStore.fetchSectors(),
-    userStore.fetchUsers()
-  ])
 
-  if (isEditing.value) {
-    const processType = await processTypeStore.fetchProcessType(route.params.id)
-    formData.value = {
-      name: processType.name,
-      description: processType.description || '',
-      steps: processType.steps.map((step, index) => ({
-        ...step,
-        tempId: Date.now() + index,
-        actions: JSON.parse(step.actions || '[]'),
-        conditions: JSON.parse(step.conditions || '{}'),
-        allowedFileTypes: JSON.parse(step.allowedFileTypes || '[]')
-      })),
-      formFields: processType.formFields?.map((field, index) => ({
-        ...field,
-        tempId: Date.now() + index + 1000,
-        options: JSON.parse(field.options || '[]'),
-        validations: JSON.parse(field.validations || '{}')
-      })) || []
+async function loadData() {
+  try {
+    //  Carregar dados auxiliares primeiro
+    await Promise.all([
+      sectorStore.fetchSectors(),
+      userStore.fetchUsers()
+    ])
+
+    if (isEditing.value && route.params.id !== 'new') {
+      console.log('📋 Loading process type for editing:', route.params.id)
+      
+      const processType = await processTypeStore.fetchProcessType(route.params.id)
+      
+      console.log(' Process type loaded:', processType)
+      
+      //  CORRIGIDO: Processar dados para edição
+      formData.value = {
+        name: processType.name,
+        description: processType.description || '',
+        
+        //  Processar etapas com parsing JSON adequado
+        steps: processType.steps?.map((step, index) => ({
+          ...step,
+          tempId: Date.now() + index,
+          //  Parse JSON fields corretamente
+          actions: (() => {
+            try {
+              return Array.isArray(step.actions) ? step.actions : JSON.parse(step.actions || '[]')
+            } catch {
+              return []
+            }
+          })(),
+          conditions: (() => {
+            try {
+              return typeof step.conditions === 'object' && step.conditions !== null ? 
+                step.conditions : JSON.parse(step.conditions || '{}')
+            } catch {
+              return {}
+            }
+          })(),
+          allowedFileTypes: (() => {
+            try {
+              return Array.isArray(step.allowedFileTypes) ? step.allowedFileTypes : JSON.parse(step.allowedFileTypes || '[]')
+            } catch {
+              return []
+            }
+          })()
+        })) || [],
+        
+        //  Processar campos de formulário com parsing JSON adequado
+        formFields: processType.formFields?.map((field, index) => ({
+          ...field,
+          tempId: Date.now() + index + 1000,
+          //  Parse JSON fields corretamente
+          options: (() => {
+            try {
+              return Array.isArray(field.options) ? field.options : JSON.parse(field.options || '[]')
+            } catch {
+              return []
+            }
+          })(),
+          validations: (() => {
+            try {
+              return typeof field.validations === 'object' && field.validations !== null ? 
+                field.validations : JSON.parse(field.validations || '{}')
+            } catch {
+              return {}
+            }
+          })()
+        })) || []
+      }
+      
+      console.log('📋 Form data set for editing:', {
+        steps: formData.value.steps.length,
+        formFields: formData.value.formFields.length
+      })
+    } else {
+      //  Dados para novo processo type
+      formData.value = {
+        name: '',
+        description: '',
+        steps: [],
+        formFields: []
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error loading data:', error)
+    window.showSnackbar?.('Erro ao carregar dados', 'error')
+    
+    //  Se erro crítico, voltar para lista
+    if (error.response?.status === 404) {
+      window.showSnackbar?.('Tipo de processo não encontrado', 'error')
+      setTimeout(() => goBack(), 1500)
     }
   }
 }
+
+function validateForm() {
+  const errors = []
+  
+  if (!formData.value.name?.trim()) {
+    errors.push('Nome do processo é obrigatório')
+  }
+  
+  if (formData.value.steps.length === 0) {
+    errors.push('Pelo menos uma etapa é obrigatória')
+  }
+  
+  formData.value.steps.forEach((step, index) => {
+    if (!step.name?.trim()) {
+      errors.push(`Etapa ${index + 1}: nome é obrigatório`)
+    }
+    if (!step.assignedToUserId && !step.assignedToSectorId) {
+      errors.push(`Etapa "${step.name || index + 1}": responsável é obrigatório`)
+    }
+  })
+  
+  formData.value.formFields.forEach((field, index) => {
+    if (!field.name?.trim()) {
+      errors.push(`Campo ${index + 1}: nome é obrigatório`)
+    }
+    if (!field.label?.trim()) {
+      errors.push(`Campo ${index + 1}: rótulo é obrigatório`)
+    }
+  })
+  
+  return errors
+}
+
+// ADICIONAR: Watch para auto-validação
+watch(() => [formData.value.name, formData.value.steps.length], () => {
+  if (formData.value.name || formData.value.steps.length > 0) {
+    const errors = validateForm()
+    if (errors.length > 0 && errors.length <= 2) {
+      // Mostrar apenas erros críticos
+      const criticalErrors = errors.filter(error => 
+        error.includes('obrigatório') && !error.includes('responsável')
+      )
+      if (criticalErrors.length > 0 && Math.random() < 0.3) { // Mostrar esporadicamente
+        console.log('⚠️ Validation warnings:', criticalErrors)
+      }
+    }
+  }
+}, { deep: true })
+
 
 onMounted(() => {
   loadData()

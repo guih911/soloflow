@@ -70,7 +70,7 @@ export class UsersService {
             userId: user.id,
             companyId: createUserDto.companyId,
             role: createUserDto.role || UserRole.USER,
-            sectorId: createUserDto.sectorId,
+            sectorId: createUserDto.sectorId || undefined, // ✅ null -> undefined
             isDefault: createUserDto.isDefault ?? true,
           },
           include: {
@@ -242,7 +242,7 @@ export class UsersService {
         userId: assignDto.userId,
         companyId: assignDto.companyId,
         role: assignDto.role,
-        sectorId: assignDto.sectorId,
+        sectorId: assignDto.sectorId || undefined, // ✅ null -> undefined
         isDefault: assignDto.isDefault ?? userCompanyCount === 0,
       },
       include: {
@@ -285,7 +285,10 @@ export class UsersService {
       where: {
         userId_companyId: { userId, companyId },
       },
-      data,
+      data: {
+        ...data,
+        sectorId: data.sectorId || undefined, // ✅ null -> undefined
+      },
       include: {
         company: true,
         sector: true,

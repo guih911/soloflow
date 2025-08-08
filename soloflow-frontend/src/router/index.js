@@ -45,13 +45,13 @@ import PendingSignatures from '@/views/signatures/PendingSignatures.vue'
 import Settings from '@/views/settings/Settings.vue'
 
 const routes = [
-  // ✅ Redirect principal
+  // SoloFlow Redirect principal
   {
     path: '/',
     redirect: '/dashboard',
   },
 
-  // ✅ ROTAS DE AUTENTICAÇÃO
+  // SoloFlow ROTAS DE AUTENTICAÇÃO
   {
     path: '/login',
     component: AuthLayout,
@@ -77,7 +77,7 @@ const routes = [
     ],
   },
 
-  // ✅ ROTAS DO DASHBOARD (todas protegidas)
+  // SoloFlow ROTAS DO DASHBOARD (todas protegidas)
   {
     path: '/dashboard',
     component: DashboardLayout,
@@ -90,7 +90,7 @@ const routes = [
         component: Dashboard,
       },
 
-      // ✅ EMPRESAS
+      // SoloFlow EMPRESAS
       {
         path: '/companies',
         name: 'Companies',
@@ -98,7 +98,7 @@ const routes = [
         meta: { requiresRole: ['ADMIN'] },
       },
 
-      // ✅ USUÁRIOS
+      // SoloFlow USUÁRIOS
       {
         path: '/users',
         name: 'Users',
@@ -106,7 +106,7 @@ const routes = [
         meta: { requiresRole: ['ADMIN', 'MANAGER'] },
       },
 
-      // ✅ SETORES (SEM DUPLICAÇÃO)
+      // SoloFlow SETORES (SEM DUPLICAÇÃO)
       {
         path: '/sectors',
         name: 'Sectors',
@@ -114,7 +114,7 @@ const routes = [
         meta: { requiresRole: ['ADMIN', 'MANAGER'] },
       },
 
-      // ✅ TIPOS DE PROCESSO (SEM DUPLICAÇÃO)
+      // SoloFlow TIPOS DE PROCESSO (SEM DUPLICAÇÃO)
       {
         path: '/process-types',
         name: 'ProcessTypes',
@@ -134,7 +134,7 @@ const routes = [
         meta: { requiresRole: ['ADMIN', 'MANAGER'] },
       },
 
-      // ✅ PROCESSOS
+      // SoloFlow PROCESSOS
       {
         path: '/processes',
         name: 'Processes',
@@ -151,7 +151,7 @@ const routes = [
         component: StepExecution,
       },
 
-      // ✅ GERENCIAR PROCESSOS
+      // SoloFlow GERENCIAR PROCESSOS
       {
         path: '/manageprocesses',
         name: 'ManageProcesses',
@@ -159,28 +159,28 @@ const routes = [
         meta: { requiresRole: ['ADMIN', 'MANAGER'] },
       },
 
-      // ✅ MINHAS TAREFAS
+      // SoloFlow MINHAS TAREFAS
       {
         path: '/mytasks',
         name: 'MyTasks',
         component: MyTasks,
       },
 
-      // ✅ NOVAS ROTAS - Assinaturas Pendentes
+      // SoloFlow NOVAS ROTAS - Assinaturas Pendentes
       {
         path: '/signatures/pending',
         name: 'PendingSignatures',
         component:PendingSignatures ,
       },
 
-      // ✅ NOVA ROTA - Perfil do Usuário
+      // SoloFlow NOVA ROTA - Perfil do Usuário
       {
         path: '/profile',
         name: 'Profile',
         component:Profile ,
       },
 
-      // ✅ NOVA ROTA - Configurações
+      // SoloFlow NOVA ROTA - Configurações
       {
         path: '/settings',
         name: 'Settings',
@@ -190,7 +190,7 @@ const routes = [
     ],
   },
 
-  // ✅ Catch-all para rotas inexistentes
+  // SoloFlow Catch-all para rotas inexistentes
   {
     path: '/:pathMatch(.*)*',
     redirect: '/dashboard',
@@ -202,7 +202,7 @@ const router = createRouter({
   routes,
 })
 
-// ✅ MELHORADO: Navigation guards
+// SoloFlow MELHORADO: Navigation guards
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   
@@ -248,7 +248,7 @@ router.beforeEach(async (to, from, next) => {
   next()
 })
 
-// ✅ Tratar erros de navegação
+// SoloFlow Tratar erros de navegação
 router.onError((error) => {
   console.error('Router error:', error)
   if (window.showSnackbar) {

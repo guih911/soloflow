@@ -54,7 +54,7 @@ export class ProcessesService {
     return this.findOne(createdInstance.id, userId);
   }
 
-  // ✅ NOVO: Listar todos os processos da empresa
+  //    Listar todos os processos da empresa
 async findAll(companyId: string, userId: string, filters: any = {}) {
   const andConditions: Prisma.ProcessInstanceWhereInput[] = [];
 
@@ -126,7 +126,7 @@ async findAll(companyId: string, userId: string, filters: any = {}) {
 }
 
 
-  // ✅ NOVO: Buscar processo específico
+  //    Buscar processo específico
   async findOne(processId: string, userId: string) {
     const process = await this.prisma.processInstance.findUnique({
       where: { id: processId },
@@ -195,7 +195,7 @@ async findAll(companyId: string, userId: string, filters: any = {}) {
     return process;
   }
 
-  // ✅ NOVO: Buscar tarefas do usuário logado
+  //    Buscar tarefas do usuário logado
   async getMyTasks(userId: string, companyId: string) {
     // Buscar setor do usuário
     const userCompany = await this.prisma.userCompany.findFirst({
@@ -261,7 +261,7 @@ async findAll(companyId: string, userId: string, filters: any = {}) {
     return tasks;
   }
 
-  // ✅ NOVO: Buscar processos criados pelo usuário
+  //    Buscar processos criados pelo usuário
   async getCreatedByUser(userId: string, companyId: string) {
     return this.prisma.processInstance.findMany({
       where: {
@@ -293,7 +293,7 @@ async findAll(companyId: string, userId: string, filters: any = {}) {
     });
   }
 
-  // ✅ NOVO: Estatísticas para dashboard
+  //    Estatísticas para dashboard
   async getDashboardStats(userId: string, companyId: string) {
     const [
       totalProcesses,

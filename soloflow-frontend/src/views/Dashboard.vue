@@ -10,7 +10,7 @@
       </p>
     </div>
 
-    <!-- ✅ Cards de estatísticas dinâmicas -->
+    <!-- SoloFlow Cards de estatísticas dinâmicas -->
     <v-row class="mb-6">
       <v-col
         v-for="stat in stats"
@@ -51,7 +51,7 @@
               </v-avatar>
             </div>
 
-            <!-- ✅ Progress bar para alguns cards -->
+            <!-- SoloFlow Progress bar para alguns cards -->
             <v-progress-linear
               v-if="stat.progress !== undefined"
               :model-value="stat.progress"
@@ -66,7 +66,7 @@
     </v-row>
 
     <v-row>
-      <!-- ✅ Minhas Tarefas Pendentes -->
+      <!-- SoloFlow Minhas Tarefas Pendentes -->
       <v-col cols="12" lg="8">
         <v-card>
           <v-card-title class="d-flex align-center justify-space-between">
@@ -209,57 +209,9 @@
         </v-card>
       </v-col>
 
-      <!-- ✅ Painel lateral com estatísticas e ações rápidas -->
+      <!-- SoloFlow Painel lateral com estatísticas e ações rápidas -->
       <v-col cols="12" lg="4">
-        <!-- Progresso do Mês -->
-        <v-card class="mb-4">
-          <v-card-title class="d-flex align-center">
-            <v-icon class="mr-2">mdi-chart-line</v-icon>
-            Progresso do Mês
-          </v-card-title>
-          
-          <v-card-text>
-            <div class="mb-4">
-              <div class="d-flex justify-space-between mb-2">
-                <span class="text-body-2">Processos Concluídos</span>
-                <span class="text-body-2 font-weight-medium">
-                  {{ monthProgress.completed }}/{{ monthProgress.total }}
-                </span>
-              </div>
-              <v-progress-linear
-                :model-value="monthProgress.percentage"
-                color="success"
-                height="8"
-                rounded
-              />
-            </div>
-
-            <div class="mb-4">
-              <div class="d-flex justify-space-between mb-2">
-                <span class="text-body-2">Meta de Produtividade</span>
-                <span class="text-body-2 font-weight-medium">
-                  {{ productivityProgress }}%
-                </span>
-              </div>
-              <v-progress-linear
-                :model-value="productivityProgress"
-                :color="productivityProgress >= 80 ? 'success' : productivityProgress >= 60 ? 'warning' : 'error'"
-                height="8"
-                rounded
-              />
-            </div>
-
-            <v-alert
-              v-if="productivityProgress >= 100"
-              type="success"
-              variant="tonal"
-              density="compact"
-            >
-              🎉 Meta do mês atingida! Parabéns!
-            </v-alert>
-          </v-card-text>
-        </v-card>
-
+       
         <!-- Ações Rápidas -->
         <v-card class="mb-4">
           <v-card-title class="d-flex align-center">
@@ -406,7 +358,7 @@ const myTasks = computed(() => processStore.myTasks)
 const dashboardStats = computed(() => processStore.dashboardStats)
 const canManageProcesses = computed(() => authStore.canManageProcessTypes)
 
-// ✅ Saudação baseada no horário
+// SoloFlow Saudação baseada no horário
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 12) return 'Bom dia!'
@@ -414,7 +366,7 @@ const greeting = computed(() => {
   return 'Boa noite!'
 })
 
-// ✅ Estatísticas dinâmicas reais
+// SoloFlow Estatísticas dinâmicas reais
 const stats = computed(() => [
   {
     title: 'Tarefas Pendentes',
@@ -453,7 +405,7 @@ const stats = computed(() => [
   }
 ])
 
-// ✅ Progresso do mês
+// SoloFlow Progresso do mês
 const monthProgress = computed(() => {
   const completed = dashboardStats.value.completedProcesses || 0
   const total = dashboardStats.value.totalProcesses || 1
@@ -593,7 +545,7 @@ function viewActivity(activity) {
   }
 }
 
-// ✅ Métodos de carregamento de dados
+// Métodos de carregamento de dados
 async function refreshTasks() {
   loadingTasks.value = true
   try {

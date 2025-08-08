@@ -19,21 +19,21 @@ export class AuthController {
     return this.authService.register(registerDto);
   }
 
-  // ✅ NOVO: Switch de empresa
+  //    Switch de empresa
   @Post('switch-company')
   @UseGuards(JwtAuthGuard)
   async switchCompany(@Body() switchDto: SwitchCompanyDto, @Request() req) {
     return this.authService.switchCompany(req.user.id, switchDto);
   }
 
-  // ✅ NOVO: Refresh token
+  //    Refresh token
   @Post('refresh')
   @UseGuards(JwtAuthGuard)
   async refreshToken(@Request() req) {
     return this.authService.refreshToken(req.user.id);
   }
 
-  // ✅ NOVO: Verificar permissões atuais
+  //    Verificar permissões atuais
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async getProfile(@Request() req) {

@@ -11,7 +11,7 @@ export const useProcessStore = defineStore('processes', () => {
   const loading = ref(false)
   const error = ref(null)
 
-  // ✅ NOVO: Buscar todos os processos com filtros
+  // SoloFlow Buscar todos os processos com filtros
   async function fetchProcesses(filters = {}) {
     loading.value = true
     error.value = null
@@ -33,7 +33,7 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // ✅ MELHORADO: Buscar processo específico
+  // SoloFlow MELHORADO: Buscar processo específico
   async function fetchProcess(id) {
     loading.value = true
     error.value = null
@@ -55,7 +55,7 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // ✅ MELHORADO: Buscar minhas tarefas
+  // SoloFlow MELHORADO: Buscar minhas tarefas
   async function fetchMyTasks() {
     loading.value = true
     error.value = null
@@ -77,7 +77,7 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // ✅ NOVO: Buscar processos criados por mim
+  // SoloFlow Buscar processos criados por mim
   async function fetchMyCreatedProcesses() {
     loading.value = true
     error.value = null
@@ -99,7 +99,7 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // ✅ NOVO: Buscar estatísticas para dashboard
+  // SoloFlow Buscar estatísticas para dashboard
   async function fetchDashboardStats() {
     loading.value = true
     error.value = null
@@ -222,17 +222,17 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // ✅ NOVO: Buscar processos por status
+  // SoloFlow Buscar processos por status
   async function fetchProcessesByStatus(status) {
     return fetchProcesses({ status })
   }
 
-  // ✅ NOVO: Buscar processos por tipo
+  // SoloFlow Buscar processos por tipo
   async function fetchProcessesByType(processTypeId) {
     return fetchProcesses({ processTypeId })
   }
 
-  // ✅ NOVO: Buscar anexos pendentes de assinatura
+  // SoloFlow Buscar anexos pendentes de assinatura
   async function fetchPendingSignatures() {
     loading.value = true
     error.value = null
@@ -258,13 +258,13 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // ✅ NOVO: Marcar todas as notificações como lidas
+  // SoloFlow Marcar todas as notificações como lidas
   async function markAllNotificationsAsRead() {
     // Implementar quando tiver sistema de notificações
     console.log('Mark all notifications as read - TODO')
   }
 
-  // ✅ NOVO: Cancelar processo (se for criador ou admin)
+  // SoloFlow Cancelar processo (se for criador ou admin)
   async function cancelProcess(processId, reason) {
     loading.value = true
     error.value = null
@@ -291,7 +291,7 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // ✅ Limpar dados
+  // SoloFlow Limpar dados
   function clearError() {
     error.value = null
   }
@@ -304,7 +304,7 @@ export const useProcessStore = defineStore('processes', () => {
     processes.value = []
   }
 
-  // ✅ NOVO: Recarregar dados após mudança de empresa
+  // SoloFlow Recarregar dados após mudança de empresa
   async function refreshAfterCompanySwitch() {
     try {
       processes.value = []

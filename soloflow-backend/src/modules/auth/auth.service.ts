@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -34,12 +34,14 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
-    // ✅ MELHORADO: Buscar empresas do usuário com mais detalhes
+    //  MELHORADO: Buscar empresas do usuário com validações rigorosas
     const userWithCompanies = await this.prisma.user.findUnique({
       where: { id: user.id },
       include: {
         userCompanies: {
-          where: { company: { isActive: true } },
+          where: { 
+            company: { isActive: true } //    Apenas empresas ativas
+          },
           include: {
             company: {
               select: {
@@ -64,18 +66,28 @@ export class AuthService {
       },
     });
 
-    if (!userWithCompanies || !userWithCompanies.userCompanies.length) {
+    if (!userWithCompanies?.userCompanies?.length) {
       throw new UnauthorizedException('Usuário não está vinculado a nenhuma empresa ativa');
     }
 
-    // Pegar empresa padrão ou a primeira
-    const defaultCompany = userWithCompanies.userCompanies.find(uc => uc.isDefault)
+    //    Pegar empresa padrão ou mais recente
+    const defaultCompany = userWithCompanies.userCompanies.find(uc => uc.isDefault) 
       || userWithCompanies.userCompanies[0];
 
-    // Atualizar último acesso
-    await this.prisma.userCompany.update({
-      where: { id: defaultCompany.id },
-      data: { lastAccessedAt: new Date() },
+    //    Atualizar último acesso de forma transacional
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userCompany.update({
+        where: { id: defaultCompany.id },
+        data: { lastAccessedAt: new Date() },
+      });
+
+      //    Se não há empresa padrão definida, definir esta como padrão
+      if (!userWithCompanies.userCompanies.some(uc => uc.isDefault)) {
+        await tx.userCompany.update({
+          where: { id: defaultCompany.id },
+          data: { isDefault: true },
+        });
+      }
     });
 
     const payload = {
@@ -85,7 +97,6 @@ export class AuthService {
       role: defaultCompany.role,
     };
 
-    // ✅ MELHORADO: Retorno mais completo
     return {
       access_token: this.jwtService.sign(payload),
       user: {
@@ -115,53 +126,55 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto) {
-    // Verificar se empresa existe
-    const company = await this.prisma.company.findUnique({
-      where: { id: registerDto.companyId },
+    //    Verificar empresa existe E está ativa
+    const company = await this.prisma.company.findFirst({
+      where: { 
+        id: registerDto.companyId,
+        isActive: true //  CRÍTICO: Apenas empresas ativas
+      },
     });
 
-    if (!company || !company.isActive) {
-      throw new BadRequestException('Empresa não encontrada ou inativa');
+    if (!company) {
+      throw new BadRequestException('Empresa não encontrada ou não está ativa');
     }
 
-    // Verificar se email já existe
+    //    Verificar email único
     const existingUser = await this.prisma.user.findUnique({
       where: { email: registerDto.email },
     });
 
     if (existingUser) {
-      throw new BadRequestException('Email já cadastrado');
+      throw new BadRequestException('Email já cadastrado no sistema');
     }
 
-    // Criar usuário e vínculo com empresa em transação
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
+    //    Transação para garantir consistência
     const result = await this.prisma.$transaction(async (tx) => {
-      // Criar usuário
+      //    Criar usuário SEM role global (role agora é por empresa)
       const newUser = await tx.user.create({
         data: {
           name: registerDto.name,
           email: registerDto.email,
           password: hashedPassword,
+          //  REMOVIDO: role global (agora é por empresa via UserCompany)
         },
       });
 
-      // Criar vínculo com empresa
+      //    Criar vínculo com empresa como padrão
       const userCompany = await tx.userCompany.create({
         data: {
           userId: newUser.id,
           companyId: registerDto.companyId,
-          role: UserRole.USER,
-          isDefault: true,
+          role: UserRole.USER, //  Novo usuário sempre começa como USER
+          isDefault: true, //  Primeira empresa é sempre padrão
+          lastAccessedAt: new Date(),
         },
         include: {
           company: {
-            select: {
-              id: true,
-              name: true,
-              cnpj: true,
-            },
+            select: { id: true, name: true, cnpj: true },
           },
+          sector: { select: { id: true, name: true } },
         },
       });
 
@@ -186,7 +199,7 @@ export class AuthService {
           companyId: result.userCompany.companyId,
           name: result.userCompany.company.name,
           role: result.userCompany.role,
-          sector: null,
+          sector: result.userCompany.sector,
           isDefault: true,
         },
         companies: [{
@@ -195,7 +208,7 @@ export class AuthService {
           name: result.userCompany.company.name,
           cnpj: result.userCompany.company.cnpj,
           role: result.userCompany.role,
-          sector: null,
+          sector: result.userCompany.sector,
           isDefault: true,
           lastAccessedAt: new Date(),
         }],
@@ -203,91 +216,60 @@ export class AuthService {
     };
   }
 
-  // ✅ CORRIGIDO: Switch de empresa melhorado
+  //    Switch de empresa com validações robustas
   async switchCompany(userId: string, switchDto: SwitchCompanyDto) {
-    // Verificar se usuário tem acesso à empresa
+    //    Verificar se usuário tem acesso válido à empresa
     const userCompany = await this.prisma.userCompany.findFirst({
       where: {
         userId,
         companyId: switchDto.companyId,
-        company: { isActive: true },
+        company: { isActive: true }, //  CRÍTICO: Empresa deve estar ativa
       },
       include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-            cnpj: true,
-            isActive: true,
-          },
-        },
-        sector: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+        company: { select: { id: true, name: true, cnpj: true, isActive: true } },
+        sector: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, email: true, isActive: true } },
       },
     });
 
     if (!userCompany) {
-      throw new UnauthorizedException('Acesso negado a esta empresa');
+      throw new ForbiddenException('Acesso negado: usuário não tem permissão para esta empresa ou empresa inativa');
     }
 
-    // Atualizar último acesso e buscar todas as empresas
-    const [updatedUserCompany, allUserCompanies] = await Promise.all([
-      this.prisma.userCompany.update({
+    if (!userCompany.user.isActive) {
+      throw new ForbiddenException('Usuário inativo');
+    }
+
+    //    Transação para atualizar acessos
+    const [updatedUserCompany, allUserCompanies] = await this.prisma.$transaction(async (tx) => {
+      //  Atualizar último acesso
+      const updated = await tx.userCompany.update({
         where: { id: userCompany.id },
         data: { lastAccessedAt: new Date() },
         include: {
-          company: {
-            select: {
-              id: true,
-              name: true,
-              cnpj: true,
-            },
-          },
-          sector: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
+          company: { select: { id: true, name: true, cnpj: true } },
+          sector: { select: { id: true, name: true } },
         },
-      }),
-      this.prisma.userCompany.findMany({
+      });
+
+      //  Buscar todas as empresas do usuário (ativas)
+      const all = await tx.userCompany.findMany({
         where: { 
           userId,
           company: { isActive: true },
         },
         include: {
-          company: {
-            select: {
-              id: true,
-              name: true,
-              cnpj: true,
-            },
-          },
-          sector: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
+          company: { select: { id: true, name: true, cnpj: true } },
+          sector: { select: { id: true, name: true } },
         },
         orderBy: [
           { isDefault: 'desc' },
           { lastAccessedAt: 'desc' },
         ],
-      }),
-    ]);
+      });
+
+      return [updated, all];
+    });
 
     const payload = {
       sub: userId,
@@ -324,37 +306,24 @@ export class AuthService {
     };
   }
 
-  // ✅ NOVO: Refresh token para manter sessão
+  //    Refresh token melhorado
   async refreshToken(userId: string) {
     const userWithCompanies = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: userId, isActive: true }, //  Verificar se usuário está ativo
       include: {
         userCompanies: {
           where: { company: { isActive: true } },
           include: {
-            company: {
-              select: {
-                id: true,
-                name: true,
-                cnpj: true,
-              },
-            },
-            sector: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
+            company: { select: { id: true, name: true, cnpj: true } },
+            sector: { select: { id: true, name: true } },
           },
-          orderBy: [
-            { lastAccessedAt: 'desc' },
-          ],
+          orderBy: { lastAccessedAt: 'desc' },
         },
       },
     });
 
-    if (!userWithCompanies || !userWithCompanies.userCompanies.length) {
-      throw new UnauthorizedException('Usuário não tem empresas ativas');
+    if (!userWithCompanies?.userCompanies?.length) {
+      throw new UnauthorizedException('Usuário não tem empresas ativas válidas');
     }
 
     const activeCompany = userWithCompanies.userCompanies[0];
@@ -394,7 +363,7 @@ export class AuthService {
     };
   }
 
-  // ✅ NOVO: Verificar permissões
+  //    Verificar permissões com validação de empresa ativa
   async checkUserPermissions(userId: string, companyId: string) {
     const userCompany = await this.prisma.userCompany.findFirst({
       where: { 
@@ -410,7 +379,7 @@ export class AuthService {
     });
 
     if (!userCompany) {
-      throw new UnauthorizedException('Usuário não tem acesso a esta empresa');
+      throw new ForbiddenException('Usuário não tem acesso válido a esta empresa');
     }
 
     return {
@@ -421,23 +390,27 @@ export class AuthService {
     };
   }
 
+  //  MELHORADO: Permissões mais granulares
   private getRolePermissions(role: UserRole) {
     const permissions = {
       ADMIN: [
         'manage_companies',
         'manage_users',
-        'manage_sectors',
+        'manage_sectors', 
         'manage_process_types',
         'manage_processes',
         'view_all_processes',
         'execute_any_step',
+        'system_settings',
+        'view_reports',
       ],
       MANAGER: [
         'manage_users',
         'manage_sectors',
-        'manage_process_types',
+        'manage_process_types', 
         'view_company_processes',
         'execute_assigned_steps',
+        'view_reports',
       ],
       USER: [
         'create_processes',
@@ -447,5 +420,19 @@ export class AuthService {
     };
 
     return permissions[role] || [];
+  }
+
+  //    Validar contexto de empresa em requests
+  async validateCompanyAccess(userId: string, companyId: string): Promise<boolean> {
+    const userCompany = await this.prisma.userCompany.findFirst({
+      where: {
+        userId,
+        companyId,
+        company: { isActive: true },
+        user: { isActive: true },
+      },
+    });
+
+    return !!userCompany;
   }
 }
