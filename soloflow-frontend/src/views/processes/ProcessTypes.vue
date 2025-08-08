@@ -8,158 +8,268 @@
           Configure os fluxos de trabalho da empresa
         </p>
       </div>
-      <v-btn
-        color="primary"
-        @click="createNew"
-        prepend-icon="mdi-plus"
-      >
-        Novo Tipo
-      </v-btn>
+      <div class="d-flex gap-2">
+        <v-btn
+          variant="text"
+          @click="refreshData"
+          :loading="refreshing"
+        >
+          <v-icon start>mdi-refresh</v-icon>
+          Atualizar
+        </v-btn>
+        <v-btn
+          color="primary"
+          @click="createNew"
+          prepend-icon="mdi-plus"
+        >
+          Novo Tipo
+        </v-btn>
+      </div>
     </div>
 
+    <!-- 🔧 Indicador de carregamento -->
+    <v-alert
+      v-if="loading && processTypes.length === 0"
+      type="info"
+      variant="tonal"
+      class="mb-6"
+    >
+      <v-progress-circular
+        indeterminate
+        size="20"
+        class="mr-3"
+      />
+      Carregando tipos de processo...
+    </v-alert>
+
+    <!-- 🔧 Alerta de erro -->
+    <v-alert
+      v-if="error"
+      type="error"
+      variant="tonal"
+      class="mb-6"
+      closable
+      @click:close="clearError"
+    >
+      <v-icon start>mdi-alert-circle</v-icon>
+      {{ error }}
+    </v-alert>
+
     <!-- Lista de Tipos de Processo -->
-    <v-row>
-  <v-col
-    v-for="processType in processTypesWithInfo"
-    :key="processType.id"
-    cols="12"
-    md="6"
-    lg="4"
-  >
-    <v-hover v-slot="{ isHovering, props }">
-      <v-card
-        v-bind="props"
-        :elevation="isHovering ? 8 : 2"
-        class="h-100 d-flex flex-column transition-all"
+    <v-row v-if="!loading || processTypes.length > 0">
+      <v-col
+        v-for="processType in processTypesWithInfo"
+        :key="processType.id"
+        cols="12"
+        md="6"
+        lg="4"
       >
-        <v-card-title>
-          <v-icon color="primary" class="mr-2">
-            mdi-file-document-multiple-outline
-          </v-icon>
-          {{ processType.name }}
-        </v-card-title>
-
-        <v-card-subtitle v-if="processType.description">
-          {{ processType.description }}
-        </v-card-subtitle>
-
-        <v-card-text class="flex-grow-1">
-          <!-- : Estatísticas corretas -->
-          <div class="mb-3">
-            <div class="d-flex align-center mb-2">
-              <v-icon size="20" class="mr-2">mdi-debug-step-over</v-icon>
-              <span class="text-body-2">
-                {{ processType.stepsCount }} etapas
-              </span>
-            </div>
-            
-            <div class="d-flex align-center mb-2">
-              <v-icon size="20" class="mr-2">mdi-form-textbox</v-icon>
-              <span class="text-body-2">
-                {{ processType.formFieldsCount }} campos de formulário
-              </span>
-            </div>
-            
-            <div class="d-flex align-center">
-              <v-icon size="20" class="mr-2">mdi-counter</v-icon>
-              <span class="text-body-2">
-                {{ processType.instancesCount }} processos criados
-              </span>
-            </div>
-          </div>
-
-          <!-- : Preview das etapas aprimorado -->
-          <div v-if="processType.stepsCount > 0" class="mt-3">
-            <p class="text-caption text-medium-emphasis mb-2">Fluxo do processo:</p>
-            <div class="d-flex flex-wrap gap-1">
-              <v-chip
-                v-for="step in processType.stepsPreview"
-                :key="step.order"
-                size="x-small"
-                class="mr-1 mb-1"
-                variant="tonal"
-                :color="getStepTypeColor(step.type)"
-              >
-                {{ step.order }}. {{ step.name }}
-              </v-chip>
-              
-              <v-chip
-                v-if="processType.hasMoreSteps"
-                size="x-small"
-                variant="outlined"
-                class="mb-1"
-              >
-                +{{ processType.moreStepsCount }}
-              </v-chip>
-            </div>
-          </div>
-          
-          <!--  NOVO: Indicadores visuais -->
-          <div v-else class="mt-3">
-            <v-alert
-              type="warning"
-              variant="tonal"
-              density="compact"
-            >
-              ⚠️ Nenhuma etapa configurada
-            </v-alert>
-          </div>
-        </v-card-text>
-
-        <v-divider />
-
-        <!-- : Actions aprimoradas -->
-        <v-card-actions class="pa-4">
-          <v-btn
-            variant="text"
-            size="small"
-            color="primary"
-            @click="editProcessType(processType)"
+        <v-hover v-slot="{ isHovering, props }">
+          <v-card
+            v-bind="props"
+            :elevation="isHovering ? 8 : 2"
+            class="h-100 d-flex flex-column transition-all position-relative"
+            :class="{ 'border-warning': processType.hasIssues }"
           >
-            <v-icon start>mdi-pencil</v-icon>
-            Editar
-          </v-btn>
-          
-          <v-spacer />
-          
-          <v-menu>
-            <template v-slot:activator="{ props }">
+            <!-- 🔧 Badge de status -->
+            <v-chip
+              v-if="processType.hasIssues"
+              size="small"
+              color="warning"
+              class="position-absolute"
+              style="top: 8px; right: 8px; z-index: 1;"
+            >
+              <v-icon start size="16">mdi-alert</v-icon>
+              Atenção
+            </v-chip>
+
+            <v-card-title class="pb-2">
+              <v-icon color="primary" class="mr-2">
+                mdi-file-document-multiple-outline
+              </v-icon>
+              {{ processType.name }}
+            </v-card-title>
+
+            <v-card-subtitle v-if="processType.description" class="pb-1">
+              {{ processType.description }}
+            </v-card-subtitle>
+
+            <v-card-text class="flex-grow-1">
+              <!-- 🔧 Estatísticas aprimoradas -->
+              <div class="mb-3">
+                <div class="d-flex align-center justify-space-between mb-2">
+                  <div class="d-flex align-center">
+                    <v-icon size="20" class="mr-2" color="primary">mdi-debug-step-over</v-icon>
+                    <span class="text-body-2">{{ processType.stepsCount }} etapas</span>
+                  </div>
+                  <v-chip
+                    v-if="processType.stepsCount === 0"
+                    size="x-small"
+                    color="warning"
+                    variant="tonal"
+                  >
+                    Sem etapas
+                  </v-chip>
+                </div>
+                
+                <div class="d-flex align-center justify-space-between mb-2">
+                  <div class="d-flex align-center">
+                    <v-icon size="20" class="mr-2" color="info">mdi-form-textbox</v-icon>
+                    <span class="text-body-2">{{ processType.formFieldsCount }} campos</span>
+                  </div>
+                </div>
+                
+                <div class="d-flex align-center justify-space-between">
+                  <div class="d-flex align-center">
+                    <v-icon size="20" class="mr-2" color="success">mdi-counter</v-icon>
+                    <span class="text-body-2">{{ processType.instancesCount }} usos</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 🔧 Preview das etapas melhorado -->
+              <div v-if="processType.stepsCount > 0" class="mt-3">
+                <p class="text-caption text-medium-emphasis mb-2">Fluxo do processo:</p>
+                <div class="d-flex flex-wrap gap-1">
+                  <v-chip
+                    v-for="step in processType.stepsPreview"
+                    :key="step.order"
+                    size="x-small"
+                    class="mr-1 mb-1"
+                    variant="tonal"
+                    :color="getStepTypeColor(step.type)"
+                  >
+                    {{ step.order }}. {{ step.name }}
+                  </v-chip>
+                  
+                  <v-chip
+                    v-if="processType.hasMoreSteps"
+                    size="x-small"
+                    variant="outlined"
+                    class="mb-1"
+                  >
+                    +{{ processType.moreStepsCount }}
+                  </v-chip>
+                </div>
+              </div>
+              
+              <!-- 🔧 Alerta para tipos sem configuração -->
+              <div v-else class="mt-3">
+                <v-alert
+                  type="warning"
+                  variant="tonal"
+                  density="compact"
+                >
+                  <v-icon start size="16">mdi-alert</v-icon>
+                  Nenhuma etapa configurada
+                </v-alert>
+              </div>
+
+              <!-- 🔧 Indicadores de recursos -->
+              <div v-if="processType.stepsCount > 0" class="mt-3">
+                <div class="d-flex flex-wrap gap-1">
+                  <v-chip
+                    v-if="processType.hasSignatureSteps"
+                    size="x-small"
+                    color="error"
+                    variant="tonal"
+                  >
+                    <v-icon start size="12">mdi-draw-pen</v-icon>
+                    Assinatura
+                  </v-chip>
+                  <v-chip
+                    v-if="processType.hasAttachmentSteps"
+                    size="x-small"
+                    color="info"
+                    variant="tonal"
+                  >
+                    <v-icon start size="12">mdi-paperclip</v-icon>
+                    Anexos
+                  </v-chip>
+                  <v-chip
+                    v-if="processType.formFieldsCount > 0"
+                    size="x-small"
+                    color="purple"
+                    variant="tonal"
+                  >
+                    <v-icon start size="12">mdi-form-textbox</v-icon>
+                    Formulário
+                  </v-chip>
+                </div>
+              </div>
+            </v-card-text>
+
+            <v-divider />
+
+            <!-- 🔧 Actions aprimoradas -->
+            <v-card-actions class="pa-4">
               <v-btn
-                v-bind="props"
-                icon="mdi-dots-vertical"
                 variant="text"
                 size="small"
-              />
-            </template>
-            
-            <v-list>
-              <v-list-item @click="duplicateProcessType(processType)">
-                <v-list-item-title>
-                  <v-icon start>mdi-content-copy</v-icon>
-                  Duplicar
-                </v-list-item-title>
-              </v-list-item>
-              
-              <v-list-item 
-                @click="viewProcessTypeDetails(processType)"
-                :disabled="processType.stepsCount === 0"
+                color="primary"
+                @click="editProcessType(processType)"
+                :disabled="loading"
               >
-                <v-list-item-title>
-                  <v-icon start>mdi-eye</v-icon>
-                  Ver Detalhes
-                </v-list-item-title>
-              </v-list-item>
-            </v-list>
-          </v-menu>
-        </v-card-actions>
-      </v-card>
-    </v-hover>
-  </v-col>
-</v-row>
+                <v-icon start>mdi-pencil</v-icon>
+                Editar
+              </v-btn>
+              
+              <v-spacer />
+              
+              <v-menu>
+                <template v-slot:activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-dots-vertical"
+                    variant="text"
+                    size="small"
+                    :disabled="loading"
+                  />
+                </template>
+                
+                <v-list>
+                  <v-list-item 
+                    @click="duplicateProcessType(processType)"
+                    :disabled="processType.stepsCount === 0"
+                  >
+                    <v-list-item-title>
+                      <v-icon start>mdi-content-copy</v-icon>
+                      Duplicar
+                    </v-list-item-title>
+                  </v-list-item>
+                  
+                  <v-list-item 
+                    @click="viewProcessTypeDetails(processType)"
+                    :disabled="processType.stepsCount === 0"
+                  >
+                    <v-list-item-title>
+                      <v-icon start>mdi-eye</v-icon>
+                      Ver Detalhes
+                    </v-list-item-title>
+                  </v-list-item>
+                  
+                  <v-divider />
+                  
+                  <v-list-item 
+                    @click="testProcessType(processType)"
+                    :disabled="processType.stepsCount === 0"
+                  >
+                    <v-list-item-title>
+                      <v-icon start>mdi-play-circle</v-icon>
+                      Testar Fluxo
+                    </v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
+            </v-card-actions>
+          </v-card>
+        </v-hover>
+      </v-col>
+    </v-row>
 
     <!-- Estado vazio -->
     <v-card
-      v-if="!loading && processTypes.length === 0"
+      v-if="!loading && processTypes.length === 0 && !error"
       class="text-center py-12"
     >
       <v-icon size="64" color="grey-lighten-1">
@@ -174,25 +284,45 @@
       <v-btn
         color="primary"
         @click="createNew"
+        size="large"
       >
         <v-icon start>mdi-plus</v-icon>
         Criar Primeiro Tipo
       </v-btn>
     </v-card>
 
-    <!-- Loading -->
-    <div v-if="loading" class="text-center py-12">
-      <v-progress-circular
-        indeterminate
-        color="primary"
-        size="64"
-      />
-    </div>
+    <!-- 🔧 Loading skeleton (quando recarregando) -->
+    <v-row v-if="loading && processTypes.length > 0">
+      <v-col v-for="n in 3" :key="`skeleton-${n}`" cols="12" md="6" lg="4">
+        <v-skeleton-loader
+          type="card"
+          height="280"
+        />
+      </v-col>
+    </v-row>
+
+    <!-- 🔧 Snackbar para feedback -->
+    <v-snackbar
+      v-model="showSnackbar"
+      :color="snackbarColor"
+      :timeout="3000"
+      location="top right"
+    >
+      {{ snackbarMessage }}
+      <template v-slot:actions>
+        <v-btn
+          variant="text"
+          @click="showSnackbar = false"
+        >
+          Fechar
+        </v-btn>
+      </template>
+    </v-snackbar>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProcessTypeStore } from '@/stores/processTypes'
 import { useAuthStore } from '@/stores/auth'
@@ -201,45 +331,49 @@ const router = useRouter()
 const processTypeStore = useProcessTypeStore()
 const authStore = useAuthStore()
 
-//  ADICIONAR: Estado local para controle
+// 🔧 Estado local
 const refreshing = ref(false)
-const lastRefresh = ref(null)
+const showSnackbar = ref(false)
+const snackbarMessage = ref('')
+const snackbarColor = ref('success')
 
 // Computed
 const loading = computed(() => processTypeStore.loading)
 const processTypes = computed(() => processTypeStore.processTypes)
+const error = computed(() => processTypeStore.error)
 
-//  CORRIGIDO: Computed para mostrar informações corretas
+// 🔧 Computed aprimorado para informações dos process types
 const processTypesWithInfo = computed(() => {
-  return processTypes.value.map(processType => ({
-    ...processType,
-    //  Garantir contagem correta de etapas e campos
-    stepsCount: processType.steps?.length || 0,
-    formFieldsCount: processType.formFields?.length || 0,
-    instancesCount: processType._count?.instances || 0,
+  return processTypes.value.map(processType => {
+    // Garantir que steps e formFields são arrays
+    const steps = Array.isArray(processType.steps) ? processType.steps : []
+    const formFields = Array.isArray(processType.formFields) ? processType.formFields : []
     
-    //  Processar etapas para preview
-    stepsPreview: processType.steps?.slice(0, 3).map((step, idx) => ({
-      order: idx + 1,
-      name: step.name,
-      type: step.type
-    })) || [],
-    
-    hasMoreSteps: (processType.steps?.length || 0) > 3,
-    moreStepsCount: Math.max(0, (processType.steps?.length || 0) - 3)
-  }))
+    return {
+      ...processType,
+      // Contagens corretas
+      stepsCount: steps.length,
+      formFieldsCount: formFields.length,
+      instancesCount: processType._count?.instances || 0,
+      
+      // Preview das etapas (primeiras 3)
+      stepsPreview: steps.slice(0, 3).map((step, idx) => ({
+        order: idx + 1,
+        name: step.name || `Etapa ${idx + 1}`,
+        type: step.type || 'INPUT'
+      })),
+      
+      // Indicadores
+      hasMoreSteps: steps.length > 3,
+      moreStepsCount: Math.max(0, steps.length - 3),
+      hasSignatureSteps: steps.some(step => step.requiresSignature),
+      hasAttachmentSteps: steps.some(step => step.allowAttachment),
+      hasIssues: steps.length === 0, // Problema se não tem etapas
+    }
+  })
 })
 
-// 🔧 CORRIGIR: Métodos
-function createNew() {
-  router.push('/process-types/new')
-}
-
-function editProcessType(processType) {
-  console.log('📝 Editing process type:', processType.id)
-  router.push(`/process-types/${processType.id}/edit`)
-}
-
+// Métodos auxiliares
 function getStepTypeColor(type) {
   const colors = {
     INPUT: 'blue',
@@ -251,104 +385,130 @@ function getStepTypeColor(type) {
   return colors[type] || 'grey'
 }
 
-//  NOVO: Método para ver detalhes
-function viewProcessTypeDetails(processType) {
-  // Implementar dialog ou página de detalhes
-  console.log('👁️ Viewing details for:', processType.name)
-  window.showSnackbar?.(`Detalhes de "${processType.name}" - Feature em desenvolvimento`, 'info')
+function showMessage(message, color = 'success') {
+  snackbarMessage.value = message
+  snackbarColor.value = color
+  showSnackbar.value = true
 }
 
+// Métodos principais
+function createNew() {
+  router.push('/process-types/new')
+}
 
-//  CORRIGIDO: Método de duplicação aprimorado
+function editProcessType(processType) {
+  console.log('📝 Editing process type:', processType.id)
+  router.push(`/process-types/${processType.id}/edit`)
+}
+
+function viewProcessTypeDetails(processType) {
+  console.log('👁️ Viewing details for:', processType.name)
+  showMessage(`Detalhes de "${processType.name}" - Feature em desenvolvimento`, 'info')
+}
+
+function testProcessType(processType) {
+  console.log('🧪 Testing process type:', processType.name)
+  showMessage(`Teste de "${processType.name}" - Feature em desenvolvimento`, 'info')
+}
+
+// 🔧 Método de duplicação aprimorado
 async function duplicateProcessType(processType) {
+  if (processType.stepsCount === 0) {
+    showMessage('Não é possível duplicar um tipo de processo sem etapas', 'warning')
+    return
+  }
+
   try {
     console.log('📋 Duplicating process type:', processType.name)
     
-    //  Mostrar loading
     refreshing.value = true
     
     const result = await processTypeStore.duplicateProcessType(processType)
     
-    console.log('🎉 Process type duplicated:', result)
-    window.showSnackbar?.(`Tipo de processo "${result.name}" duplicado com sucesso!`, 'success')
+    console.log('✅ Process type duplicated:', result.name)
+    showMessage(`Tipo de processo "${result.name}" duplicado com sucesso!`, 'success')
     
-    //  IMPORTANTE: Atualizar lista após duplicação
+    // Atualizar lista
     await refreshData()
     
   } catch (error) {
     console.error('❌ Error duplicating process type:', error)
-    window.showSnackbar?.('Erro ao duplicar tipo de processo: ' + (error.message || 'Erro desconhecido'), 'error')
+    showMessage('Erro ao duplicar tipo de processo: ' + (error.message || 'Erro desconhecido'), 'error')
   } finally {
     refreshing.value = false
   }
 }
 
-//  NOVO: Método para atualizar dados
+// 🔧 Método de atualização aprimorado
 async function refreshData() {
   try {
-    console.log('🔄 Refreshing process types data...')
+    console.log('🔄 Refreshing process types...')
     refreshing.value = true
-    lastRefresh.value = new Date()
     
     await processTypeStore.fetchProcessTypes()
     
-    console.log(' Process types refreshed, count:', processTypes.value.length)
+    console.log('✅ Process types refreshed, count:', processTypes.value.length)
+    
+    if (processTypes.value.length === 0) {
+      showMessage('Nenhum tipo de processo encontrado', 'info')
+    }
+    
   } catch (error) {
     console.error('❌ Error refreshing data:', error)
-    window.showSnackbar?.('Erro ao atualizar dados', 'error')
+    showMessage('Erro ao atualizar dados: ' + (error.message || 'Erro desconhecido'), 'error')
   } finally {
     refreshing.value = false
   }
 }
 
-//  NOVO: Auto-refresh quando necessário
-function setupAutoRefresh() {
-  //  Refresh quando voltar para a página (window focus)
-  const handleFocus = () => {
-    const now = new Date()
-    const timeSinceLastRefresh = lastRefresh.value ? now - lastRefresh.value : Infinity
-    
-    // Refresh se passou mais de 30 segundos desde o último refresh
-    if (timeSinceLastRefresh > 30000) {
-      console.log('🔄 Auto-refreshing due to window focus')
-      refreshData()
-    }
-  }
-  
-  window.addEventListener('focus', handleFocus)
-  
-  return () => {
-    window.removeEventListener('focus', handleFocus)
-  }
+function clearError() {
+  processTypeStore.clearError()
 }
 
-//  Lifecycle hooks
+// 🔧 Lifecycle melhorado
 onMounted(async () => {
   console.log('🚀 ProcessTypes page mounted')
   
-  //  Verificar se já tem dados carregados
-  if (processTypes.value.length === 0) {
+  // Verificar se o usuário tem permissão
+  if (!authStore.canManageProcessTypes) {
+    console.warn('⚠️ User does not have permission to manage process types')
+    showMessage('Você não tem permissão para gerenciar tipos de processo', 'error')
+    router.push('/dashboard')
+    return
+  }
+  
+  // Carregar dados se necessário
+  if (processTypes.value.length === 0 && !loading.value) {
     console.log('📥 No process types loaded, fetching...')
     await refreshData()
   } else {
-    console.log(' Process types already loaded:', processTypes.value.length)
-    
-    //  Fazer refresh leve se dados são antigos
-    const timeSinceMount = Date.now() - (window.processTypesLastLoaded || 0)
-    if (timeSinceMount > 60000) { // 1 minuto
-      console.log('🔄 Data might be stale, refreshing...')
-      await refreshData()
-    }
+    console.log('✅ Process types already loaded:', processTypes.value.length)
   }
-  
-  //  Setup auto-refresh
-  const cleanup = setupAutoRefresh()
-  
-  //  Cleanup na desmontagem
-  onBeforeUnmount(cleanup)
-  
-  // Marcar timestamp de carregamento
-  window.processTypesLastLoaded = Date.now()
 })
 </script>
 
+<style scoped>
+.transition-all {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.5, 1);
+}
+
+.border-warning {
+  border-left: 4px solid rgb(var(--v-theme-warning)) !important;
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+.gap-1 {
+  gap: 4px;
+}
+
+.position-relative {
+  position: relative;
+}
+
+.position-absolute {
+  position: absolute;
+}
+</style>

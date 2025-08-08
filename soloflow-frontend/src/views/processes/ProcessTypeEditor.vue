@@ -96,74 +96,55 @@
             </v-card-text>
 
             <v-list v-else lines="three">
-              <draggable
-                v-model="formData.formFields"
-                item-key="tempId"
-                handle=".drag-handle"
-                @end="updateFieldOrders"
-              >
-                <template #item="{ element: field, index }">
-                  <v-list-item class="px-4 py-3">
-                    <template v-slot:prepend>
-                      <v-icon
-                        class="drag-handle cursor-move mr-3"
-                        color="grey"
-                      >
-                        mdi-drag
-                      </v-icon>
-                      <v-avatar
-                        :color="getFieldTypeColor(field.type)"
-                        size="40"
-                      >
-                        <v-icon :icon="getFieldTypeIcon(field.type)" size="20" />
-                      </v-avatar>
-                    </template>
+              <!-- Lista de campos sem draggable temporariamente -->
+              <template v-for="(field, index) in formData.formFields" :key="field.tempId || index">
+                <v-list-item class="px-4 py-3">
+                  <template v-slot:prepend>
+                    <v-icon class="mr-3" color="grey">mdi-drag</v-icon>
+                    <v-avatar :color="getFieldTypeColor(field.type)" size="40">
+                      <v-icon :icon="getFieldTypeIcon(field.type)" size="20" />
+                    </v-avatar>
+                  </template>
 
-                    <v-list-item-title class="font-weight-medium">
-                      {{ field.label }}
-                      <v-chip
-                        v-if="field.required"
-                        size="x-small"
-                        color="error"
-                        class="ml-2"
-                      >
-                        Obrigatório
-                      </v-chip>
-                    </v-list-item-title>
+                  <v-list-item-title class="font-weight-medium">
+                    {{ field.label }}
+                    <v-chip v-if="field.required" size="x-small" color="error" class="ml-2">
+                      Obrigatório
+                    </v-chip>
+                  </v-list-item-title>
 
-                    <v-list-item-subtitle>
-                      <div>
-                        <v-icon size="16">mdi-code-tags</v-icon>
-                        Nome: {{ field.name }}
-                        <span class="mx-2">•</span>
-                        <v-icon size="16">mdi-format-list-bulleted-type</v-icon>
-                        Tipo: {{ getFieldTypeText(field.type) }}
-                      </div>
-                      <div v-if="field.placeholder" class="mt-1">
-                        <v-icon size="16">mdi-form-textbox-hint</v-icon>
-                        {{ field.placeholder }}
-                      </div>
-                    </v-list-item-subtitle>
+                  <v-list-item-subtitle>
+                    <div>
+                      <v-icon size="16">mdi-code-tags</v-icon>
+                      Nome: {{ field.name }}
+                      <span class="mx-2">•</span>
+                      <v-icon size="16">mdi-format-list-bulleted-type</v-icon>
+                      Tipo: {{ getFieldTypeText(field.type) }}
+                    </div>
+                    <div v-if="field.placeholder" class="mt-1">
+                      <v-icon size="16">mdi-form-textbox-hint</v-icon>
+                      {{ field.placeholder }}
+                    </div>
+                  </v-list-item-subtitle>
 
-                    <template v-slot:append>
-                      <v-btn
-                        icon="mdi-pencil"
-                        size="small"
-                        variant="text"
-                        @click="editField(index)"
-                      />
-                      <v-btn
-                        icon="mdi-delete"
-                        size="small"
-                        variant="text"
-                        color="error"
-                        @click="removeField(index)"
-                      />
-                    </template>
-                  </v-list-item>
-                  <v-divider v-if="index < formData.formFields.length - 1" />
-                </template>
-              </draggable>
+                  <template v-slot:append>
+                    <v-btn
+                      icon="mdi-pencil"
+                      size="small"
+                      variant="text"
+                      @click="editField(index)"
+                    />
+                    <v-btn
+                      icon="mdi-delete"
+                      size="small"
+                      variant="text"
+                      color="error"
+                      @click="removeField(index)"
+                    />
+                  </template>
+                </v-list-item>
+                <v-divider v-if="index < formData.formFields.length - 1" />
+              </template>
             </v-list>
           </v-card>
         </v-window-item>
@@ -197,91 +178,61 @@
             </v-card-text>
 
             <v-list v-else lines="three">
-              <draggable
-                v-model="formData.steps"
-                item-key="tempId"
-                handle=".drag-handle"
-                @end="updateStepOrders"
-              >
-                <template #item="{ element: step, index }">
-                  <v-list-item class="px-4 py-3">
-                    <template v-slot:prepend>
-                      <v-icon
-                        class="drag-handle cursor-move mr-3"
-                        color="grey"
-                      >
-                        mdi-drag
-                      </v-icon>
-                      <v-avatar
-                        :color="getStepTypeColor(step.type)"
-                        size="40"
-                      >
-                        <span class="text-h6">{{ index + 1 }}</span>
-                      </v-avatar>
-                    </template>
+              <!-- Lista de steps sem draggable temporariamente -->
+              <template v-for="(step, index) in formData.steps" :key="step.tempId || index">
+                <v-list-item class="px-4 py-3">
+                  <template v-slot:prepend>
+                    <v-icon class="mr-3" color="grey">mdi-drag</v-icon>
+                    <v-avatar :color="getStepTypeColor(step.type)" size="40">
+                      <span class="text-h6">{{ index + 1 }}</span>
+                    </v-avatar>
+                  </template>
 
-                    <v-list-item-title class="font-weight-medium">
-                      {{ step.name }}
-                      <v-chip
-                        size="x-small"
-                        class="ml-2"
-                        variant="tonal"
-                      >
-                        {{ getStepTypeText(step.type) }}
+                  <v-list-item-title class="font-weight-medium">
+                    {{ step.name }}
+                    <v-chip size="x-small" class="ml-2" variant="tonal">
+                      {{ getStepTypeText(step.type) }}
+                    </v-chip>
+                  </v-list-item-title>
+
+                  <v-list-item-subtitle>
+                    <div v-if="step.assignedToSectorId || step.assignedToUserId">
+                      <v-icon size="16">mdi-account-check</v-icon>
+                      Responsável: {{ getResponsibleName(step) }}
+                    </div>
+                    <div class="mt-1">
+                      <v-chip v-if="step.allowAttachment" size="x-small" class="mr-1">
+                        <v-icon start size="12">mdi-paperclip</v-icon>
+                        Anexos{{ step.requireAttachment ? ' (obrigatório)' : '' }}
                       </v-chip>
-                    </v-list-item-title>
+                      <v-chip v-if="step.requiresSignature" size="x-small" class="mr-1">
+                        <v-icon start size="12">mdi-draw-pen</v-icon>
+                        Assinatura
+                      </v-chip>
+                      <v-chip v-if="step.actions?.length > 0" size="x-small">
+                        {{ step.actions.length }} ações
+                      </v-chip>
+                    </div>
+                  </v-list-item-subtitle>
 
-                    <v-list-item-subtitle>
-                      <div v-if="step.assignedToSectorId || step.assignedToUserId">
-                        <v-icon size="16">mdi-account-check</v-icon>
-                        Responsável: 
-                        {{ getResponsibleName(step) }}
-                      </div>
-                      <div class="mt-1">
-                        <v-chip
-                          v-if="step.allowAttachment"
-                          size="x-small"
-                          class="mr-1"
-                        >
-                          <v-icon start size="12">mdi-paperclip</v-icon>
-                          Anexos{{ step.requireAttachment ? ' (obrigatório)' : '' }}
-                        </v-chip>
-                        <v-chip
-                          v-if="step.requiresSignature"
-                          size="x-small"
-                          class="mr-1"
-                        >
-                          <v-icon start size="12">mdi-draw-pen</v-icon>
-                          Assinatura
-                        </v-chip>
-                        <v-chip
-                          v-if="step.actions?.length > 0"
-                          size="x-small"
-                        >
-                          {{ step.actions.length }} ações
-                        </v-chip>
-                      </div>
-                    </v-list-item-subtitle>
-
-                    <template v-slot:append>
-                      <v-btn
-                        icon="mdi-pencil"
-                        size="small"
-                        variant="text"
-                        @click="editStep(index)"
-                      />
-                      <v-btn
-                        icon="mdi-delete"
-                        size="small"
-                        variant="text"
-                        color="error"
-                        @click="removeStep(index)"
-                      />
-                    </template>
-                  </v-list-item>
-                  <v-divider v-if="index < formData.steps.length - 1" />
-                </template>
-              </draggable>
+                  <template v-slot:append>
+                    <v-btn
+                      icon="mdi-pencil"
+                      size="small"
+                      variant="text"
+                      @click="editStep(index)"
+                    />
+                    <v-btn
+                      icon="mdi-delete"
+                      size="small"
+                      variant="text"
+                      color="error"
+                      @click="removeStep(index)"
+                    />
+                  </template>
+                </v-list-item>
+                <v-divider v-if="index < formData.steps.length - 1" />
+              </template>
             </v-list>
           </v-card>
         </v-window-item>
@@ -289,10 +240,7 @@
 
       <!-- Ações -->
       <div class="d-flex justify-end mt-6 gap-2">
-        <v-btn
-          variant="text"
-          @click="goBack"
-        >
+        <v-btn variant="text" @click="goBack">
           Cancelar
         </v-btn>
         <v-btn
@@ -308,11 +256,7 @@
     </v-form>
 
     <!-- Dialog de Campo de Formulário -->
-    <v-dialog
-      v-model="fieldDialog"
-      max-width="800"
-      persistent
-    >
+    <v-dialog v-model="fieldDialog" max-width="800" persistent>
       <v-card>
         <v-card-title>
           {{ editingFieldIndex !== null ? 'Editar' : 'Novo' }} Campo
@@ -375,108 +319,6 @@
                   rows="2"
                 />
               </v-col>
-              
-              <!-- Opções para dropdown/checkbox -->
-              <v-col v-if="['DROPDOWN', 'CHECKBOX'].includes(fieldData.type)" cols="12">
-                <v-card variant="outlined">
-                  <v-card-title class="text-subtitle-1">
-                    Opções
-                    <v-btn
-                      icon="mdi-plus"
-                      size="small"
-                      variant="text"
-                      @click="addOption"
-                      class="ml-2"
-                    />
-                  </v-card-title>
-                  <v-card-text>
-                    <div
-                      v-for="(option, idx) in fieldData.options"
-                      :key="idx"
-                      class="d-flex align-center gap-2 mb-2"
-                    >
-                      <v-text-field
-                        v-model="option.value"
-                        label="Valor"
-                        density="compact"
-                        hide-details
-                      />
-                      <v-text-field
-                        v-model="option.label"
-                        label="Rótulo"
-                        density="compact"
-                        hide-details
-                      />
-                      <v-btn
-                        icon="mdi-delete"
-                        size="small"
-                        variant="text"
-                        color="error"
-                        @click="removeOption(idx)"
-                      />
-                    </div>
-                  </v-card-text>
-                </v-card>
-              </v-col>
-
-              <!-- Validações -->
-              <v-col cols="12">
-                <v-expansion-panels>
-                  <v-expansion-panel>
-                    <v-expansion-panel-title>
-                      <v-icon start>mdi-shield-check</v-icon>
-                      Validações Avançadas
-                    </v-expansion-panel-title>
-                    <v-expansion-panel-text>
-                      <v-row>
-                        <v-col v-if="['TEXT', 'TEXTAREA'].includes(fieldData.type)" cols="12" md="6">
-                          <v-text-field
-                            v-model.number="fieldData.validations.minLength"
-                            label="Comprimento Mínimo"
-                            type="number"
-                            min="0"
-                          />
-                        </v-col>
-                        <v-col v-if="['TEXT', 'TEXTAREA'].includes(fieldData.type)" cols="12" md="6">
-                          <v-text-field
-                            v-model.number="fieldData.validations.maxLength"
-                            label="Comprimento Máximo"
-                            type="number"
-                            min="0"
-                          />
-                        </v-col>
-                        <v-col v-if="fieldData.type === 'NUMBER'" cols="12" md="6">
-                          <v-text-field
-                            v-model.number="fieldData.validations.min"
-                            label="Valor Mínimo"
-                            type="number"
-                          />
-                        </v-col>
-                        <v-col v-if="fieldData.type === 'NUMBER'" cols="12" md="6">
-                          <v-text-field
-                            v-model.number="fieldData.validations.max"
-                            label="Valor Máximo"
-                            type="number"
-                          />
-                        </v-col>
-                        <v-col cols="12">
-                          <v-text-field
-                            v-model="fieldData.validations.pattern"
-                            label="Expressão Regular (RegEx)"
-                            hint="Para validação customizada"
-                          />
-                        </v-col>
-                        <v-col cols="12">
-                          <v-text-field
-                            v-model="fieldData.validations.customMessage"
-                            label="Mensagem de Erro Customizada"
-                          />
-                        </v-col>
-                      </v-row>
-                    </v-expansion-panel-text>
-                  </v-expansion-panel>
-                </v-expansion-panels>
-              </v-col>
             </v-row>
           </v-card-text>
 
@@ -484,10 +326,7 @@
 
           <v-card-actions>
             <v-spacer />
-            <v-btn
-              variant="text"
-              @click="closeFieldDialog"
-            >
+            <v-btn variant="text" @click="closeFieldDialog">
               Cancelar
             </v-btn>
             <v-btn
@@ -503,29 +342,74 @@
       </v-card>
     </v-dialog>
 
-    <!-- Dialog de Etapa (mantém o existente mas vou adicionar as melhorias) -->
-    <StepDialog
-      v-model="stepDialog"
-      :step-data="stepData"
-      :editing-index="editingStepIndex"
-      :sectors="sectors"
-      :users="users"
-      :steps="formData.steps"
-      @save="saveStep"
-      @close="closeStepDialog"
-    />
+    <!-- Dialog Simples de Etapa (temporário) -->
+    <v-dialog v-model="stepDialog" max-width="600" persistent>
+      <v-card>
+        <v-card-title>
+          {{ editingStepIndex !== null ? 'Editar' : 'Nova' }} Etapa
+        </v-card-title>
+        <v-divider />
+        
+        <v-card-text>
+          <v-row>
+            <v-col cols="12">
+              <v-text-field
+                v-model="stepData.name"
+                label="Nome da Etapa"
+                required
+              />
+            </v-col>
+            <v-col cols="12">
+              <v-textarea
+                v-model="stepData.description"
+                label="Descrição"
+                rows="2"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="stepData.type"
+                :items="stepTypes"
+                label="Tipo de Etapa"
+                required
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="stepData.assignedToSectorId"
+                :items="sectors"
+                item-title="name"
+                item-value="id"
+                label="Setor Responsável"
+                clearable
+              />
+            </v-col>
+          </v-row>
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closeStepDialog">
+            Cancelar
+          </v-btn>
+          <v-btn color="primary" variant="elevated" @click="saveStep">
+            {{ editingStepIndex !== null ? 'Salvar' : 'Adicionar' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue' // ✅ ADICIONADO watch
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useProcessTypeStore } from '@/stores/processTypes'
 import { useSectorStore } from '@/stores/sectors'
 import { useUserStore } from '@/stores/users'
-import { VueDraggableNext as draggable } from 'vue-draggable-next'
-import StepDialog from '@/components/StepDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -563,14 +447,7 @@ const fieldData = ref({
   defaultValue: '',
   helpText: '',
   options: [],
-  validations: {
-    minLength: null,
-    maxLength: null,
-    min: null,
-    max: null,
-    pattern: '',
-    customMessage: ''
-  }
+  validations: {}
 })
 
 const stepData = ref({
@@ -580,13 +457,9 @@ const stepData = ref({
   allowAttachment: false,
   requiresSignature: false,
   requireAttachment: false,
-  minAttachments: null,
-  maxAttachments: null,
-  allowedFileTypes: [],
   actions: [],
   assignedToUserId: null,
-  assignedToSectorId: null,
-  conditions: {}
+  assignedToSectorId: null
 })
 
 // Computed
@@ -678,7 +551,6 @@ function getStepTypeText(type) {
 }
 
 function getResponsibleName(step) {
-  // : Verificar se as propriedades existem antes de acessar
   if (step.assignedToUser?.name) {
     return step.assignedToUser.name
   }
@@ -695,9 +567,6 @@ function getResponsibleName(step) {
   }
   return 'Não definido'
 }
-
-// : Carregar dados com verificações de segurança
-
 
 // Métodos - Campos
 function addField() {
@@ -718,14 +587,7 @@ function editField(index) {
     defaultValue: field.defaultValue || '',
     helpText: field.helpText || '',
     options: field.options ? [...field.options] : [],
-    validations: field.validations ? { ...field.validations } : {
-      minLength: null,
-      maxLength: null,
-      min: null,
-      max: null,
-      pattern: '',
-      customMessage: ''
-    }
+    validations: field.validations ? { ...field.validations } : {}
   }
   
   fieldDialog.value = true
@@ -733,13 +595,6 @@ function editField(index) {
 
 function removeField(index) {
   formData.value.formFields.splice(index, 1)
-  updateFieldOrders()
-}
-
-function updateFieldOrders() {
-  formData.value.formFields.forEach((field, index) => {
-    field.order = index + 1
-  })
 }
 
 function resetFieldData() {
@@ -753,14 +608,7 @@ function resetFieldData() {
     defaultValue: '',
     helpText: '',
     options: [],
-    validations: {
-      minLength: null,
-      maxLength: null,
-      min: null,
-      max: null,
-      pattern: '',
-      customMessage: ''
-    }
+    validations: {}
   }
 }
 
@@ -769,31 +617,12 @@ function closeFieldDialog() {
   resetFieldData()
 }
 
-function addOption() {
-  fieldData.value.options.push({ value: '', label: '' })
-}
-
-function removeOption(index) {
-  fieldData.value.options.splice(index, 1)
-}
-
 function saveField() {
   if (!fieldValid.value) {
     window.showSnackbar?.('Por favor, corrija os erros no campo', 'error')
     return
   }
 
-  //  CORRIGIDO: Validar nome do campo único
-  const existingField = formData.value.formFields.find((field, index) => 
-    field.name === fieldData.value.name && index !== editingFieldIndex.value
-  )
-  
-  if (existingField) {
-    window.showSnackbar?.(`Nome do campo "${fieldData.value.name}" já está em uso`, 'error')
-    return
-  }
-
-  //  Criar objeto do campo com validações
   const field = {
     name: fieldData.value.name.trim(),
     label: fieldData.value.label.trim(),
@@ -802,28 +631,15 @@ function saveField() {
     required: Boolean(fieldData.value.required),
     defaultValue: fieldData.value.defaultValue?.trim() || null,
     helpText: fieldData.value.helpText?.trim() || null,
-    
-    //  Metadados temporários
     tempId: editingFieldIndex.value !== null 
       ? formData.value.formFields[editingFieldIndex.value].tempId 
       : Date.now() + Math.random(),
     order: editingFieldIndex.value !== null 
       ? formData.value.formFields[editingFieldIndex.value].order 
       : formData.value.formFields.length + 1,
-    
-    //  CORRIGIDO: Processar opções e validações
-    options: fieldData.value.options?.filter(opt => 
-      opt.value && opt.value.trim() && opt.label && opt.label.trim()
-    ) || [],
-    
-    validations: Object.fromEntries(
-      Object.entries(fieldData.value.validations || {}).filter(([key, value]) => 
-        value !== null && value !== undefined && value !== '' && value !== 0
-      )
-    )
+    options: fieldData.value.options || [],
+    validations: fieldData.value.validations || {}
   }
-
-  console.log('💾 Saving field:', field)
 
   if (editingFieldIndex.value !== null) {
     formData.value.formFields[editingFieldIndex.value] = field
@@ -853,13 +669,9 @@ function editStep(index) {
     allowAttachment: step.allowAttachment,
     requiresSignature: step.requiresSignature,
     requireAttachment: step.requireAttachment || false,
-    minAttachments: step.minAttachments || null,
-    maxAttachments: step.maxAttachments || null,
-    allowedFileTypes: step.allowedFileTypes || [],
     actions: step.actions || [],
     assignedToUserId: step.assignedToUserId,
-    assignedToSectorId: step.assignedToSectorId,
-    conditions: step.conditions || {}
+    assignedToSectorId: step.assignedToSectorId
   }
   
   stepDialog.value = true
@@ -867,13 +679,6 @@ function editStep(index) {
 
 function removeStep(index) {
   formData.value.steps.splice(index, 1)
-  updateStepOrders()
-}
-
-function updateStepOrders() {
-  formData.value.steps.forEach((step, index) => {
-    step.order = index + 1
-  })
 }
 
 function resetStepData() {
@@ -885,13 +690,9 @@ function resetStepData() {
     allowAttachment: false,
     requiresSignature: false,
     requireAttachment: false,
-    minAttachments: null,
-    maxAttachments: null,
-    allowedFileTypes: [],
     actions: [],
     assignedToUserId: null,
-    assignedToSectorId: null,
-    conditions: {}
+    assignedToSectorId: null
   }
 }
 
@@ -900,40 +701,24 @@ function closeStepDialog() {
   resetStepData()
 }
 
-function saveStep(stepData) {
-  console.log('💾 Saving step:', stepData)
-  
-  //  Validações antes de salvar
-  if (!stepData.name || stepData.name.trim().length < 2) {
+function saveStep() {
+  if (!stepData.value.name || stepData.value.name.trim().length < 2) {
     window.showSnackbar?.('Nome da etapa deve ter pelo menos 2 caracteres', 'error')
-    return
-  }
-  
-  if (!stepData.assignedToUserId && !stepData.assignedToSectorId) {
-    window.showSnackbar?.('Etapa deve ter um responsável definido', 'error')
     return
   }
 
   const processedStep = {
-    ...stepData,
-    name: stepData.name.trim(),
-    description: stepData.description?.trim() || null,
-    
-    //  Metadados temporários
+    ...stepData.value,
+    name: stepData.value.name.trim(),
+    description: stepData.value.description?.trim() || null,
     tempId: editingStepIndex.value !== null
       ? formData.value.steps[editingStepIndex.value].tempId
       : Date.now() + Math.random(),
     order: editingStepIndex.value !== null
       ? formData.value.steps[editingStepIndex.value].order
       : formData.value.steps.length + 1,
-    
-    //  Processar arrays corretamente
-    actions: Array.isArray(stepData.actions) ? 
-      stepData.actions.filter(Boolean) : [],
-    conditions: stepData.conditions && typeof stepData.conditions === 'object' ? 
-      stepData.conditions : {},
-    allowedFileTypes: Array.isArray(stepData.allowedFileTypes) ? 
-      stepData.allowedFileTypes.filter(Boolean) : []
+    actions: Array.isArray(stepData.value.actions) ? 
+      stepData.value.actions.filter(Boolean) : []
   }
 
   if (editingStepIndex.value !== null) {
@@ -960,71 +745,45 @@ async function save() {
 
   if (formData.value.steps.length === 0) {
     window.showSnackbar?.('É necessário adicionar pelo menos uma etapa', 'warning')
-    activeTab.value = 'steps' // Ir para aba de etapas
-    return
-  }
-
-  //  Validar se todas as etapas têm responsável
-  const stepsWithoutResponsible = formData.value.steps.filter(step => 
-    !step.assignedToUserId && !step.assignedToSectorId
-  )
-  
-  if (stepsWithoutResponsible.length > 0) {
-    window.showSnackbar?.(`Etapas sem responsável: ${stepsWithoutResponsible.map(s => s.name).join(', ')}`, 'error')
     activeTab.value = 'steps'
     return
   }
 
   saving.value = true
   try {
-    //  CORRIGIDO: Estrutura de dados aprimorada
     const data = {
       name: formData.value.name.trim(),
       description: formData.value.description?.trim() || null,
-      companyId: authStore.activeCompanyId, //  Usar companyId correto
+      companyId: authStore.activeCompanyId,
       
-      //  CORRIGIDO: Processar etapas
       steps: formData.value.steps.map((step, index) => {
-        //  Limpar dados temporários
         const cleanStep = { ...step }
         delete cleanStep.tempId
         
         return {
           ...cleanStep,
           order: index + 1,
-          //  Garantir que arrays são válidos
           actions: Array.isArray(cleanStep.actions) ? 
-            cleanStep.actions.filter(Boolean) : [],
-          conditions: cleanStep.conditions && typeof cleanStep.conditions === 'object' ? 
-            cleanStep.conditions : {},
-          allowedFileTypes: Array.isArray(cleanStep.allowedFileTypes) ? 
-            cleanStep.allowedFileTypes.filter(Boolean) : []
+            cleanStep.actions.filter(Boolean) : []
         }
       }),
       
-      //  CORRIGIDO: Processar campos de formulário
       formFields: formData.value.formFields.map((field, index) => {
-        //  Limpar dados temporários
         const cleanField = { ...field }
         delete cleanField.tempId
         
         return {
           ...cleanField,
           order: index + 1,
-          //  Garantir que arrays/objetos são válidos
           options: Array.isArray(cleanField.options) ? 
             cleanField.options.filter(opt => opt.value && opt.label) : [],
           validations: cleanField.validations && typeof cleanField.validations === 'object' ? 
-            Object.fromEntries(
-              Object.entries(cleanField.validations).filter(([key, value]) => 
-                value !== null && value !== undefined && value !== ''
-              )
-            ) : {}
+            cleanField.validations : {}
         }
       })
     }
 
-    console.log('📤 Saving process type with data:', JSON.stringify(data, null, 2))
+    console.log('📤 Saving process type with data:', data)
 
     let result
     if (isEditing.value) {
@@ -1036,11 +795,7 @@ async function save() {
     }
 
     console.log('🎉 Process type saved successfully:', result)
-
-    //  IMPORTANTE: Aguardar um momento para garantir que o backend processou
-    setTimeout(() => {
-      goBack()
-    }, 500)
+    setTimeout(() => goBack(), 500)
 
   } catch (error) {
     console.error('❌ Error saving process type:', error)
@@ -1054,22 +809,13 @@ async function save() {
     }
     
     window.showSnackbar?.(errorMessage, 'error')
-    
-    //  Se erro de validação, ir para aba relevante
-    if (errorMessage.includes('etapa') || errorMessage.includes('responsável')) {
-      activeTab.value = 'steps'
-    } else if (errorMessage.includes('campo')) {
-      activeTab.value = 'fields'
-    }
   } finally {
     saving.value = false
   }
 }
 
-
 async function loadData() {
   try {
-    //  Carregar dados auxiliares primeiro
     await Promise.all([
       sectorStore.fetchSectors(),
       userStore.fetchUsers()
@@ -1080,47 +826,23 @@ async function loadData() {
       
       const processType = await processTypeStore.fetchProcessType(route.params.id)
       
-      console.log(' Process type loaded:', processType)
-      
-      //  CORRIGIDO: Processar dados para edição
       formData.value = {
         name: processType.name,
         description: processType.description || '',
-        
-        //  Processar etapas com parsing JSON adequado
         steps: processType.steps?.map((step, index) => ({
           ...step,
           tempId: Date.now() + index,
-          //  Parse JSON fields corretamente
           actions: (() => {
             try {
               return Array.isArray(step.actions) ? step.actions : JSON.parse(step.actions || '[]')
             } catch {
               return []
             }
-          })(),
-          conditions: (() => {
-            try {
-              return typeof step.conditions === 'object' && step.conditions !== null ? 
-                step.conditions : JSON.parse(step.conditions || '{}')
-            } catch {
-              return {}
-            }
-          })(),
-          allowedFileTypes: (() => {
-            try {
-              return Array.isArray(step.allowedFileTypes) ? step.allowedFileTypes : JSON.parse(step.allowedFileTypes || '[]')
-            } catch {
-              return []
-            }
           })()
         })) || [],
-        
-        //  Processar campos de formulário com parsing JSON adequado
         formFields: processType.formFields?.map((field, index) => ({
           ...field,
           tempId: Date.now() + index + 1000,
-          //  Parse JSON fields corretamente
           options: (() => {
             try {
               return Array.isArray(field.options) ? field.options : JSON.parse(field.options || '[]')
@@ -1138,13 +860,7 @@ async function loadData() {
           })()
         })) || []
       }
-      
-      console.log('📋 Form data set for editing:', {
-        steps: formData.value.steps.length,
-        formFields: formData.value.formFields.length
-      })
     } else {
-      //  Dados para novo processo type
       formData.value = {
         name: '',
         description: '',
@@ -1156,7 +872,6 @@ async function loadData() {
     console.error('❌ Error loading data:', error)
     window.showSnackbar?.('Erro ao carregar dados', 'error')
     
-    //  Se erro crítico, voltar para lista
     if (error.response?.status === 404) {
       window.showSnackbar?.('Tipo de processo não encontrado', 'error')
       setTimeout(() => goBack(), 1500)
@@ -1164,65 +879,22 @@ async function loadData() {
   }
 }
 
-function validateForm() {
-  const errors = []
-  
-  if (!formData.value.name?.trim()) {
-    errors.push('Nome do processo é obrigatório')
-  }
-  
-  if (formData.value.steps.length === 0) {
-    errors.push('Pelo menos uma etapa é obrigatória')
-  }
-  
-  formData.value.steps.forEach((step, index) => {
-    if (!step.name?.trim()) {
-      errors.push(`Etapa ${index + 1}: nome é obrigatório`)
-    }
-    if (!step.assignedToUserId && !step.assignedToSectorId) {
-      errors.push(`Etapa "${step.name || index + 1}": responsável é obrigatório`)
-    }
+// Watch para debugging
+watch(() => formData.value, (newValue) => {
+  console.log('📋 FormData changed:', {
+    name: newValue.name,
+    steps: newValue.steps.length,
+    formFields: newValue.formFields.length
   })
-  
-  formData.value.formFields.forEach((field, index) => {
-    if (!field.name?.trim()) {
-      errors.push(`Campo ${index + 1}: nome é obrigatório`)
-    }
-    if (!field.label?.trim()) {
-      errors.push(`Campo ${index + 1}: rótulo é obrigatório`)
-    }
-  })
-  
-  return errors
-}
-
-// ADICIONAR: Watch para auto-validação
-watch(() => [formData.value.name, formData.value.steps.length], () => {
-  if (formData.value.name || formData.value.steps.length > 0) {
-    const errors = validateForm()
-    if (errors.length > 0 && errors.length <= 2) {
-      // Mostrar apenas erros críticos
-      const criticalErrors = errors.filter(error => 
-        error.includes('obrigatório') && !error.includes('responsável')
-      )
-      if (criticalErrors.length > 0 && Math.random() < 0.3) { // Mostrar esporadicamente
-        console.log('⚠️ Validation warnings:', criticalErrors)
-      }
-    }
-  }
 }, { deep: true })
 
-
 onMounted(() => {
+  console.log('🚀 ProcessTypeEditor mounted, route:', route.params)
   loadData()
 })
 </script>
 
 <style scoped>
-.cursor-move {
-  cursor: move;
-}
-
 .gap-2 {
   gap: 8px;
 }
