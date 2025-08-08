@@ -24,13 +24,60 @@
           {{ process.processType.name }}
         </p>
       </div>
+      
+      <!-- Actions -->
+      <div class="d-flex gap-2">
+        <v-btn
+          variant="text"
+          @click="refreshProcess"
+          :loading="loading"
+        >
+          <v-icon start>mdi-refresh</v-icon>
+          Atualizar
+        </v-btn>
+        
+        <!-- Botão de ação principal baseado no status -->
+        <v-btn
+          v-if="currentStepExecution"
+          color="primary"
+          variant="elevated"
+          @click="executeCurrentStep"
+          :disabled="!canExecuteCurrentStep"
+        >
+          <v-icon start>mdi-play</v-icon>
+          Executar Etapa
+        </v-btn>
+      </div>
     </div>
+
+    <!-- Progress Bar -->
+    <v-card class="mb-6">
+      <v-card-text>
+        <div class="d-flex align-center justify-space-between mb-2">
+          <span class="text-subtitle-2">Progresso do Processo</span>
+          <span class="text-caption">{{ progressPercentage }}% concluído</span>
+        </div>
+        <v-progress-linear
+          :model-value="progressPercentage"
+          :color="getProgressColor()"
+          height="8"
+          rounded
+          class="mb-2"
+        />
+        <div class="text-caption text-medium-emphasis">
+          {{ completedSteps }} de {{ totalSteps }} etapas concluídas
+        </div>
+      </v-card-text>
+    </v-card>
 
     <v-row>
       <!-- Informações do Processo -->
       <v-col cols="12" md="4">
-        <v-card>
-          <v-card-title>Informações</v-card-title>
+        <v-card class="mb-4">
+          <v-card-title>
+            <v-icon class="mr-2">mdi-information</v-icon>
+            Informações
+          </v-card-title>
           <v-divider />
           <v-list density="comfortable">
             <v-list-item>
@@ -51,6 +98,14 @@
 
             <v-list-item>
               <template v-slot:prepend>
+                <v-icon>mdi-email</v-icon>
+              </template>
+              <v-list-item-title>E-mail</v-list-item-title>
+              <v-list-item-subtitle>{{ process.createdBy.email }}</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item>
+              <template v-slot:prepend>
                 <v-icon>mdi-calendar</v-icon>
               </template>
               <v-list-item-title>Criado em</v-list-item-title>
@@ -64,6 +119,14 @@
               <v-list-item-title>Concluído em</v-list-item-title>
               <v-list-item-subtitle>{{ formatDate(process.completedAt) }}</v-list-item-subtitle>
             </v-list-item>
+
+            <v-list-item v-if="estimatedCompletion">
+              <template v-slot:prepend>
+                <v-icon>mdi-clock-outline</v-icon>
+              </template>
+              <v-list-item-title>Previsão</v-list-item-title>
+              <v-list-item-subtitle>{{ estimatedCompletion }}</v-list-item-subtitle>
+            </v-list-item>
           </v-list>
 
           <v-divider v-if="process.description" />
@@ -73,12 +136,33 @@
             <p class="text-body-2">{{ process.description }}</p>
           </v-card-text>
         </v-card>
+
+        <!-- Dados do Formulário (se existirem) -->
+        <v-card v-if="process.formData">
+          <v-card-title>
+            <v-icon class="mr-2">mdi-form-textbox</v-icon>
+            Dados Informados
+          </v-card-title>
+          <v-divider />
+          <v-list density="compact">
+            <v-list-item
+              v-for="(value, key) in formattedFormData"
+              :key="key"
+            >
+              <v-list-item-title class="text-caption">{{ key }}</v-list-item-title>
+              <v-list-item-subtitle>{{ value }}</v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-card>
       </v-col>
 
       <!-- Timeline das Etapas -->
       <v-col cols="12" md="8">
         <v-card>
-          <v-card-title>Fluxo do Processo</v-card-title>
+          <v-card-title>
+            <v-icon class="mr-2">mdi-timeline</v-icon>
+            Fluxo do Processo
+          </v-card-title>
           <v-divider />
           
           <v-timeline
@@ -92,26 +176,38 @@
               :dot-color="getExecutionColor(execution)"
               :icon="getExecutionIcon(execution)"
               :size="execution.status === 'IN_PROGRESS' ? 'large' : 'default'"
+              :line-color="execution.status === 'COMPLETED' ? 'success' : 'grey-lighten-2'"
             >
               <template v-slot:opposite>
                 <div class="text-caption">
-                  Etapa {{ index + 1 }}
+                  <div class="font-weight-medium">Etapa {{ index + 1 }}</div>
+                  <div v-if="execution.createdAt">{{ formatTimeAgo(execution.createdAt) }}</div>
                 </div>
               </template>
 
               <v-card
                 :color="execution.status === 'IN_PROGRESS' ? 'primary' : ''"
                 :variant="execution.status === 'IN_PROGRESS' ? 'tonal' : 'outlined'"
+                :elevation="execution.status === 'IN_PROGRESS' ? 4 : 1"
               >
-                <v-card-title class="text-h6">
-                  {{ execution.step.name }}
+                <v-card-title class="text-h6 d-flex align-center justify-space-between">
+                  <div class="d-flex align-center">
+                    <v-icon 
+                      :color="getStepTypeColor(execution.step.type)" 
+                      class="mr-2"
+                      size="20"
+                    >
+                      {{ getStepTypeIcon(execution.step.type) }}
+                    </v-icon>
+                    {{ execution.step.name }}
+                  </div>
+                  
                   <v-chip
-                    v-if="execution.status === 'IN_PROGRESS'"
                     size="small"
-                    color="warning"
-                    class="ml-2"
+                    :color="getExecutionColor(execution)"
+                    variant="tonal"
                   >
-                    Em Andamento
+                    {{ getExecutionStatusText(execution.status) }}
                   </v-chip>
                 </v-card-title>
 
@@ -120,55 +216,109 @@
                 </v-card-subtitle>
 
                 <v-card-text>
+                  <!-- Informações do Responsável -->
                   <div class="d-flex align-center mb-2">
-                    <v-icon size="16" class="mr-1">mdi-account-check</v-icon>
+                    <v-icon size="16" class="mr-2" color="primary">mdi-account-check</v-icon>
                     <span class="text-body-2">
-                      Responsável: {{ getResponsibleName(execution) }}
+                      <strong>Responsável:</strong> {{ getResponsibleName(execution) }}
                     </span>
                   </div>
 
+                  <!-- Executor -->
                   <div v-if="execution.executor" class="d-flex align-center mb-2">
-                    <v-icon size="16" class="mr-1">mdi-account-edit</v-icon>
+                    <v-icon size="16" class="mr-2" color="success">mdi-account-edit</v-icon>
                     <span class="text-body-2">
-                      Executado por: {{ execution.executor.name }}
+                      <strong>Executado por:</strong> {{ execution.executor.name }}
                     </span>
                   </div>
 
+                  <!-- Data de conclusão -->
                   <div v-if="execution.completedAt" class="d-flex align-center mb-2">
-                    <v-icon size="16" class="mr-1">mdi-clock-check</v-icon>
+                    <v-icon size="16" class="mr-2" color="info">mdi-clock-check</v-icon>
                     <span class="text-body-2">
-                      Concluído em: {{ formatDate(execution.completedAt) }}
+                      <strong>Concluído em:</strong> {{ formatDate(execution.completedAt) }}
                     </span>
                   </div>
 
+                  <!-- Ação tomada -->
                   <div v-if="execution.action" class="d-flex align-center mb-2">
-                    <v-icon size="16" class="mr-1">mdi-gesture-tap</v-icon>
+                    <v-icon size="16" class="mr-2" color="warning">mdi-gesture-tap</v-icon>
                     <span class="text-body-2">
-                      Ação: <v-chip size="x-small">{{ execution.action }}</v-chip>
+                      <strong>Ação:</strong> 
+                      <v-chip size="x-small" class="ml-1">{{ execution.action }}</v-chip>
                     </span>
                   </div>
 
+                  <!-- Comentário -->
                   <div v-if="execution.comment" class="mt-3">
-                    <p class="text-caption text-medium-emphasis">Comentário:</p>
-                    <p class="text-body-2">{{ execution.comment }}</p>
+                    <p class="text-caption text-medium-emphasis mb-1">
+                      <v-icon size="16" class="mr-1">mdi-comment-text</v-icon>
+                      Comentário:
+                    </p>
+                    <v-alert type="info" variant="tonal" density="compact">
+                      {{ execution.comment }}
+                    </v-alert>
                   </div>
 
+                  <!-- Anexos -->
                   <div v-if="execution.attachments?.length > 0" class="mt-3">
-                    <p class="text-caption text-medium-emphasis mb-1">Anexos:</p>
-                    <v-chip
-                      v-for="attachment in execution.attachments"
-                      :key="attachment.id"
-                      size="small"
-                      class="mr-1"
-                      @click="downloadAttachment(attachment)"
-                    >
-                      <v-icon start size="16">mdi-paperclip</v-icon>
-                      {{ attachment.originalName }}
-                    </v-chip>
+                    <p class="text-caption text-medium-emphasis mb-2">
+                      <v-icon size="16" class="mr-1">mdi-paperclip</v-icon>
+                      Anexos ({{ execution.attachments.length }}):
+                    </p>
+                    <div class="d-flex flex-wrap gap-1">
+                      <v-chip
+                        v-for="attachment in execution.attachments"
+                        :key="attachment.id"
+                        size="small"
+                        variant="outlined"
+                        @click="downloadAttachment(attachment)"
+                        class="cursor-pointer"
+                      >
+                        <v-icon start size="16">
+                          {{ getFileIcon(attachment.mimeType) }}
+                        </v-icon>
+                        {{ attachment.originalName }}
+                        <v-icon 
+                          v-if="attachment.isSigned" 
+                          end 
+                          size="16" 
+                          color="success"
+                        >
+                          mdi-check-decagram
+                        </v-icon>
+                      </v-chip>
+                    </div>
+                  </div>
+
+                  <!-- Indicadores especiais -->
+                  <div v-if="execution.step.requiresSignature || execution.step.allowAttachment" class="mt-3">
+                    <div class="d-flex flex-wrap gap-1">
+                      <v-chip
+                        v-if="execution.step.requiresSignature"
+                        size="x-small"
+                        color="error"
+                        variant="tonal"
+                      >
+                        <v-icon start size="12">mdi-draw-pen</v-icon>
+                        Requer Assinatura
+                      </v-chip>
+                      <v-chip
+                        v-if="execution.step.allowAttachment"
+                        size="x-small"
+                        color="info"
+                        variant="tonal"
+                      >
+                        <v-icon start size="12">mdi-paperclip</v-icon>
+                        Permite Anexos
+                      </v-chip>
+                    </div>
                   </div>
                 </v-card-text>
 
+                <!-- Actions para etapa em progresso -->
                 <v-card-actions v-if="canExecuteStep(execution)">
+                  <v-spacer />
                   <v-btn
                     color="primary"
                     variant="elevated"
@@ -193,6 +343,17 @@
       color="primary"
       size="64"
     />
+    <p class="text-body-2 text-grey mt-4">Carregando processo...</p>
+  </div>
+
+  <!-- Erro -->
+  <div v-else class="text-center py-12">
+    <v-icon size="64" color="error">mdi-alert-circle</v-icon>
+    <p class="text-h6 mt-4 text-error">Processo não encontrado</p>
+    <v-btn color="primary" @click="goBack" class="mt-4">
+      <v-icon start>mdi-arrow-left</v-icon>
+      Voltar
+    </v-btn>
   </div>
 </template>
 
@@ -202,6 +363,11 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useProcessStore } from '@/stores/processes'
 import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
+import 'dayjs/locale/pt-br'
+
+dayjs.extend(relativeTime)
+dayjs.locale('pt-br')
 
 const router = useRouter()
 const route = useRoute()
@@ -211,6 +377,61 @@ const processStore = useProcessStore()
 // Computed
 const loading = computed(() => processStore.loading)
 const process = computed(() => processStore.currentProcess)
+
+const currentStepExecution = computed(() => {
+  if (!process.value) return null
+  return process.value.stepExecutions?.find(se => se.status === 'IN_PROGRESS')
+})
+
+const canExecuteCurrentStep = computed(() => {
+  if (!currentStepExecution.value) return false
+  return canExecuteStep(currentStepExecution.value)
+})
+
+const totalSteps = computed(() => {
+  return process.value?.stepExecutions?.length || 0
+})
+
+const completedSteps = computed(() => {
+  return process.value?.stepExecutions?.filter(se => 
+    se.status === 'COMPLETED' || se.status === 'SKIPPED'
+  ).length || 0
+})
+
+const progressPercentage = computed(() => {
+  if (totalSteps.value === 0) return 0
+  return Math.round((completedSteps.value / totalSteps.value) * 100)
+})
+
+const estimatedCompletion = computed(() => {
+  if (!process.value || process.value.status === 'COMPLETED') return null
+  
+  const avgTimePerStep = 2 // dias por etapa (estimativa)
+  const remainingSteps = totalSteps.value - completedSteps.value
+  const estimatedDays = remainingSteps * avgTimePerStep
+  
+  return dayjs().add(estimatedDays, 'day').format('DD/MM/YYYY')
+})
+
+const formattedFormData = computed(() => {
+  if (!process.value?.formData) return {}
+  
+  const formatted = {}
+  const formData = process.value.formData
+  const formFields = process.value.processType?.formFields || []
+  
+  Object.keys(formData).forEach(key => {
+    const field = formFields.find(f => f.name === key)
+    const label = field?.label || key
+    const value = formData[key]
+    
+    if (value !== null && value !== undefined && value !== '') {
+      formatted[label] = Array.isArray(value) ? value.join(', ') : value
+    }
+  })
+  
+  return formatted
+})
 
 // Métodos auxiliares
 function getStatusColor(status) {
@@ -257,6 +478,39 @@ function getExecutionIcon(execution) {
   return icons[execution.status] || 'mdi-help'
 }
 
+function getExecutionStatusText(status) {
+  const texts = {
+    PENDING: 'Pendente',
+    IN_PROGRESS: 'Em Progresso',
+    COMPLETED: 'Concluída',
+    REJECTED: 'Rejeitada',
+    SKIPPED: 'Pulada'
+  }
+  return texts[status] || status
+}
+
+function getStepTypeColor(type) {
+  const colors = {
+    INPUT: 'blue',
+    APPROVAL: 'orange',
+    UPLOAD: 'purple',
+    REVIEW: 'teal',
+    SIGNATURE: 'red'
+  }
+  return colors[type] || 'grey'
+}
+
+function getStepTypeIcon(type) {
+  const icons = {
+    INPUT: 'mdi-form-textbox',
+    APPROVAL: 'mdi-check-decagram',
+    UPLOAD: 'mdi-upload',
+    REVIEW: 'mdi-eye-check',
+    SIGNATURE: 'mdi-draw-pen'
+  }
+  return icons[type] || 'mdi-help-circle'
+}
+
 function getResponsibleName(execution) {
   if (execution.step.assignedToUser) {
     return execution.step.assignedToUser.name
@@ -265,6 +519,22 @@ function getResponsibleName(execution) {
     return `Setor ${execution.step.assignedToSector.name}`
   }
   return 'Não definido'
+}
+
+function getFileIcon(mimeType) {
+  if (mimeType?.includes('pdf')) return 'mdi-file-pdf-box'
+  if (mimeType?.includes('image')) return 'mdi-file-image'
+  if (mimeType?.includes('word')) return 'mdi-file-word'
+  if (mimeType?.includes('excel')) return 'mdi-file-excel'
+  return 'mdi-file'
+}
+
+function getProgressColor() {
+  const progress = progressPercentage.value
+  if (progress === 100) return 'success'
+  if (progress >= 75) return 'info'
+  if (progress >= 50) return 'warning'
+  return 'error'
 }
 
 function canExecuteStep(execution) {
@@ -277,7 +547,10 @@ function canExecuteStep(execution) {
   if (step.assignedToUserId === user.id) return true
   
   // Verificar se pertence ao setor responsável
-  if (step.assignedToSectorId && user.sectorId === step.assignedToSectorId) return true
+  if (step.assignedToSectorId && authStore.activeSectorId === step.assignedToSectorId) return true
+
+  // Admin pode executar qualquer etapa
+  if (authStore.isAdmin) return true
 
   return false
 }
@@ -286,34 +559,68 @@ function formatDate(date) {
   return dayjs(date).format('DD/MM/YYYY HH:mm')
 }
 
-// Métodos
+function formatTimeAgo(date) {
+  return dayjs(date).fromNow()
+}
+
+// Métodos principais
 function goBack() {
   router.push('/processes')
+}
+
+function executeCurrentStep() {
+  if (currentStepExecution.value) {
+    executeStep(currentStepExecution.value)
+  }
 }
 
 function executeStep(execution) {
   router.push(`/processes/${process.value.id}/execute/${execution.id}`)
 }
 
-async function downloadAttachment(attachment) {
+async function refreshProcess() {
   try {
-    const response = await api.get(`/attachments/${attachment.id}`, {
-      responseType: 'blob'
-    })
-    
-    const url = window.URL.createObjectURL(new Blob([response.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', attachment.originalName)
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
+    await processStore.fetchProcess(route.params.id)
+    window.showSnackbar?.('Processo atualizado!', 'success')
   } catch (error) {
-    window.showSnackbar('Erro ao baixar arquivo', 'error')
+    window.showSnackbar?.('Erro ao atualizar processo', 'error')
   }
 }
 
-onMounted(() => {
-  processStore.fetchProcess(route.params.id)
+async function downloadAttachment(attachment) {
+  try {
+    // Simular download - implemente conforme sua API
+    window.showSnackbar?.(`Download de "${attachment.originalName}" iniciado`, 'info')
+  } catch (error) {
+    window.showSnackbar?.('Erro ao baixar arquivo', 'error')
+  }
+}
+
+onMounted(async () => {
+  console.log('Loading process:', route.params.id)
+  try {
+    await processStore.fetchProcess(route.params.id)
+  } catch (error) {
+    console.error('Error loading process:', error)
+    window.showSnackbar?.('Erro ao carregar processo', 'error')
+  }
 })
 </script>
+
+<style scoped>
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.gap-1 {
+  gap: 4px;
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+.v-timeline-item {
+  padding-bottom: 24px;
+}
+</style>

@@ -34,24 +34,23 @@ import ManageProcesses from '@/views/processes/ManageProcesses.vue'
 // Views - Tasks
 import MyTasks from '@/views/tasks/MyTasks.vue'
 
-
-//Views - Profile
+// Views - Profile
 import Profile from '@/views/users/Profile.vue'
 
-//Views - signatures
+// Views - Signatures
 import PendingSignatures from '@/views/signatures/PendingSignatures.vue'
 
-//views - sttings
+// Views - Settings
 import Settings from '@/views/settings/Settings.vue'
 
 const routes = [
-  // SoloFlow Redirect principal
+  // Redirect principal
   {
     path: '/',
     redirect: '/dashboard',
   },
 
-  // SoloFlow ROTAS DE AUTENTICAÇÃO
+  // ROTAS DE AUTENTICAÇÃO
   {
     path: '/login',
     component: AuthLayout,
@@ -77,7 +76,7 @@ const routes = [
     ],
   },
 
-  // SoloFlow ROTAS DO DASHBOARD (todas protegidas)
+  // ROTAS DO DASHBOARD (todas protegidas)
   {
     path: '/dashboard',
     component: DashboardLayout,
@@ -90,7 +89,7 @@ const routes = [
         component: Dashboard,
       },
 
-      // SoloFlow EMPRESAS
+      // EMPRESAS
       {
         path: '/companies',
         name: 'Companies',
@@ -98,7 +97,7 @@ const routes = [
         meta: { requiresRole: ['ADMIN'] },
       },
 
-      // SoloFlow USUÁRIOS
+      // USUÁRIOS
       {
         path: '/users',
         name: 'Users',
@@ -106,7 +105,7 @@ const routes = [
         meta: { requiresRole: ['ADMIN', 'MANAGER'] },
       },
 
-      // SoloFlow SETORES (SEM DUPLICAÇÃO)
+      // SETORES
       {
         path: '/sectors',
         name: 'Sectors',
@@ -114,7 +113,7 @@ const routes = [
         meta: { requiresRole: ['ADMIN', 'MANAGER'] },
       },
 
-      // SoloFlow TIPOS DE PROCESSO (SEM DUPLICAÇÃO)
+      // TIPOS DE PROCESSO
       {
         path: '/process-types',
         name: 'ProcessTypes',
@@ -132,65 +131,110 @@ const routes = [
         name: 'ProcessTypeEdit',
         component: ProcessTypeEditor,
         meta: { requiresRole: ['ADMIN', 'MANAGER'] },
+        props: true,
       },
 
-      // SoloFlow PROCESSOS
+      // PROCESSOS - SEÇÃO CORRIGIDA E EXPANDIDA
       {
         path: '/processes',
         name: 'Processes',
         component: Processes,
+        meta: { 
+          title: 'Criar Processo',
+          description: 'Iniciar um novo workflow'
+        }
       },
       {
         path: '/processes/:id',
         name: 'ProcessDetail',
         component: ProcessDetail,
+        props: true,
+        meta: {
+          title: 'Detalhes do Processo',
+          description: 'Visualizar informações e progresso'
+        }
       },
       {
         path: '/processes/:id/execute/:stepId',
         name: 'StepExecution',
         component: StepExecution,
+        props: true,
+        meta: {
+          title: 'Executar Etapa',
+          description: 'Completar uma etapa do processo'
+        }
       },
 
-      // SoloFlow GERENCIAR PROCESSOS
+      // GERENCIAR PROCESSOS
       {
-        path: '/manageprocesses',
+        path: '/manage-processes',
         name: 'ManageProcesses',
         component: ManageProcesses,
-        meta: { requiresRole: ['ADMIN', 'MANAGER'] },
+        meta: { 
+          requiresRole: ['ADMIN', 'MANAGER'],
+          title: 'Gerenciar Processos',
+          description: 'Acompanhar todos os processos da empresa'
+        },
       },
 
-      // SoloFlow MINHAS TAREFAS
+      // MINHAS TAREFAS
       {
-        path: '/mytasks',
+        path: '/my-tasks',
         name: 'MyTasks',
         component: MyTasks,
+        meta: {
+          title: 'Minhas Tarefas',
+          description: 'Etapas pendentes de execução'
+        }
       },
 
-      // SoloFlow NOVAS ROTAS - Assinaturas Pendentes
+      // ASSINATURAS PENDENTES
       {
         path: '/signatures/pending',
         name: 'PendingSignatures',
-        component:PendingSignatures ,
+        component: PendingSignatures,
+        meta: {
+          title: 'Assinaturas Pendentes',
+          description: 'Documentos aguardando assinatura'
+        }
       },
 
-      // SoloFlow NOVA ROTA - Perfil do Usuário
+      // PERFIL DO USUÁRIO
       {
         path: '/profile',
         name: 'Profile',
-        component:Profile ,
+        component: Profile,
+        meta: {
+          title: 'Meu Perfil',
+          description: 'Configurações da conta'
+        }
       },
 
-      // SoloFlow NOVA ROTA - Configurações
+      // CONFIGURAÇÕES
       {
         path: '/settings',
         name: 'Settings',
         component: Settings,
-        meta: { requiresRole: ['ADMIN'] },
+        meta: { 
+          requiresRole: ['ADMIN'],
+          title: 'Configurações',
+          description: 'Configurações do sistema'
+        },
       },
+
+      // ALIASES PARA COMPATIBILIDADE
+      {
+        path: '/mytasks',
+        redirect: '/my-tasks'
+      },
+      {
+        path: '/manageprocesses',
+        redirect: '/manage-processes'
+      }
     ],
   },
 
-  // SoloFlow Catch-all para rotas inexistentes
+  // Catch-all para rotas inexistentes
   {
     path: '/:pathMatch(.*)*',
     redirect: '/dashboard',
@@ -202,21 +246,38 @@ const router = createRouter({
   routes,
 })
 
-// SoloFlow MELHORADO: Navigation guards
+// Navigation guards melhorados
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   
   // Inicializar auth do localStorage se necessário
   if (!authStore.user && localStorage.getItem('token')) {
-    authStore.initializeAuth()
+    try {
+      authStore.initializeAuth()
+    } catch (error) {
+      console.error('Error initializing auth:', error)
+      localStorage.clear()
+    }
   }
 
   const isAuthenticated = authStore.isAuthenticated
   const userRole = authStore.userRole
 
+  // Debug
+  console.log('Navigation Guard:', {
+    to: to.path,
+    isAuthenticated,
+    userRole,
+    requiresAuth: to.meta.requiresAuth,
+    requiresGuest: to.meta.requiresGuest,
+    requiresRole: to.meta.requiresRole
+  })
+
   // Rota requer autenticação
   if (to.meta.requiresAuth && !isAuthenticated) {
     console.log('Redirecting to login - not authenticated')
+    // Salvar destino para redirect após login
+    sessionStorage.setItem('redirectAfterLogin', to.fullPath)
     next('/login')
     return
   }
@@ -236,9 +297,24 @@ router.beforeEach(async (to, from, next) => {
     
     if (!allowedRoles.includes(userRole)) {
       console.log(`Access denied - user role ${userRole} not in ${allowedRoles}`)
-      // Mostrar mensagem de erro
+      
+      // Mostrar mensagem de erro se disponível
       if (window.showSnackbar) {
         window.showSnackbar('Acesso negado. Você não tem permissão para acessar esta página.', 'error')
+      }
+      
+      next('/dashboard')
+      return
+    }
+  }
+
+  // Verificar se empresa está ativa (para rotas autenticadas)
+  if (to.meta.requiresAuth && isAuthenticated) {
+    const activeCompany = authStore.activeCompany
+    if (!activeCompany) {
+      console.log('No active company - redirecting to dashboard')
+      if (window.showSnackbar) {
+        window.showSnackbar('Erro: nenhuma empresa ativa encontrada', 'error')
       }
       next('/dashboard')
       return
@@ -248,12 +324,31 @@ router.beforeEach(async (to, from, next) => {
   next()
 })
 
-// SoloFlow Tratar erros de navegação
+// Interceptar erros de navegação
 router.onError((error) => {
   console.error('Router error:', error)
+  
   if (window.showSnackbar) {
-    window.showSnackbar('Erro de navegação. Tente novamente.', 'error')
+    if (error.message.includes('Failed to fetch')) {
+      window.showSnackbar('Erro de conexão. Verifique sua internet.', 'error')
+    } else if (error.message.includes('404')) {
+      window.showSnackbar('Página não encontrada.', 'error')
+    } else {
+      window.showSnackbar('Erro de navegação. Tente novamente.', 'error')
+    }
   }
+})
+
+// Meta dados globais para debugging
+router.beforeResolve((to, from, next) => {
+  // Adicionar título da página se especificado
+  if (to.meta.title) {
+    document.title = `${to.meta.title} - SoloFlow`
+  } else {
+    document.title = 'SoloFlow - Gestão de Processos'
+  }
+  
+  next()
 })
 
 export default router
