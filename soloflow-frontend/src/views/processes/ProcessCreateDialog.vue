@@ -13,9 +13,11 @@
             mdi-file-document-multiple-outline
           </v-icon>
           <div>
-            <div class="text-h6">Criar Novo Processo</div>
-            <div v-if="selectedProcessType" class="text-caption text-medium-emphasis">
-              {{ selectedProcessType.name }}
+            <div class="text-h6">
+              {{ selectedProcessType ? 'Criar Processo' : 'Criar Novo Processo' }}
+            </div>
+            <div v-if="selectedProcessType" class="text-caption text-success">
+              ✓ Tipo: {{ selectedProcessType.name }}
             </div>
           </div>
         </div>
@@ -28,12 +30,25 @@
 
       <v-divider />
 
+      <!-- Indicador de tipo pré-selecionado -->
+      <v-alert
+        v-if="selectedProcessType"
+        type="success"
+        variant="tonal"
+        class="ma-4 mb-0"
+        density="compact"
+      >
+        <v-icon start>mdi-lightning-bolt</v-icon>
+        <strong>Criação Rápida Ativada:</strong> 
+        Tipo "{{ selectedProcessType.name }}" já selecionado
+      </v-alert>
+
       <v-stepper 
         v-model="currentStep" 
         :items="stepperItems"
         class="elevation-0"
       >
-        <!-- Step 1: Seleção do Tipo (se não foi pré-selecionado) -->
+        <!-- Step 1: Seleção do Tipo (apenas se não foi pré-selecionado) -->
         <v-stepper-window-item :value="1" v-if="!selectedProcessType">
           <v-card-text>
             <h3 class="text-h6 mb-4">Selecione o tipo de processo</h3>
@@ -98,19 +113,47 @@
           </v-card-actions>
         </v-stepper-window-item>
 
-        <!-- Step 2: Informações Básicas -->
+        <!-- Step 2: Informações Básicas (agora é o primeiro se tipo pré-selecionado) -->
         <v-stepper-window-item :value="selectedProcessType ? 1 : 2">
           <v-card-text>
-            <div v-if="selectedProcessType" class="mb-4">
-              <v-alert type="info" variant="tonal">
-                <div class="d-flex align-center">
-                  <v-icon start>mdi-information</v-icon>
-                  <div>
-                    <strong>Tipo selecionado:</strong> {{ selectedProcessType.name }}<br>
-                    <span class="text-caption">{{ selectedProcessType.description }}</span>
+            <!-- Resumo do tipo selecionado -->
+            <div v-if="getProcessType()" class="mb-4">
+              <v-card variant="outlined" color="primary">
+                <v-card-text class="pa-3">
+                  <div class="d-flex align-center">
+                    <v-icon color="primary" class="mr-3">mdi-information</v-icon>
+                    <div class="flex-grow-1">
+                      <div class="text-subtitle-1 font-weight-medium">
+                        {{ getProcessType().name }}
+                      </div>
+                      <div class="text-caption text-medium-emphasis">
+                        {{ getProcessType().description }}
+                      </div>
+                      <div class="mt-1">
+                        <v-chip size="x-small" class="mr-1" variant="tonal">
+                          {{ getProcessType().steps?.length || 0 }} etapas
+                        </v-chip>
+                        <v-chip 
+                          v-if="getProcessType().formFields?.length > 0" 
+                          size="x-small" 
+                          variant="tonal"
+                        >
+                          {{ getProcessType().formFields.length }} campos
+                        </v-chip>
+                      </div>
+                    </div>
+                    <v-btn
+                      v-if="!selectedProcessType"
+                      variant="text"
+                      size="small"
+                      @click="goBackToTypeSelection"
+                    >
+                      <v-icon start>mdi-pencil</v-icon>
+                      Alterar
+                    </v-btn>
                   </div>
-                </div>
-              </v-alert>
+                </v-card-text>
+              </v-card>
             </div>
 
             <h3 class="text-h6 mb-4">Informações do processo</h3>
@@ -120,21 +163,45 @@
                 <v-text-field
                   v-model="processData.title"
                   label="Título do processo"
-                  hint="Deixe vazio para usar o nome do tipo de processo"
+                  :hint="`Deixe vazio para usar: ${getProcessType()?.name || 'nome padrão'}`"
                   persistent-hint
                   :placeholder="getProcessType()?.name"
+                  variant="outlined"
+                  class="mb-2"
                 />
               </v-col>
               <v-col cols="12">
                 <v-textarea
                   v-model="processData.description"
-                  label="Descrição"
+                  label="Descrição (opcional)"
                   rows="3"
                   counter="500"
                   :rules="[v => !v || v.length <= 500 || 'Máximo 500 caracteres']"
+                  variant="outlined"
+                  placeholder="Descreva o objetivo ou contexto deste processo..."
                 />
               </v-col>
             </v-row>
+
+            <!-- Preview do que vem a seguir -->
+            <v-alert
+              v-if="hasFormFields"
+              type="info"
+              variant="tonal"
+              class="mt-3"
+            >
+              <v-icon start>mdi-information</v-icon>
+              <strong>Próximo passo:</strong> Preencher {{ getProcessType()?.formFields?.length }} campos específicos
+            </v-alert>
+            <v-alert
+              v-else
+              type="success"
+              variant="tonal"
+              class="mt-3"
+            >
+              <v-icon start>mdi-check-circle</v-icon>
+              <strong>Pronto para criar!</strong> Este processo não requer campos adicionais
+            </v-alert>
           </v-card-text>
 
           <v-card-actions>
@@ -143,6 +210,7 @@
               variant="text" 
               @click="previousStep"
             >
+              <v-icon start>mdi-arrow-left</v-icon>
               Voltar
             </v-btn>
             <v-spacer />
@@ -151,7 +219,9 @@
               color="primary"
               @click="hasFormFields ? nextStep() : createProcess()"
               :loading="creating"
+              variant="elevated"
             >
+              <v-icon start>{{ hasFormFields ? 'mdi-arrow-right' : 'mdi-check' }}</v-icon>
               {{ hasFormFields ? 'Próximo' : 'Criar Processo' }}
             </v-btn>
           </v-card-actions>
@@ -160,7 +230,12 @@
         <!-- Step 3: Formulário Dinâmico -->
         <v-stepper-window-item :value="selectedProcessType ? 2 : 3" v-if="hasFormFields">
           <v-card-text>
-            <h3 class="text-h6 mb-4">Preencha os dados específicos</h3>
+            <h3 class="text-h6 mb-4">
+              Preencha os dados específicos
+              <v-chip size="small" color="info" class="ml-2">
+                {{ getProcessType()?.formFields?.length }} campos
+              </v-chip>
+            </h3>
             
             <v-form ref="dynamicForm" v-model="formValid">
               <v-row>
@@ -179,6 +254,7 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     persistent-hint
+                    variant="outlined"
                   />
 
                   <!-- Campo Numérico -->
@@ -192,6 +268,7 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     persistent-hint
+                    variant="outlined"
                   />
 
                   <!-- Campo de Data -->
@@ -204,6 +281,7 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     persistent-hint
+                    variant="outlined"
                   />
 
                   <!-- Campo de Email -->
@@ -217,6 +295,7 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     persistent-hint
+                    variant="outlined"
                   />
 
                   <!-- Campo de CPF -->
@@ -230,6 +309,7 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     persistent-hint
+                    variant="outlined"
                   />
 
                   <!-- Campo de CNPJ -->
@@ -243,6 +323,7 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     persistent-hint
+                    variant="outlined"
                   />
 
                   <!-- Campo de Telefone -->
@@ -256,6 +337,7 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     persistent-hint
+                    variant="outlined"
                   />
 
                   <!-- Campo de Moeda -->
@@ -271,6 +353,7 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     persistent-hint
+                    variant="outlined"
                   />
 
                   <!-- Dropdown -->
@@ -283,21 +366,24 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     persistent-hint
+                    variant="outlined"
                   />
 
                   <!-- Checkbox -->
                   <div v-else-if="field.type === 'CHECKBOX'">
                     <p class="text-subtitle-2 mb-2">{{ field.label }}</p>
-                    <v-checkbox
-                      v-for="option in getFieldOptions(field)"
-                      :key="option.value"
-                      v-model="formData[field.name]"
-                      :label="option.label"
-                      :value="option.value"
-                      multiple
-                      hide-details
-                      density="compact"
-                    />
+                    <div class="border rounded pa-3">
+                      <v-checkbox
+                        v-for="option in getFieldOptions(field)"
+                        :key="option.value"
+                        v-model="formData[field.name]"
+                        :label="option.label"
+                        :value="option.value"
+                        multiple
+                        hide-details
+                        density="compact"
+                      />
+                    </div>
                     <p v-if="field.helpText" class="text-caption text-grey mt-1">
                       {{ field.helpText }}
                     </p>
@@ -314,6 +400,7 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     persistent-hint
+                    variant="outlined"
                   />
                 </v-col>
               </v-row>
@@ -321,7 +408,10 @@
           </v-card-text>
 
           <v-card-actions>
-            <v-btn variant="text" @click="previousStep">Voltar</v-btn>
+            <v-btn variant="text" @click="previousStep">
+              <v-icon start>mdi-arrow-left</v-icon>
+              Voltar
+            </v-btn>
             <v-spacer />
             <v-btn variant="text" @click="close">Cancelar</v-btn>
             <v-btn
@@ -329,13 +419,33 @@
               @click="createProcess"
               :loading="creating"
               :disabled="!formValid"
+              variant="elevated"
             >
-              <v-icon start>mdi-check</v-icon>
+              <v-icon start>mdi-rocket-launch</v-icon>
               Criar Processo
             </v-btn>
           </v-card-actions>
         </v-stepper-window-item>
       </v-stepper>
+
+      <!-- Loading overlay -->
+      <v-overlay
+        :model-value="creating"
+        contained
+        class="align-center justify-center"
+      >
+        <div class="text-center">
+          <v-progress-circular
+            indeterminate
+            size="64"
+            color="primary"
+          />
+          <p class="text-h6 mt-4">Criando processo...</p>
+          <p class="text-body-2 text-medium-emphasis">
+            {{ selectedProcessType ? `Tipo: ${selectedProcessType.name}` : 'Aguarde...' }}
+          </p>
+        </div>
+      </v-overlay>
     </v-card>
   </v-dialog>
 </template>
@@ -347,7 +457,7 @@ import { useProcessTypeStore } from '@/stores/processTypes'
 
 const props = defineProps({
   modelValue: Boolean,
-  selectedProcessType: Object // Tipo de processo pré-selecionado
+  selectedProcessType: Object // ✅ Tipo de processo pré-selecionado
 })
 
 const emit = defineEmits(['update:modelValue', 'created', 'close'])
@@ -507,6 +617,10 @@ function previousStep() {
   currentStep.value--
 }
 
+function goBackToTypeSelection() {
+  currentStep.value = 1
+}
+
 // Métodos principais
 function selectProcessType(processType) {
   selectedProcessTypeId.value = processType.id
@@ -549,16 +663,16 @@ async function createProcess() {
       formData: hasFormFields.value ? formData.value : undefined
     }
 
-    console.log('Creating process with data:', data)
+    console.log('✅ Creating process with FAST mode data:', data)
 
     const created = await processStore.createProcess(data)
     
-    window.showSnackbar?.('Processo criado com sucesso!', 'success')
+    console.log('🚀 Process created successfully in FAST mode:', created.code)
     
     emit('created', created)
     close()
   } catch (error) {
-    console.error('Error creating process:', error)
+    console.error('❌ Error creating process:', error)
     window.showSnackbar?.(error.message || 'Erro ao criar processo', 'error')
   } finally {
     creating.value = false
@@ -585,19 +699,22 @@ watch(() => props.modelValue, (newVal) => {
       processTypeStore.fetchProcessTypes()
     }
     
-    // Se há um tipo pré-selecionado
+    // ✅ LÓGICA PRINCIPAL: Se há um tipo pré-selecionado
     if (props.selectedProcessType) {
+      console.log('🎯 FAST mode activated with pre-selected type:', props.selectedProcessType.name)
       selectedProcessTypeId.value = props.selectedProcessType.id
       initializeFormData(props.selectedProcessType)
-      currentStep.value = 1
+      currentStep.value = 1 // Começa na etapa de informações básicas
     } else {
-      currentStep.value = 1
+      console.log('🔄 Standard mode - type selection required')
+      currentStep.value = 1 // Começa na seleção de tipo
     }
   }
 })
 
 watch(() => props.selectedProcessType, (newProcessType) => {
   if (newProcessType) {
+    console.log('🔄 Process type changed to:', newProcessType.name)
     selectedProcessTypeId.value = newProcessType.id
     initializeFormData(newProcessType)
   }
@@ -607,5 +724,29 @@ watch(() => props.selectedProcessType, (newProcessType) => {
 <style scoped>
 .v-stepper {
   box-shadow: none;
+}
+
+.border {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.rounded {
+  border-radius: 4px;
+}
+
+.pa-3 {
+  padding: 12px;
+}
+
+/* Animações suaves */
+.v-stepper-window-item {
+  transition: all 0.3s ease;
+}
+
+/* Melhorias visuais para campos */
+.v-text-field,
+.v-textarea,
+.v-select {
+  margin-bottom: 8px;
 }
 </style>
