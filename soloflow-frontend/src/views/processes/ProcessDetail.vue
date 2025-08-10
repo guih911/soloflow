@@ -2,21 +2,13 @@
   <div v-if="process">
     <!-- Header -->
     <div class="d-flex align-center mb-6">
-      <v-btn
-        icon="mdi-arrow-left"
-        variant="text"
-        @click="goBack"
-      />
+      <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" />
       <div class="ml-4 flex-grow-1">
         <div class="d-flex align-center">
-          <h1 class="text-h4 font-weight-bold">
+          <h1 class="text-h4 font-weight-bold max-width">
             {{ process.title || process.code }}
           </h1>
-          <v-chip
-            :color="getStatusColor(process.status)"
-            class="ml-3"
-            label
-          >
+          <v-chip :color="getStatusColor(process.status)" class="ml-3" label>
             {{ getStatusText(process.status) }}
           </v-chip>
         </div>
@@ -24,26 +16,17 @@
           {{ process.processType.name }}
         </p>
       </div>
-      
+
       <!-- Actions -->
       <div class="d-flex gap-2">
-        <v-btn
-          variant="text"
-          @click="refreshProcess"
-          :loading="loading"
-        >
+        <v-btn variant="text" @click="refreshProcess" :loading="loading">
           <v-icon start>mdi-refresh</v-icon>
           Atualizar
         </v-btn>
-        
+
         <!-- Botão de ação principal baseado no status -->
-        <v-btn
-          v-if="currentStepExecution"
-          color="primary"
-          variant="elevated"
-          @click="executeCurrentStep"
-          :disabled="!canExecuteCurrentStep"
-        >
+        <v-btn v-if="currentStepExecution" color="primary" variant="elevated" @click="executeCurrentStep"
+          :disabled="!canExecuteCurrentStep">
           <v-icon start>mdi-play</v-icon>
           Executar Etapa
         </v-btn>
@@ -57,13 +40,8 @@
           <span class="text-subtitle-2">Progresso do Processo</span>
           <span class="text-caption">{{ progressPercentage }}% concluído</span>
         </div>
-        <v-progress-linear
-          :model-value="progressPercentage"
-          :color="getProgressColor()"
-          height="8"
-          rounded
-          class="mb-2"
-        />
+        <v-progress-linear :model-value="progressPercentage" :color="getProgressColor()" height="8" rounded
+          class="mb-2" />
         <div class="text-caption text-medium-emphasis">
           {{ completedSteps }} de {{ totalSteps }} etapas concluídas
         </div>
@@ -130,7 +108,7 @@
           </v-list>
 
           <v-divider v-if="process.description" />
-          
+
           <v-card-text v-if="process.description">
             <p class="text-caption text-medium-emphasis mb-1">Descrição</p>
             <p class="text-body-2">{{ process.description }}</p>
@@ -145,10 +123,7 @@
           </v-card-title>
           <v-divider />
           <v-list density="compact">
-            <v-list-item
-              v-for="(value, key) in formattedFormData"
-              :key="key"
-            >
+            <v-list-item v-for="(value, key) in formattedFormData" :key="key">
               <v-list-item-title class="text-caption">{{ key }}</v-list-item-title>
               <v-list-item-subtitle>{{ value }}</v-list-item-subtitle>
             </v-list-item>
@@ -164,20 +139,12 @@
             Fluxo do Processo
           </v-card-title>
           <v-divider />
-          
-          <v-timeline
-            side="end"
-            density="comfortable"
-            class="pa-4"
-          >
-            <v-timeline-item
-              v-for="(execution, index) in process.stepExecutions"
-              :key="execution.id"
-              :dot-color="getExecutionColor(execution)"
-              :icon="getExecutionIcon(execution)"
+
+          <v-timeline side="end" density="comfortable" class="pa-4">
+            <v-timeline-item v-for="(execution, index) in process.stepExecutions" :key="execution.id"
+              :dot-color="getExecutionColor(execution)" :icon="getExecutionIcon(execution)"
               :size="execution.status === 'IN_PROGRESS' ? 'large' : 'default'"
-              :line-color="execution.status === 'COMPLETED' ? 'success' : 'grey-lighten-2'"
-            >
+              :line-color="execution.status === 'COMPLETED' ? 'success' : 'grey-lighten-2'">
               <template v-slot:opposite>
                 <div class="text-caption">
                   <div class="font-weight-medium">Etapa {{ index + 1 }}</div>
@@ -185,28 +152,18 @@
                 </div>
               </template>
 
-              <v-card
-                :color="execution.status === 'IN_PROGRESS' ? 'primary' : ''"
+              <v-card :color="execution.status === 'IN_PROGRESS' ? 'primary' : ''"
                 :variant="execution.status === 'IN_PROGRESS' ? 'tonal' : 'outlined'"
-                :elevation="execution.status === 'IN_PROGRESS' ? 4 : 1"
-              >
+                :elevation="execution.status === 'IN_PROGRESS' ? 4 : 1">
                 <v-card-title class="text-h6 d-flex align-center justify-space-between">
                   <div class="d-flex align-center">
-                    <v-icon 
-                      :color="getStepTypeColor(execution.step.type)" 
-                      class="mr-2"
-                      size="20"
-                    >
+                    <v-icon :color="getStepTypeColor(execution.step.type)" class="mr-2" size="20">
                       {{ getStepTypeIcon(execution.step.type) }}
                     </v-icon>
                     {{ execution.step.name }}
                   </div>
-                  
-                  <v-chip
-                    size="small"
-                    :color="getExecutionColor(execution)"
-                    variant="tonal"
-                  >
+
+                  <v-chip size="small" :color="getExecutionColor(execution)" variant="tonal">
                     {{ getExecutionStatusText(execution.status) }}
                   </v-chip>
                 </v-card-title>
@@ -244,7 +201,7 @@
                   <div v-if="execution.action" class="d-flex align-center mb-2">
                     <v-icon size="16" class="mr-2" color="warning">mdi-gesture-tap</v-icon>
                     <span class="text-body-2">
-                      <strong>Ação:</strong> 
+                      <strong>Ação:</strong>
                       <v-chip size="x-small" class="ml-1">{{ execution.action }}</v-chip>
                     </span>
                   </div>
@@ -267,24 +224,13 @@
                       Anexos ({{ execution.attachments.length }}):
                     </p>
                     <div class="d-flex flex-wrap gap-1">
-                      <v-chip
-                        v-for="attachment in execution.attachments"
-                        :key="attachment.id"
-                        size="small"
-                        variant="outlined"
-                        @click="downloadAttachment(attachment)"
-                        class="cursor-pointer"
-                      >
+                      <v-chip v-for="attachment in execution.attachments" :key="attachment.id" size="small"
+                        variant="outlined" @click="downloadAttachment(attachment)" class="cursor-pointer">
                         <v-icon start size="16">
-                          {{ getFileIcon(attachment.mimeType) }}
+                          {{ getFileIcon(typeof attachment.mimeType === 'string' ? attachment.mimeType : '') }}
                         </v-icon>
-                        {{ attachment.originalName }}
-                        <v-icon 
-                          v-if="attachment.isSigned" 
-                          end 
-                          size="16" 
-                          color="success"
-                        >
+                        {{ attachment.originalName || (typeof attachment === 'object' ? 'Anexo' : attachment) }}
+                        <v-icon v-if="attachment.isSigned" end size="16" color="success">
                           mdi-check-decagram
                         </v-icon>
                       </v-chip>
@@ -294,21 +240,11 @@
                   <!-- Indicadores especiais -->
                   <div v-if="execution.step.requiresSignature || execution.step.allowAttachment" class="mt-3">
                     <div class="d-flex flex-wrap gap-1">
-                      <v-chip
-                        v-if="execution.step.requiresSignature"
-                        size="x-small"
-                        color="error"
-                        variant="tonal"
-                      >
+                      <v-chip v-if="execution.step.requiresSignature" size="x-small" color="error" variant="tonal">
                         <v-icon start size="12">mdi-draw-pen</v-icon>
                         Requer Assinatura
                       </v-chip>
-                      <v-chip
-                        v-if="execution.step.allowAttachment"
-                        size="x-small"
-                        color="info"
-                        variant="tonal"
-                      >
+                      <v-chip v-if="execution.step.allowAttachment" size="x-small" color="info" variant="tonal">
                         <v-icon start size="12">mdi-paperclip</v-icon>
                         Permite Anexos
                       </v-chip>
@@ -319,11 +255,7 @@
                 <!-- Actions para etapa em progresso -->
                 <v-card-actions v-if="canExecuteStep(execution)">
                   <v-spacer />
-                  <v-btn
-                    color="primary"
-                    variant="elevated"
-                    @click="executeStep(execution)"
-                  >
+                  <v-btn color="primary" variant="elevated" @click="executeStep(execution)">
                     <v-icon start>mdi-play</v-icon>
                     Executar Etapa
                   </v-btn>
@@ -338,11 +270,7 @@
 
   <!-- Loading -->
   <div v-else-if="loading" class="text-center py-12">
-    <v-progress-circular
-      indeterminate
-      color="primary"
-      size="64"
-    />
+    <v-progress-circular indeterminate color="primary" size="64" />
     <p class="text-body-2 text-grey mt-4">Carregando processo...</p>
   </div>
 
@@ -393,7 +321,7 @@ const totalSteps = computed(() => {
 })
 
 const completedSteps = computed(() => {
-  return process.value?.stepExecutions?.filter(se => 
+  return process.value?.stepExecutions?.filter(se =>
     se.status === 'COMPLETED' || se.status === 'SKIPPED'
   ).length || 0
 })
@@ -405,31 +333,31 @@ const progressPercentage = computed(() => {
 
 const estimatedCompletion = computed(() => {
   if (!process.value || process.value.status === 'COMPLETED') return null
-  
+
   const avgTimePerStep = 2 // dias por etapa (estimativa)
   const remainingSteps = totalSteps.value - completedSteps.value
   const estimatedDays = remainingSteps * avgTimePerStep
-  
+
   return dayjs().add(estimatedDays, 'day').format('DD/MM/YYYY')
 })
 
 const formattedFormData = computed(() => {
   if (!process.value?.formData) return {}
-  
+
   const formatted = {}
   const formData = process.value.formData
   const formFields = process.value.processType?.formFields || []
-  
+
   Object.keys(formData).forEach(key => {
     const field = formFields.find(f => f.name === key)
     const label = field?.label || key
     const value = formData[key]
-    
+
     if (value !== null && value !== undefined && value !== '') {
       formatted[label] = Array.isArray(value) ? value.join(', ') : value
     }
   })
-  
+
   return formatted
 })
 
@@ -545,7 +473,7 @@ function canExecuteStep(execution) {
 
   // Verificar se é responsável direto
   if (step.assignedToUserId === user.id) return true
-  
+
   // Verificar se pertence ao setor responsável
   if (step.assignedToSectorId && authStore.activeSectorId === step.assignedToSectorId) return true
 
@@ -622,5 +550,8 @@ onMounted(async () => {
 
 .v-timeline-item {
   padding-bottom: 24px;
+}
+.max-width{
+  max-width: 610px;
 }
 </style>
