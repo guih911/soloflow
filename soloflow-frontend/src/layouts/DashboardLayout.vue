@@ -125,14 +125,14 @@
           <v-list-item-title class="text-body-2">Dashboard</v-list-item-title>
         </v-list-item>
 
-        <!-- Criar Processo -->
+        <!-- ✨ Criar Processo - ATUALIZADO -->
         <v-list-item 
           :to="{ name: 'Processes' }"
           class="mx-3 my-1"
           rounded="xl"
         >
           <template v-slot:prepend>
-            <v-icon size="20">mdi-clipboard-list</v-icon>
+            <v-icon size="20">mdi-rocket-launch</v-icon>
           </template>
           <v-list-item-title class="text-body-2">Criar Processo</v-list-item-title>
         </v-list-item>

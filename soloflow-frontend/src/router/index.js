@@ -27,6 +27,7 @@ import ProcessTypeEditor from '@/views/processes/ProcessTypeEditor.vue'
 
 // Views - Processes
 import Processes from '@/views/processes/Processes.vue'
+import CreateProcess from '@/views/processes/CreateProcess.vue' // ✅ ADICIONADO
 import ProcessDetail from '@/views/processes/ProcessDetail.vue'
 import StepExecution from '@/views/processes/StepExecution.vue'
 import ManageProcesses from '@/views/processes/ManageProcesses.vue'
@@ -134,14 +135,33 @@ const routes = [
         props: true,
       },
 
-      // PROCESSOS - SEÇÃO CORRIGIDA E EXPANDIDA
+      // PROCESSOS - ✅ SEÇÃO MELHORADA
       {
         path: '/processes',
         name: 'Processes',
         component: Processes,
         meta: { 
-          title: 'Criar Processo',
+          title: 'Processos Disponíveis',
+          description: 'Escolha um tipo de processo para iniciar'
+        }
+      },
+      {
+        path: '/processes/create',
+        name: 'CreateProcess',
+        component: CreateProcess,
+        meta: {
+          title: 'Criar Novo Processo',
           description: 'Iniciar um novo workflow'
+        }
+      },
+      {
+        path: '/processes/create/:typeId',
+        name: 'CreateProcessWithType',
+        component: CreateProcess,
+        props: true,
+        meta: {
+          title: 'Criar Processo',
+          description: 'Iniciar processo com tipo pré-selecionado'
         }
       },
       {
