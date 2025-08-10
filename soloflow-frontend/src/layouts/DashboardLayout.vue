@@ -1,183 +1,256 @@
 <template>
   <v-app>
-    <!-- App Bar -->
+    <!-- ✨ App Bar Moderno com Glassmorphism -->
     <v-app-bar
-      color="primary"
-      elevation="2"
+      color="rgba(255, 255, 255, 0.8)"
+      elevation="0"
       app
-      height="64"
+      height="72"
+      style="backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);"
+      class="app-bar-modern"
     >
-      <v-app-bar-nav-icon @click="drawer = !drawer" />
+      <!-- Menu Toggle -->
+      <v-app-bar-nav-icon 
+        @click="toggleDrawer" 
+        color="primary"
+        class="ml-2"
+      >
+        <v-icon>{{ drawer ? 'mdi-menu-open' : 'mdi-menu' }}</v-icon>
+      </v-app-bar-nav-icon>
       
-      <v-app-bar-title class="font-weight-bold">
-        SoloFlow
-      </v-app-bar-title>
+      <!-- Logo e Título -->
+      <div class="d-flex align-center ml-4">
+        <v-avatar color="primary" size="40" class="mr-3">
+          <v-icon color="white" size="20">mdi-play</v-icon>
+        </v-avatar>
+        <div>
+          <v-app-bar-title class="text-h5 font-weight-bold logo-text">
+            SoloFlow
+          </v-app-bar-title>
+          <div class="text-caption text-medium-emphasis">
+            Sistema de processos
+          </div>
+        </div>
+      </div>
 
       <v-spacer />
 
-      <!-- Seletor de Empresa -->
+      <!-- ✨ Notifications -->
+      <v-btn icon variant="text" class="mr-2" @click="showNotifications">
+        <v-badge :content="notifications.length" :model-value="notifications.length > 0" color="error">
+          <v-icon>mdi-bell</v-icon>
+        </v-badge>
+      </v-btn>
+
+      <!-- Seletor de Empresa Melhorado -->
       <v-menu 
         v-if="companies.length > 1"
         offset-y
         class="mr-4"
       >
         <template v-slot:activator="{ props }">
-          <v-btn v-bind="props" variant="text" class="text-none">
-            <v-icon start>mdi-domain</v-icon>
+          <v-btn 
+            v-bind="props" 
+            variant="outlined" 
+            class="text-none company-selector"
+            prepend-icon="mdi-domain"
+          >
             {{ currentCompany?.name }}
             <v-icon end>mdi-chevron-down</v-icon>
           </v-btn>
         </template>
 
-        <v-list min-width="250">
-          <v-list-subheader>Trocar empresa</v-list-subheader>
+        <v-list min-width="280" class="company-list">
+          <v-list-subheader class="text-primary font-weight-bold">
+            <v-icon start>mdi-swap-horizontal</v-icon>
+            Trocar empresa
+          </v-list-subheader>
           <v-list-item
             v-for="company in companies"
             :key="company.companyId"
             @click="switchCompany(company.companyId)"
             :active="company.companyId === currentCompany?.companyId"
+            class="company-item"
           >
             <template v-slot:prepend>
-              <v-icon :color="company.companyId === currentCompany?.companyId ? 'primary' : 'grey'">
-                mdi-domain
-              </v-icon>
+              <v-avatar size="32" :color="company.companyId === currentCompany?.companyId ? 'primary' : 'grey-lighten-2'">
+                <v-icon size="16" :color="company.companyId === currentCompany?.companyId ? 'white' : 'grey'">
+                  mdi-domain
+                </v-icon>
+              </v-avatar>
             </template>
-            <v-list-item-title>{{ company.name }}</v-list-item-title>
+            <v-list-item-title class="font-weight-medium">{{ company.name }}</v-list-item-title>
             <v-list-item-subtitle>{{ getRoleText(company.role) }}</v-list-item-subtitle>
             <template v-slot:append>
-              <v-icon v-if="company.companyId === currentCompany?.companyId">
-                mdi-check
-              </v-icon>
+              <v-chip 
+                v-if="company.companyId === currentCompany?.companyId"
+                size="x-small"
+                color="primary"
+                variant="flat"
+              >
+                <v-icon start size="12">mdi-check</v-icon>
+                Ativa
+              </v-chip>
             </template>
           </v-list-item>
         </v-list>
       </v-menu>
 
-      <!-- User Menu -->
+      <!-- User Menu Melhorado -->
       <v-menu offset-y>
         <template v-slot:activator="{ props }">
-          <v-btn v-bind="props" variant="text" class="text-none">
-            <v-avatar size="32" class="mr-2" color="white">
-              <span class="text-primary font-weight-bold">
+          <v-btn v-bind="props" variant="text" class="text-none user-menu-btn">
+            <v-avatar size="36" color="primary" class="mr-2">
+              <span class="text-white font-weight-bold text-body-2">
                 {{ getUserInitials(user?.name) }}
               </span>
             </v-avatar>
-            <span class="d-none d-sm-inline">{{ user?.name }}</span>
-            <v-icon end>mdi-chevron-down</v-icon>
+            <div class="d-none d-sm-flex flex-column align-start">
+              <span class="text-body-2 font-weight-medium">{{ user?.name }}</span>
+              <span class="text-caption text-medium-emphasis">{{ getRoleText(currentCompany?.role) }}</span>
+            </div>
+            <v-icon end class="ml-1">mdi-chevron-down</v-icon>
           </v-btn>
         </template>
 
-        <v-list min-width="200">
-          <v-list-item>
-            <v-list-item-title class="text-caption text-medium-emphasis">
-              {{ user?.email }}
-            </v-list-item-title>
-            <v-list-item-subtitle class="text-caption">
-              {{ currentCompany?.name }} - {{ getRoleText(currentCompany?.role) }}
+        <v-list min-width="260" class="user-menu">
+          <!-- User Info -->
+          <v-list-item class="user-info-item">
+            <template v-slot:prepend>
+              <v-avatar size="48" color="primary">
+                <span class="text-white font-weight-bold">
+                  {{ getUserInitials(user?.name) }}
+                </span>
+              </v-avatar>
+            </template>
+            <v-list-item-title class="font-weight-bold">{{ user?.name }}</v-list-item-title>
+            <v-list-item-subtitle>{{ user?.email }}</v-list-item-subtitle>
+            <v-list-item-subtitle class="text-primary">
+              {{ currentCompany?.name }} • {{ getRoleText(currentCompany?.role) }}
             </v-list-item-subtitle>
           </v-list-item>
           
-          <v-divider class="my-1" />
+          <v-divider class="my-2" />
           
-          <v-list-item @click="goToProfile">
+          <!-- Menu Items -->
+          <v-list-item @click="goToProfile" class="menu-item">
             <template v-slot:prepend>
-              <v-icon color="primary" size="small">mdi-account</v-icon>
+              <v-icon color="primary">mdi-account-circle</v-icon>
             </template>
             <v-list-item-title>Meu Perfil</v-list-item-title>
+            <v-list-item-subtitle>Dados pessoais e configurações</v-list-item-subtitle>
           </v-list-item>
           
-          <v-list-item @click="goToSettings" v-if="user?.role === 'ADMIN'">
+          <v-list-item @click="goToSettings" v-if="user?.role === 'ADMIN'" class="menu-item">
             <template v-slot:prepend>
-              <v-icon color="primary" size="small">mdi-cog</v-icon>
+              <v-icon color="primary">mdi-cog</v-icon>
             </template>
             <v-list-item-title>Configurações</v-list-item-title>
+            <v-list-item-subtitle>Configurações do sistema</v-list-item-subtitle>
           </v-list-item>
           
-          <v-divider class="my-1" />
+          <v-divider class="my-2" />
           
-          <v-list-item @click="handleLogout" class="text-error">
+          <v-list-item @click="handleLogout" class="menu-item logout-item">
             <template v-slot:prepend>
-              <v-icon color="error" size="small">mdi-logout</v-icon>
+              <v-icon color="error">mdi-logout</v-icon>
             </template>
-            <v-list-item-title>Sair do Sistema</v-list-item-title>
+            <v-list-item-title class="text-error">Sair do Sistema</v-list-item-title>
+            <v-list-item-subtitle>Encerrar sessão</v-list-item-subtitle>
           </v-list-item>
         </v-list>
       </v-menu>
     </v-app-bar>
 
-    <!-- Navigation Drawer -->
+    <!-- ✨ Navigation Drawer com Gradiente Azul -->
     <v-navigation-drawer 
       v-model="drawer" 
       app 
-      :width="250"
-      style="top: 64px !important; height: calc(100vh - 64px) !important;"
+      width="280"
+      class="modern-drawer"
+      style="top: 72px !important; height: calc(100vh - 72px) !important; background: linear-gradient(180deg, #1976D2, #1565C0, #0D47A1) !important;"
     >
-      <v-list nav density="compact" class="pt-4">
+      <v-divider style="border-color: rgba(255, 255, 255, 0.2);" />
+
+      <!-- ✨ Navigation Items com Ícones Corrigidos -->
+      <v-list nav density="comfortable" class="navigation-list" style="background: transparent;">
         <!-- Dashboard -->
         <v-list-item 
           :to="{ name: 'Dashboard' }"
-          class="mx-3 my-1"
+          class="nav-item white-text"
           rounded="xl"
         >
           <template v-slot:prepend>
-            <v-icon size="20">mdi-view-dashboard</v-icon>
+            <v-icon size="20" color="white">mdi-view-dashboard</v-icon>
           </template>
-          <v-list-item-title class="text-body-2">Dashboard</v-list-item-title>
+          <v-list-item-title class="text-white">Dashboard</v-list-item-title>
         </v-list-item>
 
-        <!-- ✨ Criar Processo - ATUALIZADO -->
+        <!-- Criar Processo -->
         <v-list-item 
           :to="{ name: 'Processes' }"
-          class="mx-3 my-1"
+          class="nav-item white-text"
           rounded="xl"
         >
           <template v-slot:prepend>
-            <v-icon size="20">mdi-rocket-launch</v-icon>
+            <v-icon size="20" color="white">mdi-rocket-launch</v-icon>
           </template>
-          <v-list-item-title class="text-body-2">Criar Processo</v-list-item-title>
+          <v-list-item-title class="text-white">Criar Processo</v-list-item-title>
         </v-list-item>
 
         <!-- Gerenciar Processos -->
         <v-list-item 
           v-if="canAccess(['ADMIN', 'MANAGER'])"
           :to="{ name: 'ManageProcesses' }"
-          class="mx-3 my-1"
+          class="nav-item white-text"
           rounded="xl"
         >
           <template v-slot:prepend>
-            <v-icon size="20">mdi-clipboard-edit</v-icon>
+            <v-icon size="20" color="white">mdi-clipboard-edit</v-icon>
           </template>
-          <v-list-item-title class="text-body-2">Gerenciar Processos</v-list-item-title>
+          <v-list-item-title class="text-white">Gerenciar Processos</v-list-item-title>
         </v-list-item>
 
         <!-- Minhas Tarefas -->
         <v-list-item 
           :to="{ name: 'MyTasks' }"
-          class="mx-3 my-1"
+          class="nav-item white-text"
           rounded="xl"
         >
           <template v-slot:prepend>
-            <v-icon size="20">mdi-clipboard-text</v-icon>
+            <v-icon size="20" color="white">mdi-clipboard-text</v-icon>
           </template>
-          <v-list-item-title class="text-body-2">Minhas Tarefas</v-list-item-title>
+          <v-list-item-title class="text-white">Minhas Tarefas</v-list-item-title>
+          <template v-slot:append v-if="pendingTasks > 0">
+            <v-chip size="x-small" color="warning" variant="flat">
+              {{ pendingTasks }}
+            </v-chip>
+          </template>
         </v-list-item>
 
         <!-- Assinaturas Pendentes -->
         <v-list-item 
           :to="{ name: 'PendingSignatures' }"
-          class="mx-3 my-1"
+          class="nav-item white-text"
           rounded="xl"
         >
           <template v-slot:prepend>
-            <v-icon size="20">mdi-draw-pen</v-icon>
+            <v-icon size="20" color="white">mdi-draw-pen</v-icon>
           </template>
-          <v-list-item-title class="text-body-2">Assinaturas Pendentes</v-list-item-title>
+          <v-list-item-title class="text-white">Assinaturas</v-list-item-title>
+          <template v-slot:append v-if="pendingSignatures > 0">
+            <v-chip size="x-small" color="warning" variant="flat">
+              {{ pendingSignatures }}
+            </v-chip>
+          </template>
         </v-list-item>
 
-        <v-divider class="my-3" />
+        <!-- Divider -->
+        <v-divider class="my-4" v-if="canAccess(['ADMIN', 'MANAGER'])" style="border-color: rgba(255, 255, 255, 0.2);" />
 
-        <!-- Configurações (apenas para ADMIN/MANAGER) -->
-        <v-list-subheader v-if="canAccess(['ADMIN', 'MANAGER'])">
+        <!-- Configurações Header -->
+        <v-list-subheader v-if="canAccess(['ADMIN', 'MANAGER'])" class="settings-header text-white">
+          <v-icon start size="16" color="white">mdi-cog</v-icon>
           CONFIGURAÇÕES
         </v-list-subheader>
 
@@ -185,111 +258,146 @@
         <v-list-item 
           v-if="canAccess(['ADMIN', 'MANAGER'])"
           :to="{ name: 'ProcessTypes' }"
-          class="mx-3 my-1"
+          class="nav-item white-text"
           rounded="xl"
         >
           <template v-slot:prepend>
-            <v-icon size="20">mdi-file-cog</v-icon>
+            <v-icon size="20" color="white">mdi-file-cog</v-icon>
           </template>
-          <v-list-item-title class="text-body-2">Tipos de Processo</v-list-item-title>
+          <v-list-item-title class="text-white">Tipos de Processo</v-list-item-title>
         </v-list-item>
 
         <!-- Setores -->
         <v-list-item 
           v-if="canAccess(['ADMIN', 'MANAGER'])"
           :to="{ name: 'Sectors' }"
-          class="mx-3 my-1"
+          class="nav-item white-text"
           rounded="xl"
         >
           <template v-slot:prepend>
-            <v-icon size="20">mdi-office-building</v-icon>
+            <v-icon size="20" color="white">mdi-office-building</v-icon>
           </template>
-          <v-list-item-title class="text-body-2">Setores</v-list-item-title>
+          <v-list-item-title class="text-white">Setores</v-list-item-title>
         </v-list-item>
 
         <!-- Usuários -->
         <v-list-item 
           v-if="canAccess(['ADMIN', 'MANAGER'])"
           :to="{ name: 'Users' }"
-          class="mx-3 my-1"
+          class="nav-item white-text"
           rounded="xl"
         >
           <template v-slot:prepend>
-            <v-icon size="20">mdi-account-group</v-icon>
+            <v-icon size="20" color="white">mdi-account-group</v-icon>
           </template>
-          <v-list-item-title class="text-body-2">Usuários</v-list-item-title>
+          <v-list-item-title class="text-white">Usuários</v-list-item-title>
         </v-list-item>
 
         <!-- Empresas -->
         <v-list-item 
           v-if="canAccess(['ADMIN'])"
           :to="{ name: 'Companies' }"
-          class="mx-3 my-1"
+          class="nav-item white-text"
           rounded="xl"
         >
           <template v-slot:prepend>
-            <v-icon size="20">mdi-domain</v-icon>
+            <v-icon size="20" color="white">mdi-domain</v-icon>
           </template>
-          <v-list-item-title class="text-body-2">Empresas</v-list-item-title>
+          <v-list-item-title class="text-white">Empresas</v-list-item-title>
         </v-list-item>
       </v-list>
     </v-navigation-drawer>
 
-    <!-- Main Content -->
-    <v-main style="padding-top: 64px !important;">
-      <div style="padding: 24px;">
+    <!-- ✨ Main Content -->
+    <v-main style="padding-top: 72px !important;">
+      <!-- Content Area -->
+      <div class="content-container">
         <router-view />
       </div>
     </v-main>
 
-    <!-- Snackbar Global -->
-    <v-snackbar
-      v-model="snackbar.show"
-      :color="snackbar.color"
-      :timeout="3000"
-      location="top right"
-    >
-      {{ snackbar.message }}
-      <template v-slot:actions>
-        <v-btn
-          variant="text"
-          @click="snackbar.show = false"
-        >
-          Fechar
-        </v-btn>
-      </template>
-    </v-snackbar>
+    <!-- ✨ Notifications Dialog -->
+    <v-dialog v-model="notificationsDialog" max-width="500">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon color="primary" class="mr-2">mdi-bell</v-icon>
+          Notificações
+          <v-spacer />
+          <v-btn icon variant="text" @click="notificationsDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-card-text>
+          <div v-if="notifications.length === 0" class="text-center py-8">
+            <v-icon size="64" color="grey-lighten-2">mdi-bell-off</v-icon>
+            <div class="text-h6 mt-4">Nenhuma notificação</div>
+            <div class="text-body-2 text-medium-emphasis">
+              Você está em dia com todas as tarefas!
+            </div>
+          </div>
+          <v-list v-else>
+            <v-list-item v-for="notification in notifications" :key="notification.id">
+              <template v-slot:prepend>
+                <v-avatar :color="notification.color" size="32">
+                  <v-icon color="white" size="16">{{ notification.icon }}</v-icon>
+                </v-avatar>
+              </template>
+              <v-list-item-title>{{ notification.title }}</v-list-item-title>
+              <v-list-item-subtitle>{{ notification.message }}</v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </v-app>
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, reactive, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
+// ✨ Estado Reativo
 const drawer = ref(true)
+const notificationsDialog = ref(false)
+
+// ✨ Computed Properties
 const user = computed(() => authStore.user)
 const currentCompany = computed(() => authStore.activeCompany)
 const companies = computed(() => authStore.companies)
 
-// Snackbar global
-const snackbar = reactive({
-  show: false,
-  message: '',
-  color: 'success'
-})
+// ✨ Dados Mock para demonstração
+const pendingTasks = ref(3)
+const pendingSignatures = ref(1)
+const notifications = ref([
+  {
+    id: 1,
+    title: 'Nova tarefa pendente',
+    message: 'Aprovação de solicitação de compra',
+    icon: 'mdi-clipboard-text',
+    color: 'primary'
+  }
+])
 
-// Expor método global para mostrar snackbar
-window.showSnackbar = (message, color = 'success') => {
-  snackbar.message = message
-  snackbar.color = color
-  snackbar.show = true
+// ✨ Métodos
+function toggleDrawer() {
+  drawer.value = !drawer.value
 }
 
-// Métodos de navegação
+// ✨ Desabilitar snackbar global (remove notificações indesejadas)
+window.showSnackbar = () => {
+  // Não faz nada - previne notificações
+}
+
+function showNotifications() {
+  notificationsDialog.value = true
+}
+
+// ✨ Métodos de navegação
 function goToProfile() {
   router.push({ name: 'Profile' })
 }
@@ -302,7 +410,7 @@ async function switchCompany(companyId) {
   try {
     await authStore.switchCompany(companyId)
   } catch (error) {
-    window.showSnackbar?.('Erro ao trocar empresa', 'error')
+    console.error('Erro ao trocar empresa:', error)
   }
 }
 
@@ -317,7 +425,7 @@ async function handleLogout() {
   }
 }
 
-// Auxiliares
+// ✨ Auxiliares
 function getUserInitials(name) {
   if (!name) return 'U'
   return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
@@ -332,19 +440,182 @@ function canAccess(requiredRoles) {
   const userRole = authStore.userRole
   return requiredRoles.includes(userRole)
 }
+
+// ✨ Watch para responsividade
+watch(() => window.innerWidth, (newWidth) => {
+  if (newWidth < 1024) {
+    drawer.value = false
+  } else {
+    drawer.value = true
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>
+/* ✨ App Bar Moderno */
+.app-bar-modern {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.logo-text {
+  background: linear-gradient(135deg, #1976D2, #42A5F5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.company-selector {
+  border-radius: 12px;
+  text-transform: none;
+  font-weight: 500;
+}
+
+/* ✨ Navigation Drawer com Gradiente Azul */
+.modern-drawer {
+  border-right: none !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.navigation-list {
+  padding: 16px 0;
+}
+
+.nav-item {
+  margin-bottom: 8px;
+  margin-left: 12px;
+  margin-right: 12px;
+  transition: all 0.2s ease;
+  border-radius: 16px !important;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  transform: translateX(4px);
+  border-radius: 16px !important;
+}
+
+.nav-item.v-list-item--active {
+  background: rgba(255, 255, 255, 0.2) !important;
+  font-weight: 600;
+  border-radius: 16px !important;
+}
+
+.white-text .v-list-item-title {
+  color: white !important;
+}
+
+.white-text .v-icon {
+  color: white !important;
+}
+
+.settings-header {
+  color: white !important;
+  font-weight: 700;
+  font-size: 0.75rem;
+  margin-top: 8px;
+  padding-left: 20px;
+  opacity: 0.9;
+}
+
+.content-container {
+  padding: 24px;
+  min-height: calc(100vh - 96px);
+}
+
+/* ✨ User Menu */
+.user-menu-btn {
+  border-radius: 12px;
+  text-transform: none;
+  padding: 4px 12px;
+  margin-right: 8px;
+}
+
+.user-info-item {
+  background: rgba(25, 118, 210, 0.04);
+  margin: 8px;
+  border-radius: 12px;
+}
+
+.menu-item {
+  margin: 4px 8px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.menu-item:hover {
+  background: rgba(25, 118, 210, 0.08) !important;
+}
+
+.logout-item:hover {
+  background: rgba(244, 67, 54, 0.08) !important;
+}
+
+/* ✨ Company List */
+.company-list {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.company-item {
+  margin: 4px 8px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.company-item:hover {
+  background: rgba(25, 118, 210, 0.08) !important;
+}
+
+/* ✨ Responsividade */
+@media (max-width: 1024px) {
+  .modern-drawer {
+    z-index: 1001;
+  }
+}
+
+@media (max-width: 768px) {
+  .content-container {
+    padding: 16px;
+  }
+  
+  .user-menu-btn .d-sm-flex {
+    display: none !important;
+  }
+}
+
+/* ✨ Animações */
 .v-list-item {
-  cursor: pointer !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.v-list-item:hover {
-  background-color: rgba(var(--v-theme-primary), 0.08) !important;
+.v-avatar {
+  transition: all 0.2s ease;
 }
 
-.v-list-item--active {
-  background-color: rgba(var(--v-theme-primary), 0.12) !important;
-  color: rgb(var(--v-theme-primary)) !important;
+.v-btn {
+  transition: all 0.2s ease;
+}
+
+/* ✨ Breadcrumbs */
+.breadcrumbs-container {
+  background: rgba(25, 118, 210, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 12px 0;
+}
+
+.content-container {
+  padding: 24px;
+  min-height: calc(100vh - 144px);
+}
+
+/* ✨ Tema Escuro */
+.v-theme--dark .modern-drawer {
+  background: linear-gradient(180deg, #0D47A1, #1565C0, #1976D2) !important;
+}
+
+.v-theme--dark .app-bar-modern {
+  background: rgba(18, 18, 18, 0.8) !important;
+  backdrop-filter: blur(20px);
 }
 </style>
