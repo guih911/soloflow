@@ -79,14 +79,6 @@
                 <v-list-item-title>{{ processType.name }}</v-list-item-title>
                 <v-list-item-subtitle>
                   {{ processType.description }}
-                  <div class="mt-1">
-                    <v-chip size="x-small" class="mr-1">
-                      {{ processType.steps?.length || 0 }} etapas
-                    </v-chip>
-                    <v-chip v-if="processType.formFields?.length > 0" size="x-small">
-                      {{ processType.formFields.length }} campos
-                    </v-chip>
-                  </div>
                 </v-list-item-subtitle>
 
                 <template v-slot:append>
@@ -113,8 +105,8 @@
           </v-card-actions>
         </v-stepper-window-item>
 
-        <!-- Step 2: Informações Básicas (agora é o primeiro se tipo pré-selecionado) -->
-        <v-stepper-window-item :value="selectedProcessType ? 1 : 2">
+        <!-- Step 2: Campos do Formulário (se existirem, agora vem primeiro) -->
+        <v-stepper-window-item :value="selectedProcessType ? 1 : 2" v-if="hasFormFields">
           <v-card-text>
             <!-- Resumo do tipo selecionado -->
             <div v-if="getProcessType()" class="mb-4">
@@ -128,18 +120,6 @@
                       </div>
                       <div class="text-caption text-medium-emphasis">
                         {{ getProcessType().description }}
-                      </div>
-                      <div class="mt-1">
-                        <v-chip size="x-small" class="mr-1" variant="tonal">
-                          {{ getProcessType().steps?.length || 0 }} etapas
-                        </v-chip>
-                        <v-chip 
-                          v-if="getProcessType().formFields?.length > 0" 
-                          size="x-small" 
-                          variant="tonal"
-                        >
-                          {{ getProcessType().formFields.length }} campos
-                        </v-chip>
                       </div>
                     </div>
                     <v-btn
@@ -156,95 +136,16 @@
               </v-card>
             </div>
 
-            <h3 class="text-h6 mb-4">Informações do processo</h3>
-            
-            <v-row>
-              <v-col cols="12">
-                <v-text-field
-                  v-model="processData.title"
-                  label="Título do processo"
-                  :hint="`Deixe vazio para usar: ${getProcessType()?.name || 'nome padrão'}`"
-                  persistent-hint
-                  :placeholder="getProcessType()?.name"
-                  variant="outlined"
-                  class="mb-2"
-                />
-              </v-col>
-              <v-col cols="12">
-                <v-textarea
-                  v-model="processData.description"
-                  label="Descrição (opcional)"
-                  rows="3"
-                  counter="500"
-                  :rules="[v => !v || v.length <= 500 || 'Máximo 500 caracteres']"
-                  variant="outlined"
-                  placeholder="Descreva o objetivo ou contexto deste processo..."
-                />
-              </v-col>
-            </v-row>
-
-            <!-- Preview do que vem a seguir -->
-            <v-alert
-              v-if="hasFormFields"
-              type="info"
-              variant="tonal"
-              class="mt-3"
-            >
-              <v-icon start>mdi-information</v-icon>
-              <strong>Próximo passo:</strong> Preencher {{ getProcessType()?.formFields?.length }} campos específicos
-            </v-alert>
-            <v-alert
-              v-else
-              type="success"
-              variant="tonal"
-              class="mt-3"
-            >
-              <v-icon start>mdi-check-circle</v-icon>
-              <strong>Pronto para criar!</strong> Este processo não requer campos adicionais
-            </v-alert>
-          </v-card-text>
-
-          <v-card-actions>
-            <v-btn 
-              v-if="!selectedProcessType" 
-              variant="text" 
-              @click="previousStep"
-            >
-              <v-icon start>mdi-arrow-left</v-icon>
-              Voltar
-            </v-btn>
-            <v-spacer />
-            <v-btn variant="text" @click="close">Cancelar</v-btn>
-            <v-btn
-              color="primary"
-              @click="hasFormFields ? nextStep() : createProcess()"
-              :loading="creating"
-              variant="elevated"
-            >
-              <v-icon start>{{ hasFormFields ? 'mdi-arrow-right' : 'mdi-check' }}</v-icon>
-              {{ hasFormFields ? 'Próximo' : 'Criar Processo' }}
-            </v-btn>
-          </v-card-actions>
-        </v-stepper-window-item>
-
-        <!-- Step 3: Formulário Dinâmico -->
-        <v-stepper-window-item :value="selectedProcessType ? 2 : 3" v-if="hasFormFields">
-          <v-card-text>
-            <h3 class="text-h6 mb-4">
-              Preencha os dados específicos
-              <v-chip size="small" color="info" class="ml-2">
-                {{ getProcessType()?.formFields?.length }} campos
-              </v-chip>
-            </h3>
+            <h3 class="text-h6 mb-4">Dados do Processo</h3>
             
             <v-form ref="dynamicForm" v-model="formValid">
               <v-row>
                 <v-col
-                  v-for="field in getProcessType()?.formFields"
+                  v-for="field in getVisibleFormFields(getProcessType())"
                   :key="field.id"
                   :cols="getFieldCols(field)"
                 >
-                  <!-- Campo de Texto -->
+                  <!-- ✨ Campo de Texto -->
                   <v-text-field
                     v-if="field.type === 'TEXT'"
                     v-model="formData[field.name]"
@@ -257,7 +158,7 @@
                     variant="outlined"
                   />
 
-                  <!-- Campo Numérico -->
+                  <!-- ✨ Campo Numérico -->
                   <v-text-field
                     v-else-if="field.type === 'NUMBER'"
                     v-model.number="formData[field.name]"
@@ -271,7 +172,7 @@
                     variant="outlined"
                   />
 
-                  <!-- Campo de Data -->
+                  <!-- ✨ Campo de Data -->
                   <v-text-field
                     v-else-if="field.type === 'DATE'"
                     v-model="formData[field.name]"
@@ -284,7 +185,7 @@
                     variant="outlined"
                   />
 
-                  <!-- Campo de Email -->
+                  <!-- ✨ Campo de Email -->
                   <v-text-field
                     v-else-if="field.type === 'EMAIL'"
                     v-model="formData[field.name]"
@@ -298,7 +199,7 @@
                     variant="outlined"
                   />
 
-                  <!-- Campo de CPF -->
+                  <!-- ✨ Campo de CPF -->
                   <v-text-field
                     v-else-if="field.type === 'CPF'"
                     v-model="formData[field.name]"
@@ -312,7 +213,7 @@
                     variant="outlined"
                   />
 
-                  <!-- Campo de CNPJ -->
+                  <!-- ✨ Campo de CNPJ -->
                   <v-text-field
                     v-else-if="field.type === 'CNPJ'"
                     v-model="formData[field.name]"
@@ -326,7 +227,7 @@
                     variant="outlined"
                   />
 
-                  <!-- Campo de Telefone -->
+                  <!-- ✨ Campo de Telefone -->
                   <v-text-field
                     v-else-if="field.type === 'PHONE'"
                     v-model="formData[field.name]"
@@ -340,7 +241,7 @@
                     variant="outlined"
                   />
 
-                  <!-- Campo de Moeda -->
+                  <!-- ✨ Campo de Moeda -->
                   <v-text-field
                     v-else-if="field.type === 'CURRENCY'"
                     v-model="formData[field.name]"
@@ -356,7 +257,7 @@
                     variant="outlined"
                   />
 
-                  <!-- Dropdown -->
+                  <!-- ✨ Dropdown -->
                   <v-select
                     v-else-if="field.type === 'DROPDOWN'"
                     v-model="formData[field.name]"
@@ -369,7 +270,7 @@
                     variant="outlined"
                   />
 
-                  <!-- Checkbox -->
+                  <!-- ✨ Checkbox -->
                   <div v-else-if="field.type === 'CHECKBOX'">
                     <p class="text-subtitle-2 mb-2">{{ field.label }}</p>
                     <div class="border rounded pa-3">
@@ -389,7 +290,7 @@
                     </p>
                   </div>
 
-                  <!-- Textarea -->
+                  <!-- ✨ Textarea -->
                   <v-textarea
                     v-else-if="field.type === 'TEXTAREA'"
                     v-model="formData[field.name]"
@@ -402,13 +303,105 @@
                     persistent-hint
                     variant="outlined"
                   />
+
+                  <!-- ✨ Campo de Arquivo -->
+                  <div v-else-if="field.type === 'FILE'" class="file-field mb-3">
+                    <p class="text-subtitle-2 mb-3 d-flex align-center">
+                      <v-icon color="primary" size="20" class="mr-2">mdi-paperclip</v-icon>
+                      {{ field.label }}
+                      <span v-if="field.required" class="text-error ml-1">*</span>
+                    </p>
+                    
+                    <v-card variant="outlined" class="pa-3">
+                      <!-- Área de upload -->
+                      <div class="d-flex align-center justify-space-between mb-3">
+                        <div>
+                          <v-btn
+                            size="small"
+                            color="primary"
+                            variant="tonal"
+                            @click="openFileDialog(field)"
+                          >
+                            <v-icon start>mdi-upload</v-icon>
+                            Selecionar Arquivos
+                          </v-btn>
+                          <input
+                            :ref="`fileInput_${field.name}`"
+                            type="file"
+                            style="display: none"
+                            :multiple="!field.validations?.maxFiles || field.validations.maxFiles > 1"
+                            :accept="getFileAcceptTypes(field)"
+                            @change="handleFileSelect($event, field)"
+                          />
+                        </div>
+                        <div class="text-caption text-medium-emphasis">
+                          {{ getFileHelpText(field) }}
+                        </div>
+                      </div>
+
+                      <!-- Lista de arquivos selecionados -->
+                      <div v-if="getFieldFiles(field).length > 0">
+                        <v-list density="compact" class="pa-0">
+                          <v-list-item
+                            v-for="(file, index) in getFieldFiles(field)"
+                            :key="index"
+                            class="px-0"
+                          >
+                            <template v-slot:prepend>
+                              <v-icon :color="getFileIconColor(file)">
+                                {{ getFileIcon(file.type) }}
+                              </v-icon>
+                            </template>
+
+                            <v-list-item-title class="text-body-2">
+                              {{ file.name }}
+                            </v-list-item-title>
+                            
+                            <v-list-item-subtitle class="text-caption">
+                              {{ formatFileSize(file.size) }}
+                            </v-list-item-subtitle>
+
+                            <template v-slot:append>
+                              <v-btn
+                                icon="mdi-delete"
+                                size="x-small"
+                                variant="text"
+                                color="error"
+                                @click="removeFile(field, index)"
+                              />
+                            </template>
+                          </v-list-item>
+                        </v-list>
+                      </div>
+
+                      <!-- Estado vazio -->
+                      <div v-else class="text-center py-4">
+                        <v-icon size="48" color="grey-lighten-2">mdi-cloud-upload</v-icon>
+                        <p class="text-body-2 text-medium-emphasis mt-2">
+                          Nenhum arquivo selecionado
+                        </p>
+                        <p class="text-caption text-medium-emphasis">
+                          {{ field.placeholder || 'Clique em "Selecionar Arquivos" para adicionar' }}
+                        </p>
+                      </div>
+                    </v-card>
+                    
+                    <p v-if="field.helpText" class="text-caption text-grey mt-2">
+                      <v-icon size="16" class="mr-1">mdi-information</v-icon>
+                      {{ field.helpText }}
+                    </p>
+                  </div>
                 </v-col>
               </v-row>
             </v-form>
           </v-card-text>
 
           <v-card-actions>
-            <v-btn variant="text" @click="previousStep">
+            <v-btn 
+              v-if="!selectedProcessType" 
+              variant="text" 
+              @click="previousStep"
+            >
               <v-icon start>mdi-arrow-left</v-icon>
               Voltar
             </v-btn>
@@ -416,9 +409,117 @@
             <v-btn variant="text" @click="close">Cancelar</v-btn>
             <v-btn
               color="primary"
+              @click="nextStep"
+              variant="elevated"
+            >
+              <v-icon start>mdi-arrow-right</v-icon>
+              Próximo
+            </v-btn>
+          </v-card-actions>
+        </v-stepper-window-item>
+
+        <!-- Step 3: Observações (ex-informações básicas, agora por último) -->
+        <v-stepper-window-item :value="selectedProcessType ? (hasFormFields ? 2 : 1) : (hasFormFields ? 3 : 2)">
+          <v-card-text>
+            <!-- Resumo do tipo selecionado (se não foi mostrado antes) -->
+            <div v-if="!hasFormFields && getProcessType()" class="mb-4">
+              <v-card variant="outlined" color="primary">
+                <v-card-text class="pa-3">
+                  <div class="d-flex align-center">
+                    <v-icon color="primary" class="mr-3">mdi-information</v-icon>
+                    <div class="flex-grow-1">
+                      <div class="text-subtitle-1 font-weight-medium">
+                        {{ getProcessType().name }}
+                      </div>
+                      <div class="text-caption text-medium-emphasis">
+                        {{ getProcessType().description }}
+                      </div>
+                      <div class="mt-1">
+                        <v-chip size="x-small" class="mr-1" variant="tonal">
+                          {{ getProcessType().steps?.length || 0 }} etapas
+                        </v-chip>
+                      </div>
+                    </div>
+                    <v-btn
+                      v-if="!selectedProcessType"
+                      variant="text"
+                      size="small"
+                      @click="goBackToTypeSelection"
+                    >
+                      <v-icon start>mdi-pencil</v-icon>
+                      Alterar
+                    </v-btn>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </div>
+
+            <h3 class="text-h6 mb-4">Observações Adicionais</h3>
+            
+            <v-row>
+              <v-col cols="12">
+                <!-- ✨ Título gerado automaticamente, não editável -->
+                <v-alert 
+                  type="info" 
+                  variant="tonal" 
+                  class="mb-4"
+                >
+                  <v-icon start>mdi-auto-fix</v-icon>
+                  <strong>Título será gerado automaticamente:</strong><br>
+                  {{ generateProcessTitle() }}
+                </v-alert>
+                
+                <!-- ✨ Campo de observações (ex-descrição) -->
+                <v-textarea
+                  v-model="processData.observations"
+                  label="Observações sobre este processo"
+                  rows="4"
+                  counter="1000"
+                  :rules="[v => !v || v.length <= 1000 || 'Máximo 1000 caracteres']"
+                  variant="outlined"
+                  placeholder="Adicione informações adicionais, contexto ou observações específicas sobre este processo..."
+                  hint="Campo opcional para informações complementares"
+                  persistent-hint
+                />
+              </v-col>
+            </v-row>
+
+            <!-- Preview do que será criado -->
+            <v-alert
+              type="success"
+              variant="tonal"
+              class="mt-4"
+            >
+              <v-icon start>mdi-check-circle</v-icon>
+              <strong>Pronto para criar!</strong> 
+              {{ hasFormFields ? 'Dados preenchidos e' : '' }} Processo será iniciado automaticamente.
+            </v-alert>
+          </v-card-text>
+
+          <v-card-actions>
+            <v-btn 
+              variant="text" 
+              @click="previousStep"
+              v-if="hasFormFields || !selectedProcessType"
+            >
+              <v-icon start>mdi-arrow-left</v-icon>
+              Voltar
+            </v-btn>
+            
+            <v-btn
+              variant="text"
+              @click="close"
+              v-if="!hasFormFields && selectedProcessType"
+            >
+              Cancelar
+            </v-btn>
+            
+            <v-spacer />
+            <v-btn variant="text" @click="close">Cancelar</v-btn>
+            <v-btn
+              color="primary"
               @click="createProcess"
               :loading="creating"
-              :disabled="!formValid"
               variant="elevated"
             >
               <v-icon start>mdi-rocket-launch</v-icon>
@@ -474,10 +575,10 @@ const selectedProcessTypeId = ref(null)
 
 const dynamicForm = ref(null)
 const processData = ref({
-  title: '',
-  description: ''
+  observations: '' // ✨ Mudança: description virou observations
 })
 const formData = ref({})
+const fileData = ref({}) // ✨ Dados dos arquivos por campo
 
 // Computed
 const processTypes = computed(() => processTypeStore.processTypes)
@@ -500,21 +601,31 @@ const stepperItems = computed(() => {
     items.push('Tipo de Processo')
   }
   
-  items.push('Informações Básicas')
-  
   if (hasFormFields.value) {
-    items.push('Formulário')
+    items.push('Dados do Processo')
   }
+  
+  items.push('Observações')
   
   return items
 })
 
 const hasFormFields = computed(() => {
   const processType = getProcessType()
-  return processType?.formFields?.length > 0
+  return getVisibleFieldsCount(processType) > 0
 })
 
-// Métodos auxiliares
+// ✨ Métodos auxiliares aprimorados
+function getVisibleFormFields(processType) {
+  if (!processType?.formFields) return []
+  // ✨ Incluir TODOS os campos, incluindo FILE
+  return processType.formFields
+}
+
+function getVisibleFieldsCount(processType) {
+  return getVisibleFormFields(processType).length
+}
+
 function getProcessType() {
   if (props.selectedProcessType) return props.selectedProcessType
   return processTypes.value.find(pt => pt.id === selectedProcessTypeId.value)
@@ -526,6 +637,8 @@ function getFieldCols(field) {
       return 12
     case 'CHECKBOX':
       return 12
+    case 'FILE':
+      return 12 // ✨ Campos de arquivo ocupam largura total
     default:
       return { cols: 12, md: 6 }
   }
@@ -553,6 +666,9 @@ function getFieldRules(field) {
       if (field.type === 'CHECKBOX') {
         return (v && v.length > 0) || `${field.label} é obrigatório`
       }
+      if (field.type === 'FILE') {
+        return (v && v.length > 0) || `${field.label} é obrigatório`
+      }
       return !!v || `${field.label} é obrigatório`
     })
   }
@@ -568,6 +684,16 @@ function getFieldRules(field) {
     case 'CNPJ':
       rules.push(v => !v || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'CNPJ inválido')
       break
+    case 'FILE':
+      if (field.validations?.minFiles) {
+        rules.push(v => !v || v.length >= field.validations.minFiles || 
+          `Mínimo ${field.validations.minFiles} arquivo(s)`)
+      }
+      if (field.validations?.maxFiles) {
+        rules.push(v => !v || v.length <= field.validations.maxFiles || 
+          `Máximo ${field.validations.maxFiles} arquivo(s)`)
+      }
+      break
   }
 
   // Validações customizadas
@@ -576,12 +702,12 @@ function getFieldRules(field) {
       const validations = typeof field.validations === 'object' ? 
         field.validations : JSON.parse(field.validations)
       
-      if (validations.minLength) {
+      if (validations.minLength && field.type !== 'FILE') {
         rules.push(v => !v || v.length >= validations.minLength || 
           validations.customMessage || `Mínimo ${validations.minLength} caracteres`)
       }
       
-      if (validations.maxLength) {
+      if (validations.maxLength && field.type !== 'FILE') {
         rules.push(v => !v || v.length <= validations.maxLength || 
           validations.customMessage || `Máximo ${validations.maxLength} caracteres`)
       }
@@ -608,6 +734,155 @@ function getFieldRules(field) {
   return rules
 }
 
+// ✨ Método para gerar título automaticamente
+function generateProcessTitle() {
+  const processType = getProcessType()
+  if (!processType) return 'Novo Processo'
+  
+  const now = new Date()
+  const dateStr = now.toLocaleDateString('pt-BR')
+  const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  
+  return `${processType.name} - ${dateStr} ${timeStr}`
+}
+
+// ✨ Funções para manipulação de arquivos
+function openFileDialog(field) {
+  const input = document.querySelector(`input[ref="fileInput_${field.name}"]`)
+  if (input) {
+    input.click()
+  }
+}
+
+function handleFileSelect(event, field) {
+  const files = Array.from(event.target.files)
+  
+  if (!fileData.value[field.name]) {
+    fileData.value[field.name] = []
+  }
+  
+  // Validar cada arquivo
+  for (const file of files) {
+    if (validateFile(file, field)) {
+      // Adicionar arquivo à lista
+      fileData.value[field.name].push({
+        file,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        uploadProgress: 0
+      })
+    }
+  }
+  
+  // Atualizar formData para validação
+  formData.value[field.name] = fileData.value[field.name]
+  
+  // Limpar input
+  event.target.value = ''
+}
+
+function removeFile(field, index) {
+  if (fileData.value[field.name]) {
+    fileData.value[field.name].splice(index, 1)
+    formData.value[field.name] = fileData.value[field.name]
+  }
+}
+
+function getFieldFiles(field) {
+  return fileData.value[field.name] || []
+}
+
+function validateFile(file, field) {
+  // Validar tamanho (padrão: 10MB)
+  const maxSize = field.validations?.maxSize || 10 * 1024 * 1024
+  if (file.size > maxSize) {
+    window.showSnackbar?.(`Arquivo "${file.name}" muito grande (máx: ${formatFileSize(maxSize)})`, 'error')
+    return false
+  }
+  
+  // Validar tipo de arquivo
+  const allowedTypes = getFileAcceptTypes(field)
+  if (allowedTypes && allowedTypes !== '*') {
+    const fileExtension = '.' + file.name.split('.').pop().toLowerCase()
+    const mimeType = file.type
+    
+    const isAllowed = allowedTypes.split(',').some(type => {
+      type = type.trim()
+      return type === mimeType || type === fileExtension || 
+             (type.includes('/*') && mimeType.startsWith(type.replace('/*', '')))
+    })
+    
+    if (!isAllowed) {
+      window.showSnackbar?.(`Tipo de arquivo "${file.name}" não permitido`, 'error')
+      return false
+    }
+  }
+  
+  // Validar quantidade máxima
+  const maxFiles = field.validations?.maxFiles || 10
+  const currentCount = getFieldFiles(field).length
+  if (currentCount >= maxFiles) {
+    window.showSnackbar?.(`Máximo ${maxFiles} arquivo(s) permitido(s)`, 'error')
+    return false
+  }
+  
+  return true
+}
+
+function getFileAcceptTypes(field) {
+  // Se tem validação de tipos específicos
+  if (field.validations?.allowedTypes) {
+    return field.validations.allowedTypes.join(',')
+  }
+  
+  // Tipos padrão baseados no placeholder ou configuração
+  if (field.placeholder) {
+    const placeholder = field.placeholder.toLowerCase()
+    if (placeholder.includes('pdf')) return '.pdf'
+    if (placeholder.includes('imagem')) return 'image/*'
+    if (placeholder.includes('documento')) return '.pdf,.doc,.docx'
+  }
+  
+  // Padrão: tipos mais comuns
+  return '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.txt'
+}
+
+function getFileHelpText(field) {
+  const maxSize = field.validations?.maxSize || 10 * 1024 * 1024
+  const maxFiles = field.validations?.maxFiles || 10
+  return `Máx: ${maxFiles} arquivo(s), ${formatFileSize(maxSize)} cada`
+}
+
+function getFileIcon(mimeType) {
+  if (!mimeType) return 'mdi-file'
+  
+  if (mimeType.includes('pdf')) return 'mdi-file-pdf-box'
+  if (mimeType.includes('image')) return 'mdi-file-image'
+  if (mimeType.includes('word') || mimeType.includes('document')) return 'mdi-file-word'
+  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'mdi-file-excel'
+  if (mimeType.includes('text')) return 'mdi-file-document'
+  if (mimeType.includes('zip') || mimeType.includes('rar')) return 'mdi-folder-zip'
+  
+  return 'mdi-file'
+}
+
+function getFileIconColor(file) {
+  if (file.type.includes('pdf')) return 'red'
+  if (file.type.includes('image')) return 'blue'
+  if (file.type.includes('word')) return 'indigo'
+  if (file.type.includes('excel')) return 'green'
+  return 'grey'
+}
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
 // Métodos de navegação
 function nextStep() {
   currentStep.value++
@@ -629,14 +904,19 @@ function selectProcessType(processType) {
 
 function initializeFormData(processType) {
   formData.value = {}
+  fileData.value = {} // ✨ Resetar dados de arquivos
   
   // Definir valores padrão dos campos
   if (processType?.formFields) {
-    processType.formFields.forEach(field => {
+    // ✨ Inicializar todos os campos, incluindo FILE
+    getVisibleFormFields(processType).forEach(field => {
       if (field.defaultValue) {
         formData.value[field.name] = field.defaultValue
       } else if (field.type === 'CHECKBOX') {
         formData.value[field.name] = []
+      } else if (field.type === 'FILE') {
+        formData.value[field.name] = []
+        fileData.value[field.name] = []
       }
     })
   }
@@ -656,11 +936,27 @@ async function createProcess() {
       throw new Error('Tipo de processo não selecionado')
     }
 
+    // ✨ Preparar dados do formulário incluindo arquivos
+    const processFormData = { ...formData.value }
+    
+    // Converter dados de arquivo para o formato esperado pelo backend
+    Object.keys(fileData.value).forEach(fieldName => {
+      if (fileData.value[fieldName]?.length > 0) {
+        processFormData[fieldName] = fileData.value[fieldName].map(fileItem => ({
+          name: fileItem.name,
+          size: fileItem.size,
+          type: fileItem.type,
+          // Note: O arquivo real (fileItem.file) será enviado separadamente
+          file: fileItem.file
+        }))
+      }
+    })
+
     const data = {
       processTypeId: processType.id,
-      title: processData.value.title?.trim() || null,
-      description: processData.value.description?.trim() || null,
-      formData: hasFormFields.value ? formData.value : undefined
+      title: generateProcessTitle(), // ✨ Título gerado automaticamente
+      description: processData.value.observations?.trim() || null, // ✨ Observações como descrição
+      formData: hasFormFields.value ? processFormData : undefined
     }
 
     console.log('✅ Creating process with FAST mode data:', data)
@@ -686,8 +982,9 @@ function close() {
   // Reset state
   currentStep.value = 1
   selectedProcessTypeId.value = null
-  processData.value = { title: '', description: '' }
+  processData.value = { observations: '' }
   formData.value = {}
+  fileData.value = {} // ✨ Resetar dados de arquivo
   searchType.value = ''
 }
 
@@ -704,7 +1001,13 @@ watch(() => props.modelValue, (newVal) => {
       console.log('🎯 FAST mode activated with pre-selected type:', props.selectedProcessType.name)
       selectedProcessTypeId.value = props.selectedProcessType.id
       initializeFormData(props.selectedProcessType)
-      currentStep.value = 1 // Começa na etapa de informações básicas
+      
+      // ✨ Definir etapa inicial baseada na existência de campos
+      if (hasFormFields.value) {
+        currentStep.value = 1 // Vai para campos do formulário
+      } else {
+        currentStep.value = 1 // Vai direto para observações
+      }
     } else {
       console.log('🔄 Standard mode - type selection required')
       currentStep.value = 1 // Começa na seleção de tipo

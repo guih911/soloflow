@@ -52,7 +52,7 @@ window.showSnackbar = (message, color = 'success') => {
 
 <style scoped>
 .auth-background {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1976D2, #42A5F5);
   min-height: 100vh;
 }
 </style>

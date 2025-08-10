@@ -7,7 +7,7 @@ import DashboardLayout from '@/layouts/DashboardLayout.vue'
 
 // Views - Auth
 import Login from '@/views/auth/Login.vue'
-import Register from '@/views/auth/Register.vue'
+
 
 // Views - Dashboard
 import Dashboard from '@/views/Dashboard.vue'
@@ -64,18 +64,7 @@ const routes = [
       },
     ],
   },
-  {
-    path: '/register',
-    component: AuthLayout,
-    children: [
-      {
-        path: '',
-        name: 'Register',
-        component: Register,
-        meta: { requiresGuest: true },
-      },
-    ],
-  },
+
 
   // ROTAS DO DASHBOARD (todas protegidas)
   {

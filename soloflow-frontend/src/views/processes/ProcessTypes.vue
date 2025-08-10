@@ -237,28 +237,6 @@
                       Duplicar
                     </v-list-item-title>
                   </v-list-item>
-                  
-                  <v-list-item 
-                    @click="viewProcessTypeDetails(processType)"
-                    :disabled="processType.stepsCount === 0"
-                  >
-                    <v-list-item-title>
-                      <v-icon start>mdi-eye</v-icon>
-                      Ver Detalhes
-                    </v-list-item-title>
-                  </v-list-item>
-                  
-                  <v-divider />
-                  
-                  <v-list-item 
-                    @click="testProcessType(processType)"
-                    :disabled="processType.stepsCount === 0"
-                  >
-                    <v-list-item-title>
-                      <v-icon start>mdi-play-circle</v-icon>
-                      Testar Fluxo
-                    </v-list-item-title>
-                  </v-list-item>
                 </v-list>
               </v-menu>
             </v-card-actions>

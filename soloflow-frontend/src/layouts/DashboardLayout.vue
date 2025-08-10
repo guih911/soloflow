@@ -20,9 +20,8 @@
       
       <!-- Logo e Título -->
       <div class="d-flex align-center ml-4">
-        <v-avatar color="primary" size="40" class="mr-3">
-          <v-icon color="white" size="20">mdi-play</v-icon>
-        </v-avatar>
+      
+      
         <div>
           <v-app-bar-title class="text-h5 font-weight-bold logo-text">
             SoloFlow
@@ -51,7 +50,7 @@
         <template v-slot:activator="{ props }">
           <v-btn 
             v-bind="props" 
-            variant="outlined" 
+            variant="plain" 
             class="text-none company-selector"
             prepend-icon="mdi-domain"
           >
@@ -525,9 +524,7 @@ watch(() => window.innerWidth, (newWidth) => {
 
 /* ✨ User Menu */
 .user-menu-btn {
-  border-radius: 12px;
   text-transform: none;
-  padding: 4px 12px;
   margin-right: 8px;
 }
 
