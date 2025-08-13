@@ -517,12 +517,27 @@ async function refreshProcess() {
 
 async function downloadAttachment(attachment) {
   try {
-    // Simular download - implemente conforme sua API
+    const res = await api.get(`/attachments/${attachment.id}/download`, {
+      responseType: 'blob',
+    })
+
+    const blob = new Blob([res.data], { type: attachment.mimeType || 'application/octet-stream' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = attachment.originalName || 'arquivo'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+
     window.showSnackbar?.(`Download de "${attachment.originalName}" iniciado`, 'info')
   } catch (error) {
+    console.error(error)
     window.showSnackbar?.('Erro ao baixar arquivo', 'error')
   }
 }
+
 
 onMounted(async () => {
   console.log('Loading process:', route.params.id)

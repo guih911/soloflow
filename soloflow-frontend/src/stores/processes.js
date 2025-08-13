@@ -174,33 +174,26 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  async function uploadAttachment(file, stepExecutionId) {
-    loading.value = true
-    error.value = null
-    
-    try {
-      console.log('Uploading attachment for step:', stepExecutionId)
-      
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('stepExecutionId', stepExecutionId)
-      
-      const response = await api.post('/attachments/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      })
-      
-      console.log('Attachment uploaded:', response.data)
-      return response.data
-    } catch (err) {
-      console.error('Error uploading attachment:', err)
-      error.value = err.response?.data?.message || 'Erro ao enviar arquivo'
-      throw err
-    } finally {
-      loading.value = false
-    }
+ async function uploadAttachment(file, stepExecutionId) {
+  loading.value = true
+  error.value = null
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)                 
+    formData.append('stepExecutionId', stepExecutionId)
+
+    const response = await api.post('/attachments/upload', formData)
+    return response.data
+  } catch (err) {
+    console.error('Error uploading attachment:', err)
+    error.value = err.response?.data?.message || 'Erro ao enviar arquivo'
+    throw err
+  } finally {
+    loading.value = false
   }
+}
+
 
   async function signAttachment(attachmentId, signatureData) {
     loading.value = true

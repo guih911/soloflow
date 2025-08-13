@@ -12,13 +12,9 @@
             Escolha um dos tipos de processo disponíveis para começar seu processo
           </p>
         </div>
-        
+
         <div class="header-actions">
-          <v-btn
-            variant="text"
-            @click="refreshData"
-            :loading="refreshing"
-          >
+          <v-btn variant="text" @click="refreshData" :loading="refreshing">
             <v-icon start>mdi-refresh</v-icon>
             Atualizar
           </v-btn>
@@ -31,16 +27,8 @@
       <v-card-text class="py-4">
         <v-row align="center">
           <v-col cols="12">
-            <v-text-field
-              v-model="search"
-              label="Buscar tipo de processo"
-              prepend-inner-icon="mdi-magnify"
-              clearable
-              variant="outlined"
-              density="comfortable"
-              hide-details
-              class="search-field"
-            />
+            <v-text-field v-model="search" label="Buscar tipo de processo" prepend-inner-icon="mdi-magnify" clearable
+              variant="outlined" density="comfortable" hide-details class="search-field" />
           </v-col>
         </v-row>
       </v-card-text>
@@ -49,70 +37,42 @@
     <!-- ✨ Lista de Processos com Design Padronizado -->
     <div v-if="!loading" class="process-grid">
       <div class="cards-container">
-        <div
-          v-for="processType in filteredProcessTypes"
-          :key="processType.id"
-          class="card-wrapper"
-        >
+        <div v-for="processType in filteredProcessTypes" :key="processType.id" class="card-wrapper">
           <v-hover v-slot="{ isHovering, props }">
-            <v-card
-              v-bind="props"
-              :elevation="isHovering ? 12 : 4"
-              class="process-card h-100 d-flex flex-column position-relative"
-              :class="{ 
+            <v-card v-bind="props" :elevation="isHovering ? 4 : 1"
+              class="process-card enterprise-card h-100 d-flex flex-column position-relative" :class="{
                 'card-hover': isHovering,
                 'card-disabled': !canCreateProcess(processType),
                 'card-featured': isFeaturedProcess(processType)
-              }"
-              @click="startProcessCreation(processType)"
-            >
+              }" @click="startProcessCreation(processType)">
+
               <!-- ✨ Badge de Status -->
               <div class="status-badges">
-                <v-chip
-                  v-if="isFeaturedProcess(processType)"
-                  size="x-small"
-                  color="warning"
-                  class="featured-badge"
-                >
+                <v-chip v-if="isFeaturedProcess(processType)" size="x-small" color="warning" class="featured-badge">
                   <v-icon start size="12">mdi-star</v-icon>
                   Popular
                 </v-chip>
-                
-                <v-chip
-                  v-if="!canCreateProcess(processType)"
-                  size="x-small"
-                  color="error"
-                  class="status-badge"
-                >
+
+                <v-chip v-if="!canCreateProcess(processType)" size="x-small" color="error" class="status-badge">
                   <v-icon start size="12">mdi-alert</v-icon>
                   Incompleto
                 </v-chip>
               </div>
 
               <!-- ✨ Header do Card com Design Padronizado -->
-              <v-sheet
-                color="primary"
-                class="card-header pa-4"
-                style="background: linear-gradient(135deg, #1976D2, #42A5F5, #64B5F6); min-height: 100px;"
-              >
+              <v-sheet class="card-header pa-4"
+                style="background-color: white; min-height: 100px; border-bottom: 1px solid rgba(0,0,0,0.06);">
                 <div class="d-flex align-center h-100">
-                  <v-avatar
-                    color="white"
-                    size="48"
-                    class="mr-4 elevation-3"
-                  >
-                    <v-icon 
-                      size="24" 
-                      color="primary"
-                    >
-                      mdi-file-document-outline
+                  <v-avatar class="avatar-soft mr-4" size="48">
+                    <!-- mantém o mesmo ícone e size 24 -->
+                    <v-icon size="24" color="primary">
+                      {{ processType.icon || 'mdi-file-document-outline' }}
                     </v-icon>
                   </v-avatar>
-                  
-                  <div class="flex-grow-1">
-                    <h3 class="text-h6 font-weight-bold text-white mb-0">
-                      {{ processType.name }}
-                    </h3>
+
+                  <div>
+                    <div class="title">{{ processType.name }}</div>
+              
                   </div>
                 </div>
               </v-sheet>
@@ -131,17 +91,12 @@
               <!-- ✨ Actions Elegantes -->
               <div style="margin-top: auto;">
                 <v-divider />
-                
+
                 <v-card-actions class="pa-4">
-                  <v-btn
-                    :color="canCreateProcess(processType) ? 'primary' : 'grey'"
-                    :variant="canCreateProcess(processType) ? 'elevated' : 'outlined'"
-                    block
-                    size="large"
-                    :disabled="!canCreateProcess(processType)"
-                    @click.stop="startProcessCreation(processType)"
-                    class="action-button"
-                  >
+                  <v-btn :color="canCreateProcess(processType) ? 'primary' : 'grey'"
+                    :variant="canCreateProcess(processType) ? 'elevated' : 'outlined'" block size="large"
+                    :disabled="!canCreateProcess(processType)" @click.stop="startProcessCreation(processType)"
+                    class="action-button">
                     <v-icon start size="20">
                       {{ canCreateProcess(processType) ? 'mdi-play-circle' : 'mdi-alert-circle' }}
                     </v-icon>
@@ -156,37 +111,28 @@
     </div>
 
     <!-- ✨ Estado Vazio Elegante -->
-    <v-card
-      v-if="!loading && filteredProcessTypes.length === 0"
-      class="empty-state text-center py-12"
-      elevation="2"
-    >
+    <v-card v-if="!loading && filteredProcessTypes.length === 0" class="empty-state text-center py-12" elevation="2">
       <div class="empty-state-content">
         <v-avatar size="120" color="grey-lighten-3" class="mb-4">
           <v-icon size="60" color="grey-lighten-1">
             mdi-file-document-multiple-outline
           </v-icon>
         </v-avatar>
-        
+
         <h2 class="text-h5 font-weight-bold mb-2">
           {{ search ? 'Nenhum processo encontrado' : 'Nenhum processo disponível' }}
         </h2>
-        
+
         <p class="text-body-1 text-medium-emphasis mb-6">
-          {{ 
-            search 
-              ? 'Tente ajustar sua busca' 
+          {{
+            search
+              ? 'Tente ajustar sua busca'
               : 'Entre em contato com um administrador para criar tipos de processo'
           }}
         </p>
-        
+
         <div class="d-flex justify-center gap-3">
-          <v-btn
-            v-if="search"
-            color="primary"
-            variant="outlined"
-            @click="clearFilters"
-          >
+          <v-btn v-if="search" color="primary" variant="outlined" @click="clearFilters">
             <v-icon start>mdi-filter-remove</v-icon>
             Limpar Busca
           </v-btn>
@@ -197,12 +143,7 @@
     <!-- ✨ Loading Elegante -->
     <div v-if="loading" class="loading-container">
       <div class="text-center py-12">
-        <v-progress-circular
-          indeterminate
-          color="primary"
-          size="64"
-          width="6"
-        />
+        <v-progress-circular indeterminate color="primary" size="64" width="6" />
         <p class="text-h6 mt-4 text-medium-emphasis">
           Carregando processos disponíveis...
         </p>
@@ -232,7 +173,7 @@ const refreshing = ref(false)
 const loading = computed(() => processTypeStore.loading)
 const processTypes = computed(() => processTypeStore.processTypes)
 
-const activeProcessTypes = computed(() => 
+const activeProcessTypes = computed(() =>
   processTypes.value.filter(pt => pt.isActive)
 )
 
@@ -243,7 +184,7 @@ const filteredProcessTypes = computed(() => {
   // Filtro por busca
   if (search.value) {
     const searchTerm = search.value.toLowerCase()
-    result = result.filter(pt => 
+    result = result.filter(pt =>
       pt.name.toLowerCase().includes(searchTerm) ||
       pt.description?.toLowerCase().includes(searchTerm)
     )
@@ -270,7 +211,7 @@ function startProcessCreation(processType) {
   }
 
   console.log('🚀 Navigating to process creation for:', processType.name)
-  
+
   // ✨ Navegar para página de criação com tipo pré-selecionado
   router.push({
     name: 'CreateProcessWithType',
@@ -297,7 +238,7 @@ async function refreshData() {
 // ✨ Lifecycle
 onMounted(async () => {
   console.log('🎯 Processes page mounted')
-  
+
   // Carregar tipos de processo se necessário
   if (processTypes.value.length === 0) {
     await processTypeStore.fetchProcessTypes()
@@ -451,20 +392,20 @@ onMounted(async () => {
   .processes-container {
     padding: 0 12px;
   }
-  
+
   .cards-container {
     grid-template-columns: 1fr;
     gap: 16px;
   }
-  
+
   .card-wrapper {
     min-height: 300px;
   }
-  
+
   .header-section {
     padding: 20px;
   }
-  
+
   .header-content h1 {
     font-size: 1.8rem;
   }
@@ -497,15 +438,116 @@ onMounted(async () => {
     border-color: rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.02);
   }
-  
+
   .process-card {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
-  
+
   .empty-state {
     border-color: rgba(255, 255, 255, 0.2);
     background: rgba(255, 255, 255, 0.02);
   }
 }
+
+
+/* === Enterprise card look (neutro, sóbrio) === */
+.enterprise-card {
+  background: var(--v-theme-surface);
+  border: 1px solid rgba(var(--v-theme-on-surface), .08);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
+  transition: border-color .2s, box-shadow .2s, transform .05s;
+}
+
+.enterprise-card.card-hover {
+  border-color: rgba(var(--v-theme-primary), .22);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .08);
+}
+
+/* Cabeçalho e textos */
+.enterprise-card .title {
+  color: rgba(var(--v-theme-on-surface), .92);
+  font-weight: 600;
+}
+
+.enterprise-card .subtitle,
+.enterprise-card .meta,
+.enterprise-card .hint {
+  color: rgba(var(--v-theme-on-surface), .62);
+}
+
+/* Chips/Badges mais sóbrios */
+.enterprise-card .status-badge,
+.enterprise-card .featured-badge {
+  background: rgba(var(--v-theme-on-surface), .06) !important;
+  color: rgba(var(--v-theme-on-surface), .72) !important;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+/* Estados específicos com sutileza */
+.enterprise-card .status-badge.error,
+.enterprise-card .status-badge.status-error {
+  background: rgba(var(--v-theme-error), .14) !important;
+  color: rgb(var(--v-theme-error)) !important;
+}
+
+.enterprise-card .status-badge.success,
+.enterprise-card .status-badge.status-success {
+  background: rgba(var(--v-theme-success), .14) !important;
+  color: rgb(var(--v-theme-success)) !important;
+}
+
+.enterprise-card .status-badge.warning,
+.enterprise-card .status-badge.status-warning {
+  background: rgba(var(--v-theme-warning), .14) !important;
+  color: rgb(var(--v-theme-warning)) !important;
+}
+
+/* Separadores e KPIs */
+.enterprise-card .kpi-label {
+  font-size: .75rem;
+  color: rgba(var(--v-theme-on-surface), .6);
+}
+
+.enterprise-card .kpi-value {
+  font-size: .95rem;
+  color: rgba(var(--v-theme-on-surface), .9);
+  font-weight: 600;
+}
+
+.enterprise-card .kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+/* Avatar suave para o ícone */
+.enterprise-card .avatar-soft {
+  background: rgba(var(--v-theme-primary), .06);
+  border-radius: 10px;
+}
+
+.enterprise-card{
+  background: var(--v-theme-surface);
+  border: 1px solid rgba(var(--v-theme-on-surface), .08);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  transition: border-color .2s, box-shadow .2s, transform .05s;
+}
+.enterprise-card.card-hover{
+  border-color: rgba(var(--v-theme-primary), .22);
+  box-shadow: 0 6px 20px rgba(0,0,0,.08);
+}
+.enterprise-card .kpi-row{
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.enterprise-card .kpi-label{ font-size:.75rem; color:rgba(var(--v-theme-on-surface), .6); }
+.enterprise-card .kpi-value{ font-size:.95rem; color:rgba(var(--v-theme-on-surface), .9); font-weight:600; }
+
+.avatar-soft{ background: rgba(var(--v-theme-primary), .06); border-radius:10px; }
 </style>

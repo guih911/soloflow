@@ -43,7 +43,7 @@
 
       <!-- Seletor de Empresa Melhorado -->
       <v-menu 
-        v-if="companies.length > 1"
+        v-if="companies.length >= 1"
         offset-y
         class="mr-4"
       >
