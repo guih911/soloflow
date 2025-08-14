@@ -365,62 +365,23 @@
                     class="mb-3"
                   />
 
-                  <!-- ✨ Campo de Arquivo como Input -->
-                  <div v-else-if="field.type === 'FILE'" class="mb-3">
-                    <v-text-field
-                      :model-value="getFileDisplayName(field)"
-                      :label="field.label"
-                      :placeholder="field.placeholder || 'Clique para anexar arquivo'"
-                      :required="field.required"
-                      :rules="getFieldRules(field)"
-                      :hint="field.helpText || getFileInputHelpText(field)"
-                      persistent-hint
-                      variant="outlined"
-                      readonly
-                      @click="openFileDialog(field)"
-                      class="file-input-field"
-                    >
-                      <template v-slot:prepend-inner>
-                        <v-icon>mdi-paperclip</v-icon>
-                      </template>
-                      
-                      <template v-slot:append-inner>
-                        <!-- Se tem arquivo, mostrar botão de remover -->
-                        <v-btn
-                          v-if="getFieldFile(field)"
-                          icon
-                          size="x-small"
-                          variant="text"
-                          color="error"
-                          @click.stop="clearFile(field)"
-                        >
-                          <v-icon size="18">mdi-close</v-icon>
-                        </v-btn>
-                        
-                        <!-- Botão de anexar -->
-                        <v-btn
-                          v-else
-                          size="small"
-                          variant="tonal"
-                          color="primary"
-                          @click.stop="openFileDialog(field)"
-                        >
-                          <v-icon start size="18">mdi-upload</v-icon>
-                          Anexar
-                        </v-btn>
-                      </template>
-                    </v-text-field>
-                    
-                    <!-- Input file escondido - AGORA SINGLE FILE -->
-                    <input
-                      :ref="el => fileInputs[field.name] = el"
-                      type="file"
-                      style="display: none"
-                      :multiple="false"
-                      :accept="getFileAcceptTypes(field)"
-                      @change="handleFileSelect($event, field)"
-                    />
-                  </div>
+                  <!-- ✨ NOVO: Campo de Arquivo com Componente Integrado -->
+                  <FileUploadField
+                    v-else-if="field.type === 'FILE'"
+                    v-model="formData[field.name]"
+                    :label="field.label"
+                    :required="field.required"
+                    :help-text="field.helpText || getFileInputHelpText(field)"
+                    :multiple="getFieldFileConfig(field).multiple"
+                    :max-files="getFieldFileConfig(field).maxFiles"
+                    :max-size="getFieldFileConfig(field).maxSize"
+                    :allowed-types="getFieldFileConfig(field).allowedTypes"
+                    :upload-title="field.placeholder || 'Clique ou arraste arquivos aqui'"
+                    :upload-description="`Selecione ${getFieldFileConfig(field).multiple ? 'um ou mais arquivos' : 'um arquivo'} para ${field.label.toLowerCase()}`"
+                    @files-changed="handleFieldFilesChanged(field, $event)"
+                    @error="handleFileError"
+                    class="mb-3"
+                  />
                 </v-col>
               </v-row>
             </div>
@@ -450,8 +411,6 @@
                   />
                 </v-col>
               </v-row>
-              
-             
             </div>
           </div>
         </v-form>
@@ -573,6 +532,9 @@ import { useRouter, useRoute } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
 import { useProcessTypeStore } from '@/stores/processTypes'
 
+// ✨ Importar o componente de upload
+import FileUploadField from '@/components/FileUploadField.vue'
+
 const router = useRouter()
 const route = useRoute()
 const processStore = useProcessStore()
@@ -589,15 +551,12 @@ const selectedProcessTypeId = ref(null)
 const formValid = ref(true)
 const creating = ref(false)
 const showPreview = ref(false)
-const isDragOver = ref({}) // ✨ Estado para drag and drop
 
 const processForm = ref(null)
 const processData = ref({
   observations: ''
 })
 const formData = ref({})
-const fileData = ref({})
-const fileInputs = ref({}) // ✨ Referências para inputs de arquivo corrigidas
 
 // ✨ Computed
 const loadingTypes = computed(() => processTypeStore.loading)
@@ -632,7 +591,12 @@ const filledFormData = computed(() => {
   Object.keys(formData.value).forEach(key => {
     const value = formData.value[key]
     if (value !== null && value !== undefined && value !== '') {
-      filled[key] = value
+      // Se é arquivo, mostrar info resumida
+      if (Array.isArray(value) && value.length > 0 && value[0].file) {
+        filled[key] = `${value.length} arquivo(s) selecionado(s)`
+      } else {
+        filled[key] = value
+      }
     }
   })
   return filled
@@ -652,9 +616,9 @@ function getFieldCols(field) {
   switch (field.type) {
     case 'TEXTAREA':
     case 'CHECKBOX':
+    case 'FILE': // Campo de arquivo ocupa largura total
       return 12
     default:
-      // Todos os outros campos, incluindo FILE, ocupam meia largura em telas grandes
       return { cols: 12, md: 6 }
   }
 }
@@ -748,165 +712,40 @@ function formatFieldValue(value) {
   return String(value)
 }
 
-// ✨ Funções para manipulação de arquivos PARA ARQUIVO ÚNICO
-function handleDragOver(fieldName, isDragging) {
-  isDragOver.value[fieldName] = isDragging
-}
-
-function handleFileDrop(event, field) {
-  handleDragOver(field.name, false)
-  const files = Array.from(event.dataTransfer.files)
-  if (files.length > 0) {
-    processFiles([files[0]], field) // Pega apenas o primeiro arquivo
+// ✨ Configuração de arquivo por campo
+function getFieldFileConfig(field) {
+  const defaultConfig = {
+    multiple: false,
+    maxFiles: 1,
+    maxSize: 10 * 1024 * 1024, // 10MB
+    allowedTypes: ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.xls', '.xlsx']
   }
-}
 
-function openFileDialog(field) {
-  const input = fileInputs.value[field.name]
-  if (input) {
-    input.click()
-  }
-}
-
-function handleFileSelect(event, field) {
-  const files = Array.from(event.target.files)
-  if (files.length > 0) {
-    processFiles([files[0]], field) // Pega apenas o primeiro arquivo
-  }
-  // Limpar input
-  event.target.value = ''
-}
-
-function processFiles(files, field) {
-  // Para campo FILE, agora aceita apenas UM arquivo
-  if (files.length === 0) return
-  
-  const file = files[0]
-  
-  // Validar arquivo
-  if (validateFile(file, field)) {
-    // Substituir arquivo existente (apenas um por vez)
-    const fileItem = {
-      file,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      uploadProgress: undefined
+  if (field.validations) {
+    try {
+      const validations = typeof field.validations === 'object' ? 
+        field.validations : JSON.parse(field.validations)
+      
+      return {
+        multiple: validations.maxFiles ? validations.maxFiles > 1 : defaultConfig.multiple,
+        maxFiles: validations.maxFiles || defaultConfig.maxFiles,
+        maxSize: validations.maxSize || defaultConfig.maxSize,
+        allowedTypes: validations.allowedTypes || defaultConfig.allowedTypes
+      }
+    } catch {
+      return defaultConfig
     }
-    
-    fileData.value[field.name] = [fileItem] // Array com apenas um item
-    formData.value[field.name] = [fileItem]
   }
+
+  return defaultConfig
 }
 
-function removeFile(field, index) {
-  if (fileData.value[field.name]) {
-    fileData.value[field.name].splice(index, 1)
-    formData.value[field.name] = fileData.value[field.name]
-  }
-}
-
-// Nova função para limpar arquivo único
-function clearFile(field) {
-  fileData.value[field.name] = []
-  formData.value[field.name] = []
-}
-
-// Nova função para obter arquivo único
-function getFieldFile(field) {
-  const files = fileData.value[field.name] || []
-  return files.length > 0 ? files[0] : null
-}
-
-// Nova função para mostrar o nome do arquivo no input
-function getFileDisplayName(field) {
-  const file = getFieldFile(field)
-  if (file) {
-    return `${file.name} (${formatFileSize(file.size)})`
-  }
-  return ''
-}
-
-// Nova função para texto de ajuda do input de arquivo
 function getFileInputHelpText(field) {
-  const maxSize = field.validations?.maxSize || 10 * 1024 * 1024
-  const allowedTypes = getFileAcceptTypes(field)
+  const config = getFieldFileConfig(field)
+  const maxSize = formatFileSize(config.maxSize)
+  const types = config.allowedTypes.slice(0, 3).map(t => t.replace('.', '').toUpperCase()).join(', ')
   
-  let help = `Tamanho máx: ${formatFileSize(maxSize)}`
-  
-  if (allowedTypes && allowedTypes !== '*') {
-    const types = allowedTypes.split(',')
-      .slice(0, 4)
-      .map(t => t.trim().replace('.', '').toUpperCase())
-      .join(', ')
-    help += ` • Tipos: ${types}`
-  }
-  
-  return help
-}
-
-function getFieldFiles(field) {
-  return fileData.value[field.name] || []
-}
-
-function validateFile(file, field) {
-  // Validar tamanho (padrão: 10MB)
-  const maxSize = field.validations?.maxSize || 10 * 1024 * 1024
-  if (file.size > maxSize) {
-    window.showSnackbar?.(`Arquivo muito grande (máx: ${formatFileSize(maxSize)})`, 'error')
-    return false
-  }
-  
-  // Validar tipo de arquivo
-  const allowedTypes = getFileAcceptTypes(field)
-  if (allowedTypes && allowedTypes !== '*') {
-    const fileExtension = '.' + file.name.split('.').pop().toLowerCase()
-    const mimeType = file.type
-    
-    const isAllowed = allowedTypes.split(',').some(type => {
-      type = type.trim()
-      return type === mimeType || type === fileExtension || 
-             (type.includes('/*') && mimeType.startsWith(type.replace('/*', '')))
-    })
-    
-    if (!isAllowed) {
-      window.showSnackbar?.(`Tipo de arquivo não permitido`, 'error')
-      return false
-    }
-  }
-  
-  return true
-}
-
-function getFileAcceptTypes(field) {
-  // Se tem validação de tipos específicos
-  if (field.validations?.allowedTypes) {
-    return field.validations.allowedTypes.join(',')
-  }
-  
-  // Tipos padrão baseados no placeholder ou configuração
-  if (field.placeholder) {
-    const placeholder = field.placeholder.toLowerCase()
-    if (placeholder.includes('pdf')) return '.pdf'
-    if (placeholder.includes('imagem')) return 'image/*'
-    if (placeholder.includes('documento')) return '.pdf,.doc,.docx'
-  }
-  
-  // Padrão: tipos mais comuns
-  return '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.txt'
-}
-
-function getFileIcon(mimeType) {
-  if (!mimeType) return 'mdi-file'
-  
-  if (mimeType.includes('pdf')) return 'mdi-file-pdf-box'
-  if (mimeType.includes('image')) return 'mdi-file-image'
-  if (mimeType.includes('word') || mimeType.includes('document')) return 'mdi-file-word'
-  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'mdi-file-excel'
-  if (mimeType.includes('text')) return 'mdi-file-document'
-  if (mimeType.includes('zip') || mimeType.includes('rar')) return 'mdi-folder-zip'
-  
-  return 'mdi-file'
+  return `Máx: ${config.maxFiles} arquivo(s), ${maxSize} cada. Tipos: ${types}${config.allowedTypes.length > 3 ? '...' : ''}`
 }
 
 function formatFileSize(bytes) {
@@ -915,6 +754,19 @@ function formatFileSize(bytes) {
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+// ✨ Manipuladores de eventos de arquivo
+function handleFieldFilesChanged(field, files) {
+  console.log(`Files changed for field ${field.name}:`, files)
+  // O v-model já cuida da atualização
+}
+
+function handleFileError(errors) {
+  console.error('File upload errors:', errors)
+  errors.forEach(error => {
+    window.showSnackbar?.(error, 'error')
+  })
 }
 
 // ✨ Método para gerar título automaticamente
@@ -934,7 +786,6 @@ function goBack() {
 function changeProcessType() {
   selectedProcessTypeId.value = null
   formData.value = {}
-  fileData.value = {}
 }
 
 function selectProcessType(processType) {
@@ -951,7 +802,6 @@ function proceedToForm() {
 
 function initializeFormData(processType) {
   formData.value = {}
-  fileData.value = {}
   
   if (processType?.formFields) {
     getVisibleFormFields(processType).forEach(field => {
@@ -960,8 +810,7 @@ function initializeFormData(processType) {
       } else if (field.type === 'CHECKBOX') {
         formData.value[field.name] = []
       } else if (field.type === 'FILE') {
-        formData.value[field.name] = []  // Array vazio para arquivo único
-        fileData.value[field.name] = []  // Array vazio para arquivo único
+        formData.value[field.name] = []
       }
     })
   }
@@ -979,9 +828,10 @@ async function createProcess() {
     const processFormData = { ...formData.value }
     
     // Converter dados de arquivo para o formato esperado pelo backend
-    Object.keys(fileData.value).forEach(fieldName => {
-      if (fileData.value[fieldName]?.length > 0) {
-        processFormData[fieldName] = fileData.value[fieldName].map(fileItem => ({
+    Object.keys(formData.value).forEach(fieldName => {
+      const fieldValue = formData.value[fieldName]
+      if (Array.isArray(fieldValue) && fieldValue.length > 0 && fieldValue[0].file) {
+        processFormData[fieldName] = fieldValue.map(fileItem => ({
           name: fileItem.name,
           size: fileItem.size,
           type: fileItem.type,
@@ -1060,6 +910,8 @@ onMounted(async () => {
   border-radius: 16px;
   padding: 24px;
   border: 1px solid rgba(25, 118, 210, 0.1);
+  margin-bottom: 32px;
+  backdrop-filter: blur(10px);
 }
 
 .selection-card,
@@ -1102,20 +954,6 @@ onMounted(async () => {
   border-radius: 8px;
 }
 
-/* ✨ Estilos para Campo de Arquivo tipo Input */
-.file-input-field {
-  cursor: pointer;
-}
-
-.file-input-field .v-field__input {
-  cursor: pointer;
-}
-
-.file-input-field .v-field--variant-outlined:hover .v-field__outline__start,
-.file-input-field .v-field--variant-outlined:hover .v-field__outline__end {
-  border-color: rgb(var(--v-theme-primary));
-}
-
 .preview-content {
   max-height: 400px;
   overflow-y: auto;
@@ -1131,11 +969,6 @@ onMounted(async () => {
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
-  }
-  
-  .file-input-field .v-input__append-inner {
-    flex-direction: column;
-    gap: 4px;
   }
 }
 </style>

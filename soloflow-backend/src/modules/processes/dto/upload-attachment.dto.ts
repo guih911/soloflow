@@ -10,7 +10,7 @@ export class UploadAttachmentDto {
 
   @IsOptional()
   @IsString()
-  fieldName?: string; // Nome do campo dinâmico de arquivo
+  fieldName?: string; 
 
   @IsOptional()
   @IsString()

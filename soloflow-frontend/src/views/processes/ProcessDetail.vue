@@ -24,6 +24,14 @@
           Atualizar
         </v-btn>
 
+        <!-- ✨ Botão de anexos integrado -->
+        <AttachmentButton
+          :process="process"
+          variant="elevated"
+          color="info"
+          show-empty-state
+        />
+
         <!-- Botão de ação principal baseado no status -->
         <v-btn v-if="currentStepExecution" color="primary" variant="elevated" @click="executeCurrentStep"
           :disabled="!canExecuteCurrentStep">
@@ -115,7 +123,7 @@
           </v-card-text>
         </v-card>
 
-        <!-- Dados do Formulário (se existirem) -->
+        <!-- ✨ Dados do Formulário MELHORADO com suporte a anexos -->
         <v-card v-if="process.formData">
           <v-card-title>
             <v-icon class="mr-2">mdi-form-textbox</v-icon>
@@ -123,10 +131,33 @@
           </v-card-title>
           <v-divider />
           <v-list density="compact">
+            <!-- Campos normais -->
             <v-list-item v-for="(value, key) in formattedFormData" :key="key">
               <v-list-item-title class="text-caption">{{ key }}</v-list-item-title>
               <v-list-item-subtitle>{{ value }}</v-list-item-subtitle>
             </v-list-item>
+            
+            <!-- ✨ Campos de arquivo -->
+            <template v-for="field in fileFields" :key="field.name">
+              <v-list-item v-if="getFieldFileData(field)">
+                <v-list-item-title class="text-caption">
+                  {{ field.label }}
+                </v-list-item-title>
+                <v-list-item-subtitle>
+                  <div class="d-flex align-center">
+                    <v-icon size="16" class="mr-2" :color="getFileTypeColor(getFieldFileData(field).mimeType)">
+                      {{ getFileIcon(getFieldFileData(field).mimeType) }}
+                    </v-icon>
+                    <span class="file-link" @click="downloadFieldFile(field)">
+                      {{ getFieldFileData(field).originalName }}
+                    </span>
+                    <v-chip size="x-small" class="ml-2" variant="tonal">
+                      {{ formatFileSize(getFieldFileData(field).size) }}
+                    </v-chip>
+                  </div>
+                </v-list-item-subtitle>
+              </v-list-item>
+            </template>
           </v-list>
         </v-card>
       </v-col>
@@ -217,24 +248,19 @@
                     </v-alert>
                   </div>
 
-                  <!-- Anexos -->
+                  <!-- ✨ ANEXOS MELHORADO com componente dedicado -->
                   <div v-if="execution.attachments?.length > 0" class="mt-3">
                     <p class="text-caption text-medium-emphasis mb-2">
                       <v-icon size="16" class="mr-1">mdi-paperclip</v-icon>
                       Anexos ({{ execution.attachments.length }}):
                     </p>
-                    <div class="d-flex flex-wrap gap-1">
-                      <v-chip v-for="attachment in execution.attachments" :key="attachment.id" size="small"
-                        variant="outlined" @click="downloadAttachment(attachment)" class="cursor-pointer">
-                        <v-icon start size="16">
-                          {{ getFileIcon(typeof attachment.mimeType === 'string' ? attachment.mimeType : '') }}
-                        </v-icon>
-                        {{ attachment.originalName || (typeof attachment === 'object' ? 'Anexo' : attachment) }}
-                        <v-icon v-if="attachment.isSigned" end size="16" color="success">
-                          mdi-check-decagram
-                        </v-icon>
-                      </v-chip>
-                    </div>
+                    
+                    <AttachmentButton
+                      :attachments="execution.attachments"
+                      variant="tonal"
+                      size="small"
+                      color="info"
+                    />
                   </div>
 
                   <!-- Indicadores especiais -->
@@ -266,6 +292,12 @@
         </v-card>
       </v-col>
     </v-row>
+
+    <!-- ✨ Modal de anexos -->
+    <AttachmentModal
+      v-model="attachmentModal"
+      :attachments="selectedAttachments"
+    />
   </div>
 
   <!-- Loading -->
@@ -290,9 +322,14 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useProcessStore } from '@/stores/processes'
+import api from '@/services/api'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/pt-br'
+
+// ✨ Importar componentes de anexos
+import AttachmentButton from '@/components/AttachmentButton.vue'
+import AttachmentModal from '@/components/AttachmentModal.vue'
 
 dayjs.extend(relativeTime)
 dayjs.locale('pt-br')
@@ -301,6 +338,10 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const processStore = useProcessStore()
+
+// Estado
+const attachmentModal = ref(false)
+const selectedAttachments = ref([])
 
 // Computed
 const loading = computed(() => processStore.loading)
@@ -341,6 +382,12 @@ const estimatedCompletion = computed(() => {
   return dayjs().add(estimatedDays, 'day').format('DD/MM/YYYY')
 })
 
+// ✨ Computed para campos de arquivo
+const fileFields = computed(() => {
+  if (!process.value?.processType?.formFields) return []
+  return process.value.processType.formFields.filter(field => field.type === 'FILE')
+})
+
 const formattedFormData = computed(() => {
   if (!process.value?.formData) return {}
 
@@ -352,6 +399,9 @@ const formattedFormData = computed(() => {
     const field = formFields.find(f => f.name === key)
     const label = field?.label || key
     const value = formData[key]
+
+    // Pular campos de arquivo (serão mostrados separadamente)
+    if (field?.type === 'FILE') return
 
     if (value !== null && value !== undefined && value !== '') {
       formatted[label] = Array.isArray(value) ? value.join(', ') : value
@@ -449,14 +499,6 @@ function getResponsibleName(execution) {
   return 'Não definido'
 }
 
-function getFileIcon(mimeType) {
-  if (mimeType?.includes('pdf')) return 'mdi-file-pdf-box'
-  if (mimeType?.includes('image')) return 'mdi-file-image'
-  if (mimeType?.includes('word')) return 'mdi-file-word'
-  if (mimeType?.includes('excel')) return 'mdi-file-excel'
-  return 'mdi-file'
-}
-
 function getProgressColor() {
   const progress = progressPercentage.value
   if (progress === 100) return 'success'
@@ -491,6 +533,81 @@ function formatTimeAgo(date) {
   return dayjs(date).fromNow()
 }
 
+// ✨ Métodos para manipular arquivos dos campos
+function getFieldFileData(field) {
+  const formData = process.value?.formData
+  if (!formData || !formData[field.name]) return null
+  
+  const fieldData = formData[field.name]
+  if (typeof fieldData === 'object' && fieldData.attachmentId) {
+    return fieldData
+  }
+  
+  return null
+}
+
+async function downloadFieldFile(field) {
+  const fileData = getFieldFileData(field)
+  if (!fileData?.attachmentId) return
+  
+  try {
+    const response = await api.get(`/processes/attachment/${fileData.attachmentId}/download`, {
+      responseType: 'blob',
+    })
+
+    const blob = new Blob([response.data], { 
+      type: fileData.mimeType || 'application/octet-stream' 
+    })
+    const url = window.URL.createObjectURL(blob)
+    
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileData.originalName || 'arquivo'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+
+    window.showSnackbar?.(`Download de "${fileData.originalName}" iniciado`, 'success')
+  } catch (error) {
+    console.error('Error downloading field file:', error)
+    window.showSnackbar?.('Erro ao baixar arquivo', 'error')
+  }
+}
+
+function getFileIcon(mimeType) {
+  if (!mimeType) return 'mdi-file'
+  
+  if (mimeType.includes('pdf')) return 'mdi-file-pdf-box'
+  if (mimeType.includes('image')) return 'mdi-file-image'
+  if (mimeType.includes('word') || mimeType.includes('document')) return 'mdi-file-word'
+  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'mdi-file-excel'
+  if (mimeType.includes('text')) return 'mdi-file-document'
+  if (mimeType.includes('zip') || mimeType.includes('rar')) return 'mdi-folder-zip'
+  
+  return 'mdi-file'
+}
+
+function getFileTypeColor(mimeType) {
+  if (!mimeType) return 'grey'
+  
+  if (mimeType.includes('pdf')) return 'red'
+  if (mimeType.includes('image')) return 'blue'
+  if (mimeType.includes('word')) return 'indigo'
+  if (mimeType.includes('excel')) return 'green'
+  if (mimeType.includes('text')) return 'orange'
+  
+  return 'grey'
+}
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
 // Métodos principais
 function goBack() {
   router.push('/processes')
@@ -514,30 +631,6 @@ async function refreshProcess() {
     window.showSnackbar?.('Erro ao atualizar processo', 'error')
   }
 }
-
-async function downloadAttachment(attachment) {
-  try {
-    const res = await api.get(`/attachments/${attachment.id}/download`, {
-      responseType: 'blob',
-    })
-
-    const blob = new Blob([res.data], { type: attachment.mimeType || 'application/octet-stream' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = attachment.originalName || 'arquivo'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    window.URL.revokeObjectURL(url)
-
-    window.showSnackbar?.(`Download de "${attachment.originalName}" iniciado`, 'info')
-  } catch (error) {
-    console.error(error)
-    window.showSnackbar?.('Erro ao baixar arquivo', 'error')
-  }
-}
-
 
 onMounted(async () => {
   console.log('Loading process:', route.params.id)
@@ -566,7 +659,21 @@ onMounted(async () => {
 .v-timeline-item {
   padding-bottom: 24px;
 }
+
 .max-width{
   max-width: 610px;
+}
+
+/* ✨ Estilos para links de arquivo */
+.file-link {
+  cursor: pointer;
+  color: rgb(var(--v-theme-primary));
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.2s ease;
+}
+
+.file-link:hover {
+  text-decoration-color: rgb(var(--v-theme-primary));
 }
 </style>
