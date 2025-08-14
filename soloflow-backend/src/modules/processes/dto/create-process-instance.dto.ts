@@ -1,5 +1,19 @@
-import { IsString, IsOptional, IsUUID, IsObject } from 'class-validator';
+// soloflow-backend/src/modules/processes/dto/create-process-instance.dto.ts (CORRIGIDO)
+import { IsString, IsOptional, IsUUID, IsObject, ValidateNested, IsArray } from 'class-validator';
+import { Type } from 'class-transformer';
 
+// ✅ DTO para dados de arquivo
+export class FileDataDto {
+  @IsString()
+  name: string;
+
+  @IsString()
+  type: string;
+
+  file?: any; // O arquivo real será processado separadamente
+}
+
+// ✅ DTO principal corrigido
 export class CreateProcessInstanceDto {
   @IsUUID()
   processTypeId: string;
@@ -14,10 +28,9 @@ export class CreateProcessInstanceDto {
 
   @IsOptional()
   @IsObject()
-  formData?: Record<string, any>;
-
+  formData?: Record<string, any>; 
 
   @IsOptional()
   @IsObject()
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any>; 
 }

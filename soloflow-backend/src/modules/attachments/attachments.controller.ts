@@ -2,21 +2,37 @@ import {
   Controller,
   Post,
   Get,
-  Delete,
-  Param,
   Body,
+  Param,
   UseGuards,
-  UploadedFile,
   UseInterceptors,
+  UploadedFile,
+  UploadedFiles,
   Res,
-  Request,
-  BadRequestException,
+  StreamableFile,
+  Header,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
 import { Response } from 'express';
+import { createReadStream, existsSync } from 'fs';
 import { AttachmentsService } from './attachments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { SignAttachmentDto } from './dto/sign-attachment.dto';
+
+
+
+
+
+// Configuração do Multer para upload
+const storage = diskStorage({
+  destination: './uploads/attachments',
+  filename: (req, file, callback) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = extname(file.originalname);
+    callback(null, `${uniqueSuffix}${ext}`);
+  },
+});
 
 @Controller('attachments')
 @UseGuards(JwtAuthGuard)
@@ -24,68 +40,76 @@ export class AttachmentsController {
   constructor(private readonly attachmentsService: AttachmentsService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', {
-    limits: {
-      fileSize: 10 * 1024 * 1024, // 10MB
-    },
-    fileFilter: (req, file, cb) => {
-      // Aceitar apenas alguns tipos de arquivo
-      const allowedMimes = [
-        'application/pdf',
-        'image/jpeg',
-        'image/png',
-        'image/gif',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      ];
-      
-      if (allowedMimes.includes(file.mimetype)) {
-        cb(null, true);
-      } else {
-        cb(new BadRequestException('Tipo de arquivo não permitido'), false);
-      }
-    },
-  }))
-  async upload(
-    @UploadedFile() file: Express.Multer.File,
-    @Body('stepExecutionId') stepExecutionId: string,
-    @Request() req
-  ) {
-    if (!file) {
-      throw new BadRequestException('Arquivo não fornecido');
-    }
-
-    return this.attachmentsService.uploadFile(file, stepExecutionId, req.user.id);
+  @UseInterceptors(FileInterceptor('file', { storage }))
+  async uploadFile(@UploadedFile() file: Express.Multer.File, @Body() body: any) {
+    return this.attachmentsService.createAttachment({
+      filename: file.filename,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      path: file.path,
+      stepExecutionId: body.stepExecutionId,
+    });
   }
 
-  @Get(':id')
-  async download(
-    @Param('id') id: string,
-    @Res() res: Response,
-    @Request() req
-  ) {
-    const { attachment, buffer } = await this.attachmentsService.getFile(id, req.user.id);
+  @Post('upload-multiple')
+  @UseInterceptors(FilesInterceptor('files', 10, { storage }))
+  async uploadFiles(@UploadedFiles() files: Express.Multer.File[], @Body() body: any) {
+  const attachments: any[] = [];
+    
+    for (const file of files) {
+      const attachment= await this.attachmentsService.createAttachment({
+        filename: file.filename,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        path: file.path,
+        stepExecutionId: body.stepExecutionId,
+      });
+      attachments.push(attachment);
+    }
+    
+    return attachments;
+  }
 
+  @Get(':id/download')
+  async downloadFile(@Param('id') id: string, @Res({ passthrough: true }) res: Response) {
+    const attachment = await this.attachmentsService.findOne(id);
+    
+    if (!attachment || !existsSync(attachment.path)) {
+      throw new Error('Arquivo não encontrado');
+    }
+
+    const file = createReadStream(attachment.path);
+    
     res.set({
       'Content-Type': attachment.mimeType,
       'Content-Disposition': `attachment; filename="${attachment.originalName}"`,
     });
 
-    res.send(buffer);
+    return new StreamableFile(file);
   }
 
- @Post(':id/sign')
-async sign(
-  @Param('id') id: string,
-  @Body() signatureData: SignAttachmentDto,
-  @Request() req
-) {
-  return this.attachmentsService.signAttachment(id, req.user.id, signatureData);
-}
+  @Get(':id/view')
+  async viewFile(@Param('id') id: string, @Res({ passthrough: true }) res: Response) {
+    const attachment = await this.attachmentsService.findOne(id);
+    
+    if (!attachment || !existsSync(attachment.path)) {
+      throw new Error('Arquivo não encontrado');
+    }
 
-  @Delete(':id')
-  async remove(@Param('id') id: string) {
-    await this.attachmentsService.deleteFile(id);
-    return { success: true };
+    const file = createReadStream(attachment.path);
+    
+    res.set({
+      'Content-Type': attachment.mimeType,
+      'Content-Disposition': `inline; filename="${attachment.originalName}"`,
+    });
+
+    return new StreamableFile(file);
+  }
+
+  @Post(':id/sign')
+  async signAttachment(@Param('id') id: string, @Body() signatureData: any) {
+    return this.attachmentsService.signAttachment(id, signatureData);
   }
 }

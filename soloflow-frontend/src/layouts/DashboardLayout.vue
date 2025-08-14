@@ -43,7 +43,7 @@
 
       <!-- Seletor de Empresa Melhorado -->
       <v-menu 
-        v-if="companies.length >= 1"
+        v-if="companies.length > 1"
         offset-y
         class="mr-4"
       >
@@ -370,7 +370,7 @@ const currentCompany = computed(() => authStore.activeCompany)
 const companies = computed(() => authStore.companies)
 
 // ✨ Dados Mock para demonstração
-const pendingTasks = ref(3)
+const pendingTasks = ref(15)
 const pendingSignatures = ref(1)
 const notifications = ref([
   {

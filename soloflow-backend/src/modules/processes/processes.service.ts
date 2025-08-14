@@ -1,4 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { Response } from 'express';
+import { createReadStream, existsSync } from 'fs';
+import { join } from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProcessInstanceDto } from './dto/create-process-instance.dto';
 import { ExecuteStepDto } from './dto/execute-step.dto';
@@ -11,7 +14,11 @@ import { Prisma } from '@prisma/client';
 export class ProcessesService {
   constructor(private prisma: PrismaService) {}
 
-  async createInstance(createDto: CreateProcessInstanceDto, userId: string): Promise<ProcessInstance> {
+  async createInstance(
+    createDto: CreateProcessInstanceDto, 
+    userId: string, 
+    files?: Express.Multer.File[]
+  ): Promise<ProcessInstance> {
     const processType = await this.prisma.processType.findUnique({
       where: { id: createDto.processTypeId },
       include: {
@@ -30,6 +37,11 @@ export class ProcessesService {
 
     if (!userCompany) throw new BadRequestException('Usuário não está vinculado a nenhuma empresa');
 
+    // Validar formData se houver campos obrigatórios
+    if (createDto.formData && processType.formFields.length > 0) {
+      await this.validateFormData(createDto.formData, processType.formFields);
+    }
+
     const createdInstance = await this.prisma.processInstance.create({
       data: {
         processTypeId: createDto.processTypeId,
@@ -43,6 +55,7 @@ export class ProcessesService {
       },
     });
 
+    // Criar step executions
     await this.prisma.stepExecution.createMany({
       data: processType.steps.map((step) => ({
         processInstanceId: createdInstance.id,
@@ -51,80 +64,285 @@ export class ProcessesService {
       })),
     });
 
+    // Processar arquivos enviados no formData
+    if (files && files.length > 0) {
+      await this.processFormFiles(createdInstance.id, files, processType.formFields);
+    }
+
     return this.findOne(createdInstance.id, userId);
   }
 
-  //    Listar todos os processos da empresa
-async findAll(companyId: string, userId: string, filters: any = {}) {
-  const andConditions: Prisma.ProcessInstanceWhereInput[] = [];
+  async processFormFiles(
+    processInstanceId: string, 
+    files: Express.Multer.File[], 
+    formFields: any[]
+  ): Promise<void> {
+    // Buscar campos do tipo FILE
+    const fileFields = formFields.filter(field => field.type === 'FILE');
+    
+    if (fileFields.length === 0) return;
 
-  if (filters.status) {
-    andConditions.push({ status: filters.status });
-  }
-
-  if (filters.processTypeId) {
-    andConditions.push({ processTypeId: filters.processTypeId });
-  }
-
-  if (filters.search) {
-    andConditions.push({
-      OR: [
-        { code: { contains: filters.search}},
-        { title: { contains: filters.search} },
-        { description: { contains: filters.search} },
-      ],
+    // Buscar a primeira step execution para anexar os arquivos
+    const firstStepExecution = await this.prisma.stepExecution.findFirst({
+      where: { 
+        processInstanceId,
+        step: { order: 1 }
+      }
     });
+
+    if (!firstStepExecution) return;
+
+    // Criar anexos para cada arquivo
+    for (const file of files) {
+      await this.prisma.attachment.create({
+        data: {
+          filename: file.filename,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          path: file.path,
+          stepExecutionId: firstStepExecution.id,
+        },
+      });
+    }
   }
 
-  const where: Prisma.ProcessInstanceWhereInput = {
-    companyId,
-    ...(andConditions.length > 0 && { AND: andConditions }),
-  };
+  async uploadProcessFile(
+    processInstanceId: string,
+    fieldName: string,
+    file: Express.Multer.File,
+    userId: string
+  ): Promise<any> {
+    // Verificar se o processo existe e se o usuário tem permissão
+    const process = await this.prisma.processInstance.findUnique({
+      where: { id: processInstanceId },
+      include: { 
+        processType: { 
+          include: { formFields: true } 
+        } 
+      }
+    });
 
-  const processes = await this.prisma.processInstance.findMany({
-    where,
-    include: {
-      processType: {
-        select: {
-          id: true,
-          name: true,
-          description: true,
-        },
+    if (!process) throw new NotFoundException('Processo não encontrado');
+    await this.checkViewPermission(process, userId);
+
+    // Verificar se existe um campo FILE com esse nome
+    const fileField = process.processType.formFields.find(
+      field => field.name === fieldName && field.type === 'FILE'
+    );
+
+    if (!fileField) {
+      throw new BadRequestException('Campo de arquivo não encontrado');
+    }
+
+    // Buscar a step execution ativa ou primeira
+    const stepExecution = await this.prisma.stepExecution.findFirst({
+      where: { 
+        processInstanceId,
+        OR: [
+          { status: 'IN_PROGRESS' },
+          { step: { order: 1 } }
+        ]
       },
-      createdBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
+      orderBy: { step: { order: 'asc' } }
+    });
+
+    if (!stepExecution) {
+      throw new BadRequestException('Nenhuma etapa disponível para anexo');
+    }
+
+    // Criar o anexo
+    const attachment = await this.prisma.attachment.create({
+      data: {
+        filename: file.filename,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        path: file.path,
+        stepExecutionId: stepExecution.id,
       },
-      stepExecutions: {
-        include: {
-          step: {
-            select: {
-              id: true,
-              name: true,
-              type: true,
-              order: true,
+    });
+
+    // Atualizar formData do processo com referência ao arquivo
+    const currentFormData = process.formData as Record<string, any> || {};
+    currentFormData[fieldName] = {
+      attachmentId: attachment.id,
+      originalName: file.originalname,
+      size: file.size,
+      mimeType: file.mimetype
+    };
+
+    await this.prisma.processInstance.update({
+      where: { id: processInstanceId },
+      data: { formData: currentFormData }
+    });
+
+    return {
+      success: true,
+      attachment: {
+        id: attachment.id,
+        originalName: attachment.originalName,
+        size: attachment.size,
+        mimeType: attachment.mimeType
+      }
+    };
+  }
+
+  async uploadAttachment(
+    stepExecutionId: string,
+    file: Express.Multer.File,
+    description?: string,
+    userId?: string
+  ): Promise<any> {
+    const stepExecution = await this.prisma.stepExecution.findUnique({
+      where: { id: stepExecutionId },
+      include: { 
+        step: true,
+        processInstance: true 
+      }
+    });
+
+    if (!stepExecution) {
+      throw new NotFoundException('Execução de etapa não encontrada');
+    }
+
+    if (userId) {
+      await this.checkViewPermission(stepExecution.processInstance, userId);
+    }
+
+    const attachment = await this.prisma.attachment.create({
+      data: {
+        filename: file.filename,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        path: file.path,
+        stepExecutionId,
+      },
+    });
+
+    return {
+      success: true,
+      attachment: {
+        id: attachment.id,
+        originalName: attachment.originalName,
+        size: attachment.size,
+        mimeType: attachment.mimeType
+      }
+    };
+  }
+
+  async downloadAttachment(
+    attachmentId: string,
+    userId: string,
+    res: Response
+  ): Promise<void> {
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: { 
+        stepExecution: { 
+          include: { processInstance: true } 
+        } 
+      }
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Anexo não encontrado');
+    }
+
+    // Verificar permissão
+    await this.checkViewPermission(attachment.stepExecution.processInstance, userId);
+
+    // Verificar se arquivo existe
+    const filePath = attachment.path;
+    if (!existsSync(filePath)) {
+      throw new NotFoundException('Arquivo não encontrado no sistema');
+    }
+
+    // Configurar headers para download
+    res.setHeader('Content-Type', attachment.mimeType);
+    res.setHeader(
+      'Content-Disposition', 
+      `attachment; filename="${encodeURIComponent(attachment.originalName)}"`
+    );
+
+    // Enviar arquivo
+    const fileStream = createReadStream(filePath);
+    fileStream.pipe(res);
+  }
+
+  //    Listar todos os processos da empresa
+  async findAll(companyId: string, userId: string, filters: any = {}) {
+    const andConditions: Prisma.ProcessInstanceWhereInput[] = [];
+
+    if (filters.status) {
+      andConditions.push({ status: filters.status });
+    }
+
+    if (filters.processTypeId) {
+      andConditions.push({ processTypeId: filters.processTypeId });
+    }
+
+    if (filters.search) {
+      andConditions.push({
+        OR: [
+          { code: { contains: filters.search}},
+          { title: { contains: filters.search} },
+          { description: { contains: filters.search} },
+        ],
+      });
+    }
+
+    const where: Prisma.ProcessInstanceWhereInput = {
+      companyId,
+      ...(andConditions.length > 0 && { AND: andConditions }),
+    };
+
+    const processes = await this.prisma.processInstance.findMany({
+      where,
+      include: {
+        processType: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        stepExecutions: {
+          include: {
+            step: {
+              select: {
+                id: true,
+                name: true,
+                type: true,
+                order: true,
+              },
+            },
+            attachments: {
+              select: {
+                id: true,
+                originalName: true,
+                mimeType: true,
+                size: true,
+                isSigned: true,
+              },
             },
           },
-          attachments: {
-            select: {
-              id: true,
-              originalName: true,
-              isSigned: true,
-            },
-          },
+          orderBy: { step: { order: 'asc' } },
         },
-        orderBy: { step: { order: 'asc' } },
       },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+      orderBy: { createdAt: 'desc' },
+    });
 
-  return processes;
-}
-
+    return processes;
+  }
 
   //    Buscar processo específico
   async findOne(processId: string, userId: string) {
@@ -251,6 +469,8 @@ async findAll(companyId: string, userId: string, filters: any = {}) {
           select: {
             id: true,
             originalName: true,
+            mimeType: true,
+            size: true,
             isSigned: true,
           },
         },
