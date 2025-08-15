@@ -6,18 +6,47 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProcessInstanceDto } from './dto/create-process-instance.dto';
 import { ExecuteStepDto } from './dto/execute-step.dto';
 import { ValidateSignatureDto } from './dto/validate-signature.dto';
-import { ProcessInstance, StepExecution, ProcessStatus, StepExecutionStatus } from '@prisma/client';
+import {  ProcessInstance, StepExecution, ProcessStatus, StepExecutionStatus, Attachment } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
+
+// ✅ Tipo para metadata de anexo
+export interface AttachmentMeta {
+  attachmentId: string;
+  originalName: string;
+  size: number;
+  mimeType: string;
+}
+
+// ✅ Interface para resposta de upload
+export interface UploadResponse {
+  success: boolean;
+  attachment?: {
+    id: string;
+    originalName: string;
+    size: number;
+    mimeType: string;
+    fieldName?: string;
+  };
+  attachments?: Array<{
+    id: string;
+    originalName: string;
+    size: number;
+    mimeType: string;
+    fieldName?: string;
+  }>;
+  fieldName?: string;
+  count?: number;
+}
 
 @Injectable()
 export class ProcessesService {
   constructor(private prisma: PrismaService) {}
 
+  // ✅ MÉTODO REFATORADO: Criar processo apenas com dados JSON
   async createInstance(
     createDto: CreateProcessInstanceDto, 
-    userId: string, 
-    files?: Express.Multer.File[]
+    userId: string
   ): Promise<ProcessInstance> {
     const processType = await this.prisma.processType.findUnique({
       where: { id: createDto.processTypeId },
@@ -37,7 +66,7 @@ export class ProcessesService {
 
     if (!userCompany) throw new BadRequestException('Usuário não está vinculado a nenhuma empresa');
 
-    // Validar formData se houver campos obrigatórios
+    // ✅ CRÍTICO: Validar apenas campos não-arquivo no formData
     if (createDto.formData && processType.formFields.length > 0) {
       await this.validateFormData(createDto.formData, processType.formFields);
     }
@@ -64,55 +93,16 @@ export class ProcessesService {
       })),
     });
 
-    // Processar arquivos enviados no formData
-    if (files && files.length > 0) {
-      await this.processFormFiles(createdInstance.id, files, processType.formFields);
-    }
-
     return this.findOne(createdInstance.id, userId);
   }
 
-  async processFormFiles(
-    processInstanceId: string, 
-    files: Express.Multer.File[], 
-    formFields: any[]
-  ): Promise<void> {
-    // Buscar campos do tipo FILE
-    const fileFields = formFields.filter(field => field.type === 'FILE');
-    
-    if (fileFields.length === 0) return;
-
-    // Buscar a primeira step execution para anexar os arquivos
-    const firstStepExecution = await this.prisma.stepExecution.findFirst({
-      where: { 
-        processInstanceId,
-        step: { order: 1 }
-      }
-    });
-
-    if (!firstStepExecution) return;
-
-    // Criar anexos para cada arquivo
-    for (const file of files) {
-      await this.prisma.attachment.create({
-        data: {
-          filename: file.filename,
-          originalName: file.originalname,
-          mimeType: file.mimetype,
-          size: file.size,
-          path: file.path,
-          stepExecutionId: firstStepExecution.id,
-        },
-      });
-    }
-  }
-
+  // ✅ MÉTODO REFATORADO: Upload de arquivo único para campo específico
   async uploadProcessFile(
     processInstanceId: string,
     fieldName: string,
     file: Express.Multer.File,
     userId: string
-  ): Promise<any> {
+  ): Promise<UploadResponse> {
     // Verificar se o processo existe e se o usuário tem permissão
     const process = await this.prisma.processInstance.findUnique({
       where: { id: processInstanceId },
@@ -152,7 +142,7 @@ export class ProcessesService {
     }
 
     // Criar o anexo
-    const attachment = await this.prisma.attachment.create({
+    const attachment: Attachment = await this.prisma.attachment.create({
       data: {
         filename: file.filename,
         originalName: file.originalname,
@@ -163,14 +153,15 @@ export class ProcessesService {
       },
     });
 
-    // Atualizar formData do processo com referência ao arquivo
-    const currentFormData = process.formData as Record<string, any> || {};
-    currentFormData[fieldName] = {
+    // ✅ CRÍTICO: Atualizar formData do processo com referência ao arquivo
+    const currentFormData: Record<string, any> = (process.formData as Record<string, any>) || {};
+    const attachmentMeta: AttachmentMeta = {
       attachmentId: attachment.id,
       originalName: file.originalname,
       size: file.size,
       mimeType: file.mimetype
     };
+    currentFormData[fieldName] = attachmentMeta;
 
     await this.prisma.processInstance.update({
       where: { id: processInstanceId },
@@ -183,17 +174,133 @@ export class ProcessesService {
         id: attachment.id,
         originalName: attachment.originalName,
         size: attachment.size,
-        mimeType: attachment.mimeType
+        mimeType: attachment.mimeType,
+        fieldName: fieldName
       }
     };
   }
 
+  // ✅ NOVO: Upload de múltiplos arquivos para campo específico
+  async uploadProcessFiles(
+    processInstanceId: string,
+    fieldName: string,
+    files: Express.Multer.File[],
+    userId: string
+  ): Promise<UploadResponse> {
+    // Verificar se o processo existe e se o usuário tem permissão
+    const process = await this.prisma.processInstance.findUnique({
+      where: { id: processInstanceId },
+      include: { 
+        processType: { 
+          include: { formFields: true } 
+        } 
+      }
+    });
+
+    if (!process) throw new NotFoundException('Processo não encontrado');
+    await this.checkViewPermission(process, userId);
+
+    // Verificar se existe um campo FILE com esse nome
+    const fileField = process.processType.formFields.find(
+      field => field.name === fieldName && field.type === 'FILE'
+    );
+
+    if (!fileField) {
+      throw new BadRequestException('Campo de arquivo não encontrado');
+    }
+
+    // Verificar limitações do campo
+    const fieldConfig = this.getFieldFileConfig(fileField);
+    if (files.length > fieldConfig.maxFiles) {
+      throw new BadRequestException(`Máximo ${fieldConfig.maxFiles} arquivo(s) permitido(s) para este campo`);
+    }
+
+    // Buscar a step execution ativa ou primeira
+    const stepExecution = await this.prisma.stepExecution.findFirst({
+      where: { 
+        processInstanceId,
+        OR: [
+          { status: 'IN_PROGRESS' },
+          { step: { order: 1 } }
+        ]
+      },
+      orderBy: { step: { order: 'asc' } }
+    });
+
+    if (!stepExecution) {
+      throw new BadRequestException('Nenhuma etapa disponível para anexo');
+    }
+
+    const createdAttachments: Attachment[] = [];
+
+    // Criar anexos para cada arquivo
+    const attachmentPromises: Promise<Attachment>[] = files.map((file: Express.Multer.File) => 
+      this.prisma.attachment.create({
+        data: {
+          filename: file.filename,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          path: file.path,
+          stepExecutionId: stepExecution.id,
+        },
+      })
+    );
+
+    // ✅ AGUARDAR TODOS OS UPLOADS COM TIPAGEM
+    const attachments: Attachment[] = await Promise.all(attachmentPromises);
+    createdAttachments.push(...attachments);
+
+    // ✅ CRÍTICO: Atualizar formData com referência aos arquivos
+    const currentFormData: Record<string, any> = (process.formData as Record<string, any>) || {};
+    
+    if (fieldConfig.multiple && files.length > 1) {
+      // Campo múltiplo: array de referências
+      const attachmentMetas: AttachmentMeta[] = createdAttachments.map((att: Attachment): AttachmentMeta => ({
+        attachmentId: att.id,
+        originalName: att.originalName,
+        size: att.size,
+        mimeType: att.mimeType
+      }));
+      currentFormData[fieldName] = attachmentMetas;
+    } else {
+      // Campo único: apenas primeira referência
+      const firstAttachment: Attachment | undefined = createdAttachments[0];
+      if (firstAttachment) {
+        const attachmentMeta: AttachmentMeta = {
+          attachmentId: firstAttachment.id,
+          originalName: firstAttachment.originalName,
+          size: firstAttachment.size,
+          mimeType: firstAttachment.mimeType
+        };
+        currentFormData[fieldName] = attachmentMeta;
+      }
+    }
+
+    await this.prisma.processInstance.update({
+      where: { id: processInstanceId },
+      data: { formData: currentFormData }
+    });
+
+    return {
+      success: true,
+      attachments: createdAttachments.map((att: Attachment) => ({
+        id: att.id,
+        originalName: att.originalName,
+        size: att.size,
+        mimeType: att.mimeType,
+        fieldName: fieldName
+      })),
+      fieldName: fieldName,
+      count: createdAttachments.length
+    };
+  }
   async uploadAttachment(
     stepExecutionId: string,
     file: Express.Multer.File,
     description?: string,
     userId?: string
-  ): Promise<any> {
+  ): Promise<UploadResponse> {
     const stepExecution = await this.prisma.stepExecution.findUnique({
       where: { id: stepExecutionId },
       include: { 
@@ -210,7 +317,7 @@ export class ProcessesService {
       await this.checkViewPermission(stepExecution.processInstance, userId);
     }
 
-    const attachment = await this.prisma.attachment.create({
+    const attachment: Attachment = await this.prisma.attachment.create({
       data: {
         filename: file.filename,
         originalName: file.originalname,
@@ -231,7 +338,6 @@ export class ProcessesService {
       }
     };
   }
-
   async downloadAttachment(
     attachmentId: string,
     userId: string,
@@ -269,6 +375,74 @@ export class ProcessesService {
     // Enviar arquivo
     const fileStream = createReadStream(filePath);
     fileStream.pipe(res);
+  }
+
+  // ✅ NOVO: Visualizar anexo (inline)
+  async viewAttachment(
+    attachmentId: string,
+    userId: string,
+    res: Response
+  ): Promise<void> {
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: { 
+        stepExecution: { 
+          include: { processInstance: true } 
+        } 
+      }
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Anexo não encontrado');
+    }
+
+    // Verificar permissão
+    await this.checkViewPermission(attachment.stepExecution.processInstance, userId);
+
+    // Verificar se arquivo existe
+    const filePath = attachment.path;
+    if (!existsSync(filePath)) {
+      throw new NotFoundException('Arquivo não encontrado no sistema');
+    }
+
+    // Configurar headers para visualização inline
+    res.setHeader('Content-Type', attachment.mimeType);
+    res.setHeader(
+      'Content-Disposition', 
+      `inline; filename="${encodeURIComponent(attachment.originalName)}"`
+    );
+
+    // Enviar arquivo
+    const fileStream = createReadStream(filePath);
+    fileStream.pipe(res);
+  }
+
+  // ✅ Método auxiliar para configurações de campo de arquivo
+  private getFieldFileConfig(field: any): { multiple: boolean; maxFiles: number; maxSize: number; allowedTypes: string[] } {
+    const defaultConfig = {
+      multiple: false,
+      maxFiles: 1,
+      maxSize: 10 * 1024 * 1024, // 10MB
+      allowedTypes: ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.xls', '.xlsx']
+    };
+
+    if (field.validations) {
+      try {
+        const validations = typeof field.validations === 'object' ? 
+          field.validations : JSON.parse(field.validations);
+        
+        return {
+          multiple: validations.maxFiles ? validations.maxFiles > 1 : defaultConfig.multiple,
+          maxFiles: validations.maxFiles || defaultConfig.maxFiles,
+          maxSize: validations.maxSize || defaultConfig.maxSize,
+          allowedTypes: validations.allowedTypes || defaultConfig.allowedTypes
+        };
+      } catch {
+        return defaultConfig;
+      }
+    }
+
+    return defaultConfig;
   }
 
   //    Listar todos os processos da empresa
@@ -726,8 +900,14 @@ export class ProcessesService {
     throw new ForbiddenException('Sem permissão para executar esta etapa');
   }
 
+  // ✅ MÉTODO REFATORADO: Validação de formData apenas para campos não-arquivo
   private async validateFormData(formData: Record<string, any>, formFields: any[]): Promise<void> {
     for (const field of formFields) {
+      // ✅ CRÍTICO: Pular campos de arquivo na validação inicial
+      if (field.type === 'FILE') {
+        continue;
+      }
+
       const value = formData[field.name];
       if (field.required && (value === undefined || value === null || value === '')) {
         throw new BadRequestException(`Campo "${field.label}" é obrigatório`);

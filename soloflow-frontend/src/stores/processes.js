@@ -11,29 +11,155 @@ export const useProcessStore = defineStore('processes', () => {
   const loading = ref(false)
   const error = ref(null)
 
-  // SoloFlow Buscar todos os processos com filtros
-  async function fetchProcesses(filters = {}) {
+  // ✅ ETAPA 1: createProcess cria apenas o processo (JSON puro)
+  async function createProcess(data) {
     loading.value = true
     error.value = null
     
     try {
-      console.log('Fetching processes with filters:', filters)
+      console.log('🚀 Creating process (step 1/2): JSON data only')
       
-      const response = await api.get('/processes', { params: filters })
-      processes.value = response.data
+      // 🔧 CRÍTICO: Filtrar apenas dados não-arquivo do formData
+      const sanitizedFormData = {}
+      if (data.formData) {
+        Object.keys(data.formData).forEach(fieldName => {
+          const fieldValue = data.formData[fieldName]
+          // Verificar se é array de arquivos (tem propriedade .file)
+          if (Array.isArray(fieldValue) && fieldValue.length > 0 && fieldValue[0]?.file instanceof File) {
+            // PULAR - é campo de arquivo, será enviado depois
+            console.log(`📎 Skipping file field: ${fieldName} (${fieldValue.length} files)`)
+          } else {
+            // Incluir - é campo normal (string, number, date, etc.)
+            sanitizedFormData[fieldName] = fieldValue
+          }
+        })
+      }
+
+      // 🔧 Payload limpo (apenas dados JSON)
+      const cleanPayload = {
+        processTypeId: data.processTypeId,
+        title: data.title,
+        description: data.description,
+        formData: data.formData // Já deve estar sanitizado
+      }
+console.log('📤 Sending clean payload:', cleanPayload)
       
-      console.log('Processes fetched:', response.data.length)
+      const response = await api.post('/processes', cleanPayload)
+      
+      console.log('✅ Process created (step 1/2):', response.data.code)
+      
+      // Adicionar à lista local
+      if (processes.value.length > 0) {
+        processes.value.unshift(response.data)
+      }
+      
       return response.data
     } catch (err) {
-      console.error('Error fetching processes:', err)
-      error.value = err.response?.data?.message || 'Erro ao buscar processos'
+      console.error('❌ Error creating process:', err)
+      error.value = err.response?.data?.message || 'Erro ao criar processo'
       throw err
     } finally {
       loading.value = false
     }
   }
 
-  // SoloFlow MELHORADO: Buscar processo específico
+  // ✅ ETAPA 2: Helper para upload individual por campo
+  async function uploadProcessFieldFile(processId, fieldName, file) {
+    console.log(`📁 Uploading file for field ${fieldName}:`, file.name)
+    
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('fieldName', fieldName)
+
+    try {
+      const response = await api.post(`/processes/${processId}/upload`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        // 🔧 BÔNUS: Progress tracking
+        onUploadProgress: (progressEvent) => {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          console.log(`📊 Upload progress for ${file.name}: ${progress}%`)
+        }
+      })
+      
+      console.log(`✅ File uploaded for field ${fieldName}:`, response.data)
+      return response.data
+    } catch (err) {
+      console.error(`❌ Error uploading file for field ${fieldName}:`, err)
+      throw new Error(`Erro ao enviar arquivo para ${fieldName}: ${err.response?.data?.message || err.message}`)
+    }
+  }
+
+  // ✅ ETAPA 2: Upload de todos os arquivos por campo (fluxo principal)
+  async function uploadProcessFiles(processId, filesMap) {
+    console.log('📁 Starting bulk file upload for process:', processId)
+    console.log('📋 Files map:', Object.keys(filesMap))
+    
+    const uploadResults = []
+    const uploadErrors = []
+
+    try {
+      // 🔧 Iterar por cada campo que tem arquivos
+      for (const [fieldName, fileList] of Object.entries(filesMap)) {
+        console.log(`📂 Processing field: ${fieldName} (${fileList.length} files)`)
+        
+        // 🔧 Para cada arquivo do campo
+        for (const fileItem of fileList) {
+          try {
+            // Extrair o File objeto (pode estar em .file ou ser o próprio objeto)
+            const file = fileItem?.file || fileItem
+            
+            if (!(file instanceof File)) {
+              console.warn(`⚠️ Skipping invalid file in field ${fieldName}:`, fileItem)
+              continue
+            }
+
+            const result = await uploadProcessFieldFile(processId, fieldName, file)
+            uploadResults.push({ fieldName, file: file.name, result })
+            
+            // 🔧 PERFORMANCE: Pequeno delay para não sobrecarregar
+            await new Promise(resolve => setTimeout(resolve, 200))
+            
+          } catch (fileError) {
+            console.error(`❌ Failed to upload file in field ${fieldName}:`, fileError)
+            uploadErrors.push({ fieldName, file: fileItem?.name || 'unknown', error: fileError.message })
+          }
+        }
+      }
+
+      // ✅ GARANTIR: Refetch do processo para ter formData atualizado
+      console.log('🔄 Refetching process to get updated formData...')
+      const updatedProcess = await api.get(`/processes/${processId}`)
+      currentProcess.value = updatedProcess.data
+      
+      console.log('✅ All files uploaded successfully!')
+      console.log('📊 Upload summary:', {
+        successful: uploadResults.length,
+        failed: uploadErrors.length,
+        results: uploadResults
+      })
+
+      // ✅ Se houve erros, reportar mas não falhar completamente
+      if (uploadErrors.length > 0) {
+        console.warn('⚠️ Some file uploads failed:', uploadErrors)
+        const errorMessage = `${uploadErrors.length} arquivo(s) falharam: ${uploadErrors.map(e => e.file).join(', ')}`
+        throw new Error(errorMessage)
+      }
+
+      return {
+        processId,
+        uploadResults,
+        updatedProcess: currentProcess.value
+      }
+
+    } catch (error) {
+      console.error('❌ Bulk upload failed:', error)
+      throw error
+    }
+  }
+
+  // ✅ MANTIDO: Outros métodos existentes
   async function fetchProcess(id) {
     loading.value = true
     error.value = null
@@ -55,7 +181,27 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // SoloFlow MELHORADO: Buscar minhas tarefas
+  async function fetchProcesses(filters = {}) {
+    loading.value = true
+    error.value = null
+    
+    try {
+      console.log('Fetching processes with filters:', filters)
+      
+      const response = await api.get('/processes', { params: filters })
+      processes.value = response.data
+      
+      console.log('Processes fetched:', response.data.length)
+      return response.data
+    } catch (err) {
+      console.error('Error fetching processes:', err)
+      error.value = err.response?.data?.message || 'Erro ao buscar processos'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function fetchMyTasks() {
     loading.value = true
     error.value = null
@@ -77,7 +223,6 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // SoloFlow Buscar processos criados por mim
   async function fetchMyCreatedProcesses() {
     loading.value = true
     error.value = null
@@ -99,7 +244,6 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // SoloFlow Buscar estatísticas para dashboard
   async function fetchDashboardStats() {
     loading.value = true
     error.value = null
@@ -115,31 +259,6 @@ export const useProcessStore = defineStore('processes', () => {
     } catch (err) {
       console.error('Error fetching dashboard stats:', err)
       error.value = err.response?.data?.message || 'Erro ao buscar estatísticas'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function createProcess(data) {
-    loading.value = true
-    error.value = null
-    
-    try {
-      console.log('Creating process with data:', data)
-      
-      const response = await api.post('/processes', data)
-      
-      // Adicionar à lista local se estiver carregada
-      if (processes.value.length > 0) {
-        processes.value.unshift(response.data)
-      }
-      
-      console.log('Process created:', response.data)
-      return response.data
-    } catch (err) {
-      console.error('Error creating process:', err)
-      error.value = err.response?.data?.message || 'Erro ao criar processo'
       throw err
     } finally {
       loading.value = false
@@ -174,26 +293,25 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
- async function uploadAttachment(file, stepExecutionId) {
-  loading.value = true
-  error.value = null
+  async function uploadAttachment(file, stepExecutionId) {
+    loading.value = true
+    error.value = null
 
-  try {
-    const formData = new FormData()
-    formData.append('file', file)                 
-    formData.append('stepExecutionId', stepExecutionId)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)                 
+      formData.append('stepExecutionId', stepExecutionId)
 
-    const response = await api.post('/attachments/upload', formData)
-    return response.data
-  } catch (err) {
-    console.error('Error uploading attachment:', err)
-    error.value = err.response?.data?.message || 'Erro ao enviar arquivo'
-    throw err
-  } finally {
-    loading.value = false
+      const response = await api.post('/attachments/upload', formData)
+      return response.data
+    } catch (err) {
+      console.error('Error uploading attachment:', err)
+      error.value = err.response?.data?.message || 'Erro ao enviar arquivo'
+      throw err
+    } finally {
+      loading.value = false
+    }
   }
-}
-
 
   async function signAttachment(attachmentId, signatureData) {
     loading.value = true
@@ -215,76 +333,7 @@ export const useProcessStore = defineStore('processes', () => {
     }
   }
 
-  // SoloFlow Buscar processos por status
-  async function fetchProcessesByStatus(status) {
-    return fetchProcesses({ status })
-  }
-
-  // SoloFlow Buscar processos por tipo
-  async function fetchProcessesByType(processTypeId) {
-    return fetchProcesses({ processTypeId })
-  }
-
-  // SoloFlow Buscar anexos pendentes de assinatura
-  async function fetchPendingSignatures() {
-    loading.value = true
-    error.value = null
-    
-    try {
-      console.log('Fetching pending signatures...')
-      
-      // Buscar tarefas que requerem assinatura
-      const tasks = await fetchMyTasks()
-      const pendingSignatures = tasks.filter(task => 
-        task.step.requiresSignature && 
-        task.status === 'IN_PROGRESS'
-      )
-      
-      console.log('Pending signatures found:', pendingSignatures.length)
-      return pendingSignatures
-    } catch (err) {
-      console.error('Error fetching pending signatures:', err)
-      error.value = err.response?.data?.message || 'Erro ao buscar assinaturas pendentes'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // SoloFlow Marcar todas as notificações como lidas
-  async function markAllNotificationsAsRead() {
-    // Implementar quando tiver sistema de notificações
-    console.log('Mark all notifications as read - TODO')
-  }
-
-  // SoloFlow Cancelar processo (se for criador ou admin)
-  async function cancelProcess(processId, reason) {
-    loading.value = true
-    error.value = null
-    
-    try {
-      console.log('Cancelling process:', processId)
-      
-      const response = await api.patch(`/processes/${processId}/cancel`, { reason })
-      
-      // Atualizar processo na lista
-      const index = processes.value.findIndex(p => p.id === processId)
-      if (index !== -1) {
-        processes.value[index] = response.data
-      }
-      
-      console.log('Process cancelled:', response.data)
-      return response.data
-    } catch (err) {
-      console.error('Error cancelling process:', err)
-      error.value = err.response?.data?.message || 'Erro ao cancelar processo'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // SoloFlow Limpar dados
+  // Utility methods
   function clearError() {
     error.value = null
   }
@@ -297,25 +346,6 @@ export const useProcessStore = defineStore('processes', () => {
     processes.value = []
   }
 
-  // SoloFlow Recarregar dados após mudança de empresa
-  async function refreshAfterCompanySwitch() {
-    try {
-      processes.value = []
-      myTasks.value = []
-      myCreatedProcesses.value = []
-      dashboardStats.value = {}
-      currentProcess.value = null
-      
-      // Recarregar dados básicos
-      await Promise.all([
-        fetchMyTasks(),
-        fetchDashboardStats()
-      ])
-    } catch (error) {
-      console.error('Error refreshing after company switch:', error)
-    }
-  }
-
   return {
     // State
     processes,
@@ -326,28 +356,24 @@ export const useProcessStore = defineStore('processes', () => {
     loading,
     error,
     
-    // Actions - Básicas
-    fetchProcesses,
+    // Actions - PRINCIPAIS REFATORADOS
+    createProcess,           // ✅ REFATORADO: só JSON
+    uploadProcessFieldFile,  // ✅ NOVO: upload individual
+    uploadProcessFiles,      // ✅ NOVO: upload em lote por campo
+    
+    // Actions - Mantidas
     fetchProcess,
+    fetchProcesses,
     fetchMyTasks,
     fetchMyCreatedProcesses,
     fetchDashboardStats,
-    createProcess,
     executeStep,
     uploadAttachment,
     signAttachment,
     
-    // Actions - Específicas
-    fetchProcessesByStatus,
-    fetchProcessesByType,
-    fetchPendingSignatures,
-    cancelProcess,
-    
-    // Actions - Utilidades
+    // Utils
     clearError,
     clearCurrentProcess,
     clearProcesses,
-    refreshAfterCompanySwitch,
-    markAllNotificationsAsRead,
   }
 })

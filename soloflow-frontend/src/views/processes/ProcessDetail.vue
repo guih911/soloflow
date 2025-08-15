@@ -24,7 +24,7 @@
           Atualizar
         </v-btn>
 
-        <!-- ✨ Botão de anexos integrado -->
+        <!-- ✅ Botão de anexos integrado - CORRIGIDO -->
         <AttachmentButton
           :process="process"
           variant="elevated"
@@ -69,7 +69,20 @@
             <v-list-item>
               <template v-slot:prepend>
                 <v-icon>mdi-identifier</v-icon>
-              </template>
+                <!-- Modal de visualização de anexos -->
+  <AttachmentModal
+    v-model="modalOpen"
+    :attachments="modalAttachments"
+    :title="modalTitle"
+  />
+    
+    <!-- ✅ NOVO: Modal específico para arquivos de campo -->
+    <FieldFileModal
+      v-model="fieldFileModal"
+      :file-data="selectedFieldFile"
+      :field-info="selectedField"
+    />
+</template>
               <v-list-item-title>Código</v-list-item-title>
               <v-list-item-subtitle>{{ process.code }}</v-list-item-subtitle>
             </v-list-item>
@@ -77,7 +90,13 @@
             <v-list-item>
               <template v-slot:prepend>
                 <v-icon>mdi-account</v-icon>
-              </template>
+                <!-- Modal de visualização de anexos -->
+  <AttachmentModal
+    v-model="modalOpen"
+    :attachments="modalAttachments"
+    :title="modalTitle"
+  />
+</template>
               <v-list-item-title>Solicitante</v-list-item-title>
               <v-list-item-subtitle>{{ process.createdBy.name }}</v-list-item-subtitle>
             </v-list-item>
@@ -85,7 +104,13 @@
             <v-list-item>
               <template v-slot:prepend>
                 <v-icon>mdi-email</v-icon>
-              </template>
+                <!-- Modal de visualização de anexos -->
+  <AttachmentModal
+    v-model="modalOpen"
+    :attachments="modalAttachments"
+    :title="modalTitle"
+  />
+</template>
               <v-list-item-title>E-mail</v-list-item-title>
               <v-list-item-subtitle>{{ process.createdBy.email }}</v-list-item-subtitle>
             </v-list-item>
@@ -93,7 +118,13 @@
             <v-list-item>
               <template v-slot:prepend>
                 <v-icon>mdi-calendar</v-icon>
-              </template>
+                <!-- Modal de visualização de anexos -->
+  <AttachmentModal
+    v-model="modalOpen"
+    :attachments="modalAttachments"
+    :title="modalTitle"
+  />
+</template>
               <v-list-item-title>Criado em</v-list-item-title>
               <v-list-item-subtitle>{{ formatDate(process.createdAt) }}</v-list-item-subtitle>
             </v-list-item>
@@ -101,7 +132,13 @@
             <v-list-item v-if="process.completedAt">
               <template v-slot:prepend>
                 <v-icon>mdi-calendar-check</v-icon>
-              </template>
+                <!-- Modal de visualização de anexos -->
+  <AttachmentModal
+    v-model="modalOpen"
+    :attachments="modalAttachments"
+    :title="modalTitle"
+  />
+</template>
               <v-list-item-title>Concluído em</v-list-item-title>
               <v-list-item-subtitle>{{ formatDate(process.completedAt) }}</v-list-item-subtitle>
             </v-list-item>
@@ -109,7 +146,13 @@
             <v-list-item v-if="estimatedCompletion">
               <template v-slot:prepend>
                 <v-icon>mdi-clock-outline</v-icon>
-              </template>
+                <!-- Modal de visualização de anexos -->
+  <AttachmentModal
+    v-model="modalOpen"
+    :attachments="modalAttachments"
+    :title="modalTitle"
+  />
+</template>
               <v-list-item-title>Previsão</v-list-item-title>
               <v-list-item-subtitle>{{ estimatedCompletion }}</v-list-item-subtitle>
             </v-list-item>
@@ -123,23 +166,24 @@
           </v-card-text>
         </v-card>
 
-        <!-- ✨ Dados do Formulário MELHORADO com suporte a anexos -->
-        <v-card v-if="process.formData">
+        <!-- ✅ Dados do Formulário COMPLETAMENTE REFATORADO -->
+        <v-card v-if="process.formData || hasFormFieldFiles">
           <v-card-title>
             <v-icon class="mr-2">mdi-form-textbox</v-icon>
             Dados Informados
           </v-card-title>
           <v-divider />
           <v-list density="compact">
-            <!-- Campos normais -->
+            <!-- ✅ Campos normais (não-arquivo) -->
             <v-list-item v-for="(value, key) in formattedFormData" :key="key">
               <v-list-item-title class="text-caption">{{ key }}</v-list-item-title>
               <v-list-item-subtitle>{{ value }}</v-list-item-subtitle>
             </v-list-item>
             
-            <!-- ✨ Campos de arquivo -->
+            <!-- ✅ Campos de arquivo - CORRIGIDO COMPLETAMENTE -->
             <template v-for="field in fileFields" :key="field.name">
-              <v-list-item v-if="getFieldFileData(field)">
+              <!-- ✅ SUPORTE: Campo único -->
+              <v-list-item v-if="getFieldFileData(field) && !Array.isArray(getFieldFileData(field))">
                 <v-list-item-title class="text-caption">
                   {{ field.label }}
                 </v-list-item-title>
@@ -148,16 +192,63 @@
                     <v-icon size="16" class="mr-2" :color="getFileTypeColor(getFieldFileData(field).mimeType)">
                       {{ getFileIcon(getFieldFileData(field).mimeType) }}
                     </v-icon>
-                    <span class="file-link" @click="downloadFieldFile(field)">
-                      {{ getFieldFileData(field).originalName }}
+                    <span class="file-link" @click="openAttachmentModal(field, 0)">
+                      {{ field.label }}
                     </span>
+                    <v-btn icon variant="text" size="x-small" class="ml-1" @click.stop="downloadFieldFile(field, 0)">
+                      <v-icon size="16">mdi-download</v-icon>
+                    </v-btn>
                     <v-chip size="x-small" class="ml-2" variant="tonal">
                       {{ formatFileSize(getFieldFileData(field).size) }}
                     </v-chip>
                   </div>
                 </v-list-item-subtitle>
               </v-list-item>
-            </template>
+              
+              <!-- ✅ SUPORTE: Campo múltiplo -->
+              <template v-else-if="Array.isArray(getFieldFileData(field))">
+                <v-list-item v-for="(fileItem, index) in getFieldFileData(field)" :key="`${field.name}-${index}`">
+                  <v-list-item-title class="text-caption">
+                    {{ field.label }} ({{ index + 1 }})
+                  </v-list-item-title>
+                  <v-list-item-subtitle>
+                    <div class="d-flex align-center">
+                      <v-icon size="16" class="mr-2" :color="getFileTypeColor(fileItem.mimeType)">
+                        {{ getFileIcon(fileItem.mimeType) }}
+                      </v-icon>
+                      <span class="file-link" @click="openAttachmentModal(field, index)">
+                        {{ field.label }} ({{ index + 1 }})
+                      </span>
+                      <v-btn icon variant="text" size="x-small" class="ml-1" @click.stop="downloadFieldFile(field, index)">
+                        <v-icon size="16">mdi-download</v-icon>
+                      </v-btn>
+                      <v-chip size="x-small" class="ml-2" variant="tonal">
+                        {{ formatFileSize(fileItem.size) }}
+                      </v-chip>
+                    </div>
+                  </v-list-item-subtitle>
+                </v-list-item>
+                <!-- Modal de visualização de anexos -->
+  <AttachmentModal
+    v-model="modalOpen"
+    :attachments="modalAttachments"
+    :title="modalTitle"
+  />
+</template>  <!-- Modal de visualização de anexos -->
+  <AttachmentModal
+    v-model="modalOpen"
+    :attachments="modalAttachments"
+    :title="modalTitle"
+  />
+</template>
+
+            <!-- ✅ NOVO: Seção especial se não há dados -->
+            <v-list-item v-if="!process.formData && !hasFormFieldFiles">
+              <v-list-item-title class="text-center text-medium-emphasis">
+                <v-icon class="mr-2">mdi-information-outline</v-icon>
+                Nenhum dado informado
+              </v-list-item-title>
+            </v-list-item>
           </v-list>
         </v-card>
       </v-col>
@@ -181,7 +272,13 @@
                   <div class="font-weight-medium">Etapa {{ index + 1 }}</div>
                   <div v-if="execution.createdAt">{{ formatTimeAgo(execution.createdAt) }}</div>
                 </div>
-              </template>
+                <!-- Modal de visualização de anexos -->
+  <AttachmentModal
+    v-model="modalOpen"
+    :attachments="modalAttachments"
+    :title="modalTitle"
+  />
+</template>
 
               <v-card :color="execution.status === 'IN_PROGRESS' ? 'primary' : ''"
                 :variant="execution.status === 'IN_PROGRESS' ? 'tonal' : 'outlined'"
@@ -248,20 +345,7 @@
                     </v-alert>
                   </div>
 
-                  <!-- ✨ ANEXOS MELHORADO com componente dedicado -->
-                  <div v-if="execution.attachments?.length > 0" class="mt-3">
-                    <p class="text-caption text-medium-emphasis mb-2">
-                      <v-icon size="16" class="mr-1">mdi-paperclip</v-icon>
-                      Anexos ({{ execution.attachments.length }}):
-                    </p>
-                    
-                    <AttachmentButton
-                      :attachments="execution.attachments"
-                      variant="tonal"
-                      size="small"
-                      color="info"
-                    />
-                  </div>
+                  
 
                   <!-- Indicadores especiais -->
                   <div v-if="execution.step.requiresSignature || execution.step.allowAttachment" class="mt-3">
@@ -293,7 +377,7 @@
       </v-col>
     </v-row>
 
-    <!-- ✨ Modal de anexos -->
+    <!-- ✅ Modal de anexos -->
     <AttachmentModal
       v-model="attachmentModal"
       :attachments="selectedAttachments"
@@ -315,6 +399,12 @@
       Voltar
     </v-btn>
   </div>
+  <!-- Modal de visualização de anexos -->
+  <AttachmentModal
+    v-model="modalOpen"
+    :attachments="modalAttachments"
+    :title="modalTitle"
+  />
 </template>
 
 <script setup>
@@ -327,9 +417,10 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/pt-br'
 
-// ✨ Importar componentes de anexos
+// ✅ Importar componentes de anexos
 import AttachmentButton from '@/components/AttachmentButton.vue'
 import AttachmentModal from '@/components/AttachmentModal.vue'
+import FieldFileModal from '@/components/FieldFileModal.vue'
 
 dayjs.extend(relativeTime)
 dayjs.locale('pt-br')
@@ -342,6 +433,9 @@ const processStore = useProcessStore()
 // Estado
 const attachmentModal = ref(false)
 const selectedAttachments = ref([])
+const fieldFileModal = ref(false)
+const selectedFieldFile = ref(null)
+const selectedField = ref(null)
 
 // Computed
 const loading = computed(() => processStore.loading)
@@ -382,10 +476,14 @@ const estimatedCompletion = computed(() => {
   return dayjs().add(estimatedDays, 'day').format('DD/MM/YYYY')
 })
 
-// ✨ Computed para campos de arquivo
+// ✅ COMPUTED COMPLETAMENTE REFATORADO para campos de arquivo
 const fileFields = computed(() => {
   if (!process.value?.processType?.formFields) return []
   return process.value.processType.formFields.filter(field => field.type === 'FILE')
+})
+
+const hasFormFieldFiles = computed(() => {
+  return fileFields.value.some(field => getFieldFileData(field) !== null)
 })
 
 const formattedFormData = computed(() => {
@@ -400,7 +498,7 @@ const formattedFormData = computed(() => {
     const label = field?.label || key
     const value = formData[key]
 
-    // Pular campos de arquivo (serão mostrados separadamente)
+    // ✅ CRÍTICO: Pular campos de arquivo (serão mostrados separadamente)
     if (field?.type === 'FILE') return
 
     if (value !== null && value !== undefined && value !== '') {
@@ -533,28 +631,108 @@ function formatTimeAgo(date) {
   return dayjs(date).fromNow()
 }
 
-// ✨ Métodos para manipular arquivos dos campos
+
+
+// ✅ Modal de visualização de anexos
+const modalOpen = ref(false)
+const modalTitle = ref('Anexos do Processo')
+const modalAttachments = ref([])
+// Opcional: índice inicial para navegação
+const modalStartIndex = ref(0)
+
+// Monta lista de anexos a partir de um campo específico
+function buildAttachmentsForField(field) {
+  const data = getFieldFileData(field)
+  if (!data) return []
+  const items = Array.isArray(data) ? data : [data]
+  return items
+    .filter(it => it && it.attachmentId)
+    .map(it => ({
+      id: it.attachmentId,
+      originalName: it.originalName || 'Arquivo',
+      mimeType: it.mimeType || 'application/octet-stream',
+      size: it.size || 0,
+      createdAt: it.createdAt || new Date().toISOString(),
+      isSigned: Boolean(it.isSigned)
+    }))
+}
+
+function openAttachmentModal(field, index = 0) {
+  modalAttachments.value = buildAttachmentsForField(field)
+  modalStartIndex.value = index
+  modalTitle.value = `Anexos - ${field.label}`
+  modalOpen.value = true
+}
+// ✅ MÉTODOS COMPLETAMENTE REFATORADOS para manipular arquivos dos campos
 function getFieldFileData(field) {
   const formData = process.value?.formData
   if (!formData || !formData[field.name]) return null
   
   const fieldData = formData[field.name]
-  if (typeof fieldData === 'object' && fieldData.attachmentId) {
+  
+  // ✅ SUPORTE: Campo único (objeto AttachmentMeta)
+  if (typeof fieldData === 'object' && !Array.isArray(fieldData) && fieldData.attachmentId) {
     return fieldData
   }
   
+  // ✅ SUPORTE: Campo múltiplo (array de AttachmentMeta)
+  if (Array.isArray(fieldData)) {
+    return fieldData.filter(item => item && item.attachmentId)
+  }
+  
+  // ✅ COMPATIBILIDADE: Se é string (ID direto - formato legado)
+  if (typeof fieldData === 'string') {
+    return {
+      attachmentId: fieldData,
+      originalName: `Arquivo de ${field.label}`,
+      size: 0,
+      mimeType: 'application/octet-stream'
+    }
+  }
+  
   return null
+
 }
 
-async function downloadFieldFile(field) {
-  const fileData = getFieldFileData(field)
-  if (!fileData?.attachmentId) return
+
+
+// ✅ NOVO: Abrir modal específico para arquivo de campo
+function openFieldFileModal(field, index = 0) {
+  const fieldData = getFieldFileData(field)
+  let fileData = fieldData
+  
+  // Se é array, pegar o item específico
+  if (Array.isArray(fieldData)) {
+    fileData = fieldData[index]
+  }
+  
+  if (fileData?.attachmentId) {
+    selectedFieldFile.value = fileData
+    selectedField.value = field
+    fieldFileModal.value = true
+  }
+}
+async function downloadFieldFile(field, index = 0) {
+  const fieldData = getFieldFileData(field)
+  let fileData = fieldData
+  
+  // Se é array, pegar o item específico
+  if (Array.isArray(fieldData)) {
+    fileData = fieldData[index]
+  }
+  
+  if (!fileData?.attachmentId) {
+    window.showSnackbar?.('Arquivo não encontrado', 'error')
+    return
+  }
   
   try {
+    console.log(`📥 Downloading field file: ${field.label} (index: ${index})`, fileData)
+    
     const response = await api.get(`/processes/attachment/${fileData.attachmentId}/download`, {
       responseType: 'blob',
     })
-
+  
     const blob = new Blob([response.data], { 
       type: fileData.mimeType || 'application/octet-stream' 
     })
@@ -562,17 +740,18 @@ async function downloadFieldFile(field) {
     
     const a = document.createElement('a')
     a.href = url
-    a.download = fileData.originalName || 'arquivo'
+    a.download = fileData.originalName || `arquivo-${field.label.toLowerCase()}`
     document.body.appendChild(a)
     a.click()
     a.remove()
     window.URL.revokeObjectURL(url)
-
+  
     window.showSnackbar?.(`Download de "${fileData.originalName}" iniciado`, 'success')
   } catch (error) {
     console.error('Error downloading field file:', error)
     window.showSnackbar?.('Erro ao baixar arquivo', 'error')
   }
+
 }
 
 function getFileIcon(mimeType) {
@@ -664,7 +843,7 @@ onMounted(async () => {
   max-width: 610px;
 }
 
-/* ✨ Estilos para links de arquivo */
+/* ✅ Estilos para links de arquivo */
 .file-link {
   cursor: pointer;
   color: rgb(var(--v-theme-primary));

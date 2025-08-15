@@ -110,7 +110,7 @@ const allAttachments = computed(() => {
     return attachments
   }
 
-  // Verificar se há dados de arquivos no formData (campos FILE)
+  // ✅ CORRIGIDO: Verificar se há dados de arquivos no formData (campos FILE)
   if (props.process?.formData) {
     const fileAttachments = []
     const formData = props.process.formData
@@ -121,16 +121,32 @@ const allAttachments = computed(() => {
       if (field.type === 'FILE' && formData[field.name]) {
         const fieldData = formData[field.name]
         
-        if (fieldData.attachmentId) {
-          // Se há referência a um attachment
+        // ✅ SUPORTE: Campo único (objeto AttachmentMeta)
+        if (fieldData.attachmentId && typeof fieldData === 'object' && !Array.isArray(fieldData)) {
           fileAttachments.push({
             id: fieldData.attachmentId,
-            originalName: fieldData.originalName,
-            size: fieldData.size,
-            mimeType: fieldData.mimeType,
+            originalName: fieldData.originalName || 'Arquivo',
+            size: fieldData.size || 0,
+            mimeType: fieldData.mimeType || 'application/octet-stream',
             fieldName: field.name,
             fieldLabel: field.label,
             isFormField: true
+          })
+        }
+        // ✅ SUPORTE: Campo múltiplo (array de AttachmentMeta)
+        else if (Array.isArray(fieldData)) {
+          fieldData.forEach((fileItem, index) => {
+            if (fileItem.attachmentId) {
+              fileAttachments.push({
+                id: fileItem.attachmentId,
+                originalName: fileItem.originalName || `Arquivo ${index + 1}`,
+                size: fileItem.size || 0,
+                mimeType: fileItem.mimeType || 'application/octet-stream',
+                fieldName: field.name,
+                fieldLabel: `${field.label} (${index + 1})`,
+                isFormField: true
+              })
+            }
           })
         }
       }
