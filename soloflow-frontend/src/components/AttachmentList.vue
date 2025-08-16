@@ -24,6 +24,7 @@
 
           <!-- Informações do arquivo -->
           <div class="flex-grow-1">
+            <!-- ✅ NOVO: Nome baseado na origem -->
             <h4 class="text-subtitle-1 font-weight-medium">
               {{ getDisplayName(attachment) }}
             </h4>
@@ -36,7 +37,7 @@
               <span>{{ formatDate(attachment.createdAt) }}</span>
             </div>
 
-            <!-- Badges -->
+            <!-- ✅ NOVO: Badges com informação de origem -->
             <div class="mt-2">
               <v-chip
                 v-if="attachment.isSigned"
@@ -60,15 +61,15 @@
                 Visualizável
               </v-chip>
 
-              <!-- Badge para indicar origem do arquivo -->
+              <!-- ✅ NOVO: Badge de origem melhorado -->
               <v-chip
-                v-if="attachment.isFormField"
-                size="x-small"
-                color="purple"
+                :size="'x-small'"
+                :color="getOriginColor(attachment)"
                 variant="tonal"
+                class="mr-2"
               >
-                <v-icon start size="12">mdi-form-textbox</v-icon>
-                {{ attachment.fieldLabel || 'Campo' }}
+                <v-icon start size="12">{{ getOriginIcon(attachment) }}</v-icon>
+                {{ attachment.attachmentSource || 'Processo' }}
               </v-chip>
             </div>
           </div>
@@ -181,14 +182,49 @@ function isPdf(attachment) {
   return attachment.mimeType?.includes('pdf')
 }
 
+// ✅ NOVO: Nome de exibição baseado na origem
 function getDisplayName(attachment) {
+  // Se tem displayName (definido no AttachmentButton), usar ele
+  if (attachment.displayName) {
+    return attachment.displayName
+  }
+  
   // Se é campo do formulário, usar o nome do campo
   if (attachment.isFormField && attachment.fieldLabel) {
     return attachment.fieldLabel
   }
   
+  // Se é anexo de etapa, usar nome original + contexto
+  if (attachment.attachmentType === 'step' && attachment.stepName) {
+    return `${attachment.originalName} (${attachment.stepName})`
+  }
+  
   // Senão usar nome original
   return attachment.originalName
+}
+
+// ✅ NOVO: Cor baseada na origem
+function getOriginColor(attachment) {
+  switch (attachment.attachmentType) {
+    case 'form':
+      return 'purple'
+    case 'step':
+      return 'blue'
+    default:
+      return 'grey'
+  }
+}
+
+// ✅ NOVO: Ícone baseado na origem
+function getOriginIcon(attachment) {
+  switch (attachment.attachmentType) {
+    case 'form':
+      return 'mdi-form-textbox'
+    case 'step':
+      return 'mdi-debug-step-over'
+    default:
+      return 'mdi-file'
+  }
 }
 </script>
 

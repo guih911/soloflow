@@ -13,12 +13,12 @@
           <v-icon color="primary" size="28" class="mr-3">mdi-paperclip</v-icon>
           <div>
             <h3 class="text-h5 font-weight-bold">
-              {{ selectedAttachment ? getDisplayName(selectedAttachment) : 'Anexos do Processo' }}
+              {{ selectedAttachment ? getDisplayName(selectedAttachment) : (title || 'Anexos das Etapas') }}
             </h3>
             <p class="text-body-2 text-medium-emphasis mt-1">
               {{ selectedAttachment ? 
                 `${getFileTypeName(selectedAttachment.mimeType)} • ${formatFileSize(selectedAttachment.size)}` : 
-                `${attachments.length} arquivo(s) anexado(s)` 
+                `${attachments.length} arquivo(s) anexado(s) durante as etapas do processo` 
               }}
             </p>
           </div>
@@ -60,7 +60,7 @@
             </div>
           </v-window-item>
           
-          <!-- ✅ Aba do Visualizador -->
+          <!-- ✅ Aba do Visualizador com fundo branco para etapas -->
           <v-window-item value="preview">
             <AttachmentPreview 
               :attachment="selectedAttachment"
@@ -80,12 +80,12 @@
           />
         </div>
 
-        <!-- ✅ Estado vazio -->
+        <!-- ✅ Estado vazio melhorado -->
         <div v-else class="empty-state">
-          <v-icon size="80" color="grey-lighten-2">mdi-paperclip-off</v-icon>
-          <h3 class="text-h6 mt-4 text-grey">Nenhum anexo encontrado</h3>
+          <v-icon size="80" color="grey-lighten-2">mdi-debug-step-over</v-icon>
+          <h3 class="text-h6 mt-4 text-grey">Nenhum anexo de etapa encontrado</h3>
           <p class="text-body-2 text-grey">
-            Este processo não possui arquivos anexados.
+            Ainda não foram anexados arquivos durante as etapas deste processo.
           </p>
         </div>
       </v-card-text>
@@ -98,26 +98,28 @@
           <v-icon size="16" class="mr-1">mdi-information</v-icon>
           {{ selectedAttachment ? 
             `Arquivo ${getCurrentIndex() + 1} de ${attachments.length}` :
-            `Total: ${attachments.length} arquivo(s) • ${getTotalSize()} • ${getSignedCount()} assinado(s)`
+            `Total: ${attachments.length} arquivo(s) de etapas • ${getTotalSize()} • ${getSignedCount()} assinado(s)`
           }}
         </div>
         
         <v-spacer />
         
-        <v-btn variant="text" @click="close">
-          Fechar
-        </v-btn>
-        
-        <v-btn
-          v-if="attachments.length > 0 && !selectedAttachment"
-          color="primary"
-          variant="elevated"
-          @click="downloadAll"
-          :loading="loadingDownloadAll"
-        >
-          <v-icon start>mdi-download-multiple</v-icon>
-          Baixar Todos
-        </v-btn>
+        <div class="actions-footer">
+          <v-btn variant="text" @click="close" class="mr-3">
+            Fechar
+          </v-btn>
+          
+          <v-btn
+            v-if="attachments.length > 0 && !selectedAttachment"
+            color="primary"
+            variant="elevated"
+            @click="downloadAll"
+            :loading="loadingDownloadAll"
+          >
+            <v-icon start>mdi-download-multiple</v-icon>
+            Baixar Todos
+          </v-btn>
+        </div>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -135,6 +137,10 @@ const props = defineProps({
   attachments: {
     type: Array,
     default: () => []
+  },
+  title: {
+    type: String,
+    default: ''
   }
 })
 
@@ -156,12 +162,17 @@ const formattedAttachments = computed(() => {
     ...attachment,
     // Garantir que tem um ID único
     id: attachment.id || `temp-${Date.now()}-${Math.random()}`,
+    // ✅ CORRIGIDO: Garantir que anexos de etapas sempre usam nome original
+    displayName: attachment.originalName || attachment.filename || 'Arquivo',
     // Garantir campos obrigatórios
     originalName: attachment.originalName || attachment.filename || 'Arquivo sem nome',
     size: attachment.size || 0,
     mimeType: attachment.mimeType || 'application/octet-stream',
     createdAt: attachment.createdAt || new Date().toISOString(),
-    isSigned: Boolean(attachment.isSigned)
+    isSigned: Boolean(attachment.isSigned),
+    // ✅ Garantir que são marcados como anexos de etapa
+    attachmentType: 'step',
+    attachmentSource: 'Anexo de Etapa'
   }))
 })
 
@@ -179,13 +190,8 @@ function isPdf(attachment) {
 }
 
 function getDisplayName(attachment) {
-  // Se é campo do formulário, usar o nome do campo
-  if (attachment.isFormField && attachment.fieldLabel) {
-    return attachment.fieldLabel || attachment.originalName
-  }
-  
-  // Senão usar nome original
-  return attachment.originalName
+  // Para anexos de etapas, sempre usar nome original
+  return attachment.originalName || attachment.filename || 'Arquivo'
 }
 
 function getFileTypeName(mimeType) {
@@ -311,6 +317,7 @@ function close() {
 .attachment-list-container {
   height: 700px;
   overflow-y: auto;
+  background: #ffffff;
 }
 
 .empty-state {
@@ -320,6 +327,18 @@ function close() {
   justify-content: center;
   height: 400px;
   text-align: center;
+  background: #ffffff;
+}
+
+/* ✅ Espaçamento adequado nos botões do footer */
+.actions-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.actions-footer .v-btn {
+  margin: 0;
 }
 
 /* Scrollbar personalizada */

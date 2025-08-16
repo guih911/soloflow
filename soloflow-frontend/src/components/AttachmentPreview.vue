@@ -1,6 +1,6 @@
 <template>
   <div class="attachment-preview">
-    <!-- Header do preview com informações do arquivo -->
+    <!-- ✅ NOVO: Header melhorado com informações de origem -->
     <div class="preview-header pa-4">
       <div class="d-flex align-center justify-space-between">
         <div class="d-flex align-center">
@@ -13,15 +13,25 @@
           </v-avatar>
           <div>
             <h3 class="text-h6 font-weight-bold">{{ getDisplayName(attachment) }}</h3>
-            <p class="text-caption text-medium-emphasis">
-              {{ formatFileSize(attachment.size) }} • {{ getFileTypeName(attachment.mimeType) }}
-            </p>
+            <div class="d-flex align-center text-caption text-medium-emphasis">
+              <span>{{ formatFileSize(attachment.size) }} • {{ getFileTypeName(attachment.mimeType) }}</span>
+              <!-- ✅ NOVO: Indicador de origem -->
+              <v-chip
+                size="x-small"
+                :color="getOriginColor(attachment)"
+                variant="tonal"
+                class="ml-2"
+              >
+                <v-icon start size="10">{{ getOriginIcon(attachment) }}</v-icon>
+                {{ attachment.attachmentSource || 'Processo' }}
+              </v-chip>
+            </div>
           </div>
         </div>
         
-        <div class="d-flex gap-2">
+        <div class="d-flex align-center gap-3">
           <!-- Zoom controls para PDF -->
-          <div v-if="isPdf && previewUrl" class="zoom-controls mr-3">
+          <div v-if="isPdf && previewUrl" class="zoom-controls">
             <v-btn-group variant="outlined" density="compact">
               <v-btn size="small" @click="zoomOut" :disabled="zoomLevel <= 50">
                 <v-icon>mdi-magnify-minus</v-icon>
@@ -80,10 +90,10 @@
       </div>
     </div>
 
-    <!-- Preview content -->
-    <div v-else-if="previewUrl" class="preview-content">
+    <!-- ✅ CORRIGIDO: Preview content com fundo baseado na origem -->
+    <div v-else-if="previewUrl" class="preview-content" :class="getPreviewContentClass()">
       <!-- PDF Preview -->
-      <div v-if="isPdf" class="pdf-preview-container">
+      <div v-if="isPdf" class="pdf-preview-container" :class="getPdfContainerClass()">
         <iframe
           :src="previewUrl"
           class="pdf-viewer"
@@ -94,7 +104,7 @@
       </div>
       
       <!-- Image Preview -->
-      <div v-else-if="isImage" class="image-preview">
+      <div v-else-if="isImage" class="image-preview" :class="getImagePreviewClass()">
         <div class="image-container">
           <img
             :src="previewUrl"
@@ -200,7 +210,7 @@ async function loadPreview() {
   error.value = ''
   
   try {
-    console.log('🔍 Loading preview for attachment:', props.attachment.id)
+    console.log('🔍 Loading preview for attachment:', props.attachment.id, 'Type:', props.attachment.attachmentType)
     
     // ✅ Usar endpoint de view com autenticação automática via axios
     const response = await api.get(`/processes/attachment/${props.attachment.id}/view`, {
@@ -302,6 +312,45 @@ function resetImageZoom() {
   imageZoom.value = 100
 }
 
+// ✅ NOVO: Classes baseadas na origem do arquivo
+function getPreviewContentClass() {
+  const baseClass = 'preview-content'
+  
+  // Diferentes estilos baseados na origem
+  switch (props.attachment.attachmentType) {
+    case 'form':
+      return `${baseClass} preview-content--form`
+    case 'step':
+      return `${baseClass} preview-content--step`
+    default:
+      return `${baseClass} preview-content--default`
+  }
+}
+
+function getPdfContainerClass() {
+  // Fundo baseado na origem
+  switch (props.attachment.attachmentType) {
+    case 'form':
+      return 'pdf-container--form'
+    case 'step':
+      return 'pdf-container--step'
+    default:
+      return 'pdf-container--default'
+  }
+}
+
+function getImagePreviewClass() {
+  // Fundo baseado na origem
+  switch (props.attachment.attachmentType) {
+    case 'form':
+      return 'image-preview--form'
+    case 'step':
+      return 'image-preview--step'
+    default:
+      return 'image-preview--default'
+  }
+}
+
 // Métodos auxiliares
 function getFileIcon(mimeType) {
   if (!mimeType) return 'mdi-file'
@@ -348,13 +397,47 @@ function formatFileSize(bytes) {
 }
 
 function getDisplayName(attachment) {
+  // Se tem displayName (definido no AttachmentButton), usar ele
+  if (attachment.displayName) {
+    return attachment.displayName
+  }
+  
   // Se é campo do formulário, usar o nome do campo
   if (attachment.isFormField && attachment.fieldLabel) {
     return attachment.fieldLabel
   }
   
+  // Se é anexo de etapa, usar nome original + contexto
+  if (attachment.attachmentType === 'step' && attachment.stepName) {
+    return `${attachment.originalName} (${attachment.stepName})`
+  }
+  
   // Senão usar nome original
   return attachment.originalName
+}
+
+// ✅ NOVO: Cor baseada na origem
+function getOriginColor(attachment) {
+  switch (attachment.attachmentType) {
+    case 'form':
+      return 'purple'
+    case 'step':
+      return 'blue'
+    default:
+      return 'grey'
+  }
+}
+
+// ✅ NOVO: Ícone baseado na origem
+function getOriginIcon(attachment) {
+  switch (attachment.attachmentType) {
+    case 'form':
+      return 'mdi-form-textbox'
+    case 'step':
+      return 'mdi-debug-step-over'
+    default:
+      return 'mdi-file'
+  }
 }
 
 onMounted(() => {
@@ -376,7 +459,7 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f8f9fa;
+  background: #ffffff;
 }
 
 .preview-header {
@@ -385,32 +468,78 @@ onUnmounted(() => {
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
+/* ✅ NOVO: Classes base para diferentes origens */
 .preview-content {
   flex: 1;
   overflow: hidden;
   position: relative;
-  background: #f8f9fa;
+  display: flex;
+  flex-direction: column;
 }
 
-/* ✅ CORRIGIDO: Estilos para visualização de PDF sem fundo preto */
+/* ✅ Arquivos de formulário (solicitação inicial) - fundo transparente */
+.preview-content--form {
+  background: transparent;
+}
+
+/* ✅ Arquivos de etapa (processo) - fundo branco */
+.preview-content--step {
+  background: #ffffff;
+}
+
+/* ✅ Padrão - fundo branco */
+.preview-content--default {
+  background: #ffffff;
+}
+
+/* ✅ PDF Containers com fundos diferentes */
 .pdf-preview-container {
   height: 100%;
   width: 100%;
-  background: #f8f9fa;
   padding: 0;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* ✅ PDF de formulário - fundo transparente */
+.pdf-container--form {
+  background: transparent !important;
+}
+
+/* ✅ PDF de etapa - fundo branco */
+.pdf-container--step {
+  background: #ffffff !important;
+}
+
+/* ✅ PDF padrão - fundo branco */
+.pdf-container--default {
+  background: #ffffff !important;
 }
 
 .pdf-viewer {
   width: 100%;
   height: 100%;
   border: none;
-  background: #ffffff !important;
   margin: 0;
   padding: 0;
+  flex: 1;
+  min-height: 600px;
 }
 
-/* ✅ Forçar fundo branco para PDFs */
+/* ✅ Forçar fundo transparente para PDFs de formulário */
+.pdf-container--form .pdf-viewer {
+  background: transparent !important;
+}
+
+/* ✅ Forçar fundo branco para PDFs de etapa */
+.pdf-container--step .pdf-viewer,
+.pdf-container--default .pdf-viewer {
+  background: #ffffff !important;
+}
+
+/* ✅ Scrollbar personalizada */
 .pdf-viewer::-webkit-scrollbar {
   width: 8px;
 }
@@ -424,11 +553,21 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
+/* ✅ Image Preview com fundos diferentes */
 .image-preview {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f8f9fa;
+  flex: 1;
+}
+
+.image-preview--form {
+  background: transparent;
+}
+
+.image-preview--step,
+.image-preview--default {
+  background: #ffffff;
 }
 
 .image-container {
@@ -438,6 +577,14 @@ onUnmounted(() => {
   align-items: center;
   overflow: auto;
   padding: 20px;
+}
+
+.image-preview--form .image-container {
+  background: transparent;
+}
+
+.image-preview--step .image-container,
+.image-preview--default .image-container {
   background: #ffffff;
 }
 
@@ -467,10 +614,20 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   background: #ffffff;
+  flex: 1;
 }
 
 .zoom-controls {
   display: flex;
   align-items: center;
+}
+
+/* ✅ Espaçamento entre botões */
+.gap-3 {
+  gap: 12px;
+}
+
+.gap-3 > * + * {
+  margin-left: 12px;
 }
 </style>
