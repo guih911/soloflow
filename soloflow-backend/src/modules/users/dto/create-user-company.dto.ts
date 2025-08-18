@@ -1,5 +1,22 @@
-import { IsString, IsEmail, IsEnum, Length, IsUUID, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsEmail, IsEnum, Length, IsUUID, IsOptional, IsBoolean, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { UserRole } from '@prisma/client';
+
+export class UserCompanyAssignmentDto {
+  @IsUUID()
+  companyId: string;
+
+  @IsEnum(UserRole)
+  role: UserRole;
+
+  @IsOptional()
+  @IsUUID()
+  sectorId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
+}
 
 export class CreateUserCompanyDto {
   @IsString()
@@ -13,11 +30,14 @@ export class CreateUserCompanyDto {
   @Length(6, 50)
   password: string;
 
-  @IsEnum(UserRole)
-  role: UserRole;
 
+  @IsOptional()
+  @IsEnum(UserRole)
+  role?: UserRole;
+
+  @IsOptional()
   @IsUUID()
-  companyId: string;
+  companyId?: string;
 
   @IsOptional()
   @IsUUID()
@@ -26,4 +46,12 @@ export class CreateUserCompanyDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+ 
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => UserCompanyAssignmentDto)
+  companies?: UserCompanyAssignmentDto[];
 }
+

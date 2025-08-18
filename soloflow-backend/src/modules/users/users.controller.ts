@@ -13,6 +13,7 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserCompanyDto } from './dto/create-user-company.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserCompaniesDto } from './dto/update-user-companies.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -29,13 +30,21 @@ export class UsersController {
     console.log('Creating user with payload:', createUserDto);
     console.log('Request user:', req.user);
 
-    // Se não for admin, forçar a empresa do usuário logado
+    // Se não for admin e não especificou empresas, forçar a empresa do usuário logado
     if (req.user.role !== UserRole.ADMIN) {
-      createUserDto.companyId = req.user.companyId;
+      if (!createUserDto.companies || createUserDto.companies.length === 0) {
+        // Modo compatibilidade: usar empresa atual do usuário
+        createUserDto.companyId = req.user.companyId;
+      } else {
+        // Modo múltiplas empresas: filtrar apenas empresas que o manager pode gerenciar
+        createUserDto.companies = createUserDto.companies.filter(
+          company => company.companyId === req.user.companyId
+        );
+      }
     }
 
-    // Garantir que companyId está definido
-    if (!createUserDto.companyId) {
+    // Garantir que pelo menos uma empresa está especificada
+    if (!createUserDto.companyId && (!createUserDto.companies || createUserDto.companies.length === 0)) {
       createUserDto.companyId = req.user.companyId;
     }
 
@@ -73,6 +82,23 @@ export class UsersController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(id, updateUserDto);
+  }
+
+  @Patch(':id/companies')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async updateUserCompanies(
+    @Param('id') id: string, 
+    @Body() updateDto: UpdateUserCompaniesDto,
+    @Request() req
+  ) {
+    // Se não for admin, filtrar apenas empresas que o manager pode gerenciar
+    if (req.user.role !== UserRole.ADMIN && updateDto.companies) {
+      updateDto.companies = updateDto.companies.filter(
+        company => company.companyId === req.user.companyId
+      );
+    }
+
+    return this.usersService.updateUserCompanies(id, updateDto);
   }
 
   @Delete(':id')

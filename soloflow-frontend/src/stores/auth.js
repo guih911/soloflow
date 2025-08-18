@@ -29,64 +29,89 @@ export const useAuthStore = defineStore('auth', () => {
   const canManageProcessTypes = computed(() => ['ADMIN', 'MANAGER'].includes(userRole.value))
 
   // SoloFlow MELHORADO: Login com tratamento robusto de erros
-  async function login(credentials) {
-    loading.value = true
-    error.value = null
+ async function login(credentials) {
+  loading.value = true
+  error.value = null
+  
+  try {
+    console.log('Attempting login with:', credentials.email)
     
-    try {
-      console.log('Attempting login with:', credentials.email)
-      
-      const response = await api.post('/auth/login', credentials)
-      const { access_token, user: userData } = response.data
-      
-      console.log('Login response:', response.data)
-      
-      // SoloFlow CORRIGIDO: Validação mais rigorosa dos dados
-      if (!access_token || !userData?.id || !userData?.companies?.length) {
-        throw new Error('Resposta inválida do servidor')
-      }
-      
-      // SoloFlow Configurar dados do usuário
-      token.value = access_token
-      user.value = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-      }
-      companies.value = userData.companies || []
-      activeCompany.value = userData.activeCompany
-      
-      // SoloFlow CRÍTICO: Salvar no localStorage de forma consistente
-      localStorage.setItem('token', access_token)
-      localStorage.setItem('user', JSON.stringify(user.value))
-      localStorage.setItem('companies', JSON.stringify(companies.value))
-      localStorage.setItem('activeCompany', JSON.stringify(activeCompany.value))
-      
-      // SoloFlow Configurar header padrão do axios
-      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-      
-      console.log('Login successful, active company:', activeCompany.value?.name)
-      
-      // SoloFlow MELHORADO: Navegação após login
-      const redirectPath = sessionStorage.getItem('redirectAfterLogin') || '/dashboard'
-      sessionStorage.removeItem('redirectAfterLogin')
-      router.push(redirectPath)
-      
-      window.showSnackbar?.('Login realizado com sucesso!', 'success')
-      
-      return response.data
-    } catch (err) {
-      console.error('Login error:', err)
-      error.value = err.response?.data?.message || err.message || 'Erro ao fazer login'
-      window.showSnackbar?.(error.value, 'error')
-      
-      // SoloFlow SEGURANÇA: Limpar dados em caso de erro
-      logout()
-      throw err
-    } finally {
-      loading.value = false
+    const response = await api.post('/auth/login', credentials)
+    const { access_token, user: userData } = response.data
+    
+    console.log('Login response:', response.data)
+    
+    // SoloFlow CORRIGIDO: Validação mais rigorosa dos dados
+    if (!access_token || !userData?.id || !userData?.companies?.length) {
+      throw new Error('Resposta inválida do servidor')
     }
+    
+    // SoloFlow Configurar dados do usuário
+    token.value = access_token
+    user.value = {
+      id: userData.id,
+      name: userData.name,
+      email: userData.email,
+    }
+    companies.value = userData.companies || []
+    activeCompany.value = userData.activeCompany
+    
+    // SoloFlow CRÍTICO: Salvar no localStorage de forma consistente
+    localStorage.setItem('token', access_token)
+    localStorage.setItem('user', JSON.stringify(user.value))
+    localStorage.setItem('companies', JSON.stringify(companies.value))
+    localStorage.setItem('activeCompany', JSON.stringify(activeCompany.value))
+    
+    // SoloFlow Configurar header padrão do axios
+    api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
+    
+    console.log('Login successful, active company:', activeCompany.value?.name)
+    
+   
+    const redirectPath = sessionStorage.getItem('redirectAfterLogin') || '/dashboard'
+    sessionStorage.removeItem('redirectAfterLogin')
+    router.push(redirectPath)
+    
+    window.showSnackbar?.('Login realizado com sucesso!', 'success')
+    
+    return response.data
+  } catch (err) {
+    console.error('Login error:', err)
+    
+   
+    let errorMessage = 'Erro ao fazer login'
+    
+    if (err.response?.status === 401) {
+      errorMessage = 'Email ou senha incorretos'
+    } else if (err.response?.data?.message) {
+      errorMessage = err.response.data.message
+    } else if (err.message) {
+      errorMessage = err.message
+    }
+    
+    error.value = errorMessage
+    window.showSnackbar?.(errorMessage, 'error')
+    
+   
+    token.value = null
+    user.value = null
+    companies.value = []
+    activeCompany.value = null
+    
+    // Limpar localStorage silenciosamente
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    localStorage.removeItem('companies')
+    localStorage.removeItem('activeCompany')
+    
+    // Limpar header do axios
+    delete api.defaults.headers.common['Authorization']
+    
+    throw err
+  } finally {
+    loading.value = false
   }
+}
 
   async function register(userData) {
     loading.value = true

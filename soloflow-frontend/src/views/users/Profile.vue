@@ -208,17 +208,17 @@
         </v-card>
 
         <!-- Empresas Vinculadas -->
-        <v-card v-if="companies?.length > 1">
+        <v-card v-if="userCompanies?.length > 1">
           <v-card-title>
             <v-icon class="mr-2">mdi-domain</v-icon>
-            Empresas Vinculadas
+            Empresas Vinculadas ({{ userCompanies.length }})
           </v-card-title>
           
           <v-divider />
           
           <v-list density="comfortable">
             <v-list-item
-              v-for="company in companies"
+              v-for="company in userCompanies"
               :key="company.companyId"
               :class="{ 'bg-primary-lighten-5': company.companyId === activeCompany?.companyId }"
             >
@@ -230,14 +230,27 @@
                 </v-icon>
               </template>
               
-              <v-list-item-title>{{ company.name }}</v-list-item-title>
+              <v-list-item-title class="d-flex align-center">
+                {{ company.companyName }}
+                <v-icon
+                  v-if="company.isDefault"
+                  color="warning"
+                  size="16"
+                  class="ml-2"
+                >
+                  mdi-star
+                </v-icon>
+              </v-list-item-title>
+              
               <v-list-item-subtitle>
-                <v-chip size="x-small" :color="getRoleColor(company.role)">
-                  {{ getRoleText(company.role) }}
-                </v-chip>
-                <span v-if="company.sector" class="ml-2">
-                  • {{ company.sector.name }}
-                </span>
+                <div class="d-flex align-center flex-wrap ga-2">
+                  <v-chip size="x-small" :color="getRoleColor(company.role)">
+                    {{ getRoleText(company.role) }}
+                  </v-chip>
+                  <span v-if="company.sector" class="text-caption">
+                    • {{ company.sector.name }}
+                  </span>
+                </div>
               </v-list-item-subtitle>
 
               <template v-slot:append>
@@ -337,7 +350,19 @@ const passwordData = ref({
 // Computed
 const user = computed(() => authStore.user)
 const activeCompany = computed(() => authStore.activeCompany)
-const companies = computed(() => authStore.companies)
+const userCompanies = computed(() => {
+  // Extrair empresas do usuário logado
+  if (user.value?.userCompanies) {
+    return user.value.userCompanies.map(uc => ({
+      companyId: uc.company.id,
+      companyName: uc.company.name,
+      role: uc.role,
+      sector: uc.sector,
+      isDefault: uc.isDefault
+    }))
+  }
+  return []
+})
 
 const profileChanged = computed(() => {
   return JSON.stringify(profileData.value) !== JSON.stringify(originalProfileData.value)
@@ -415,8 +440,10 @@ async function updateProfile() {
   try {
     await authStore.updateProfile(profileData.value)
     originalProfileData.value = { ...profileData.value }
+    window.showSnackbar?.('Perfil atualizado com sucesso!', 'success')
   } catch (error) {
     console.error('Error updating profile:', error)
+    window.showSnackbar?.('Erro ao atualizar perfil', 'error')
   }
 }
 
@@ -439,8 +466,10 @@ async function changePassword() {
       newPassword: passwordData.value.newPassword
     })
     resetPassword()
+    window.showSnackbar?.('Senha alterada com sucesso!', 'success')
   } catch (error) {
     console.error('Error changing password:', error)
+    window.showSnackbar?.('Erro ao alterar senha', 'error')
   } finally {
     changingPassword.value = false
   }
@@ -450,8 +479,10 @@ async function switchToCompany(companyId) {
   switchingCompany.value = companyId
   try {
     await authStore.switchCompany(companyId)
+    window.showSnackbar?.('Empresa alterada com sucesso!', 'success')
   } catch (error) {
     console.error('Error switching company:', error)
+    window.showSnackbar?.('Erro ao alterar empresa', 'error')
   } finally {
     switchingCompany.value = null
   }
