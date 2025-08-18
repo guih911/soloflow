@@ -24,13 +24,7 @@
           Atualizar
         </v-btn>
 
-        <!-- ✅ Botão de anexos integrado - CORRIGIDO -->
-        <AttachmentButton
-          :process="process"
-          variant="elevated"
-          color="info"
-          show-empty-state
-        />
+        <!-- ✅ REMOVIDO: Botão de anexos das etapas -->
 
         <!-- Botão de ação principal baseado no status -->
         <v-btn v-if="currentStepExecution" color="primary" variant="elevated" @click="executeCurrentStep"
@@ -69,20 +63,7 @@
             <v-list-item>
               <template v-slot:prepend>
                 <v-icon>mdi-identifier</v-icon>
-                <!-- Modal de visualização de anexos -->
-  <AttachmentModal
-    v-model="modalOpen"
-    :attachments="modalAttachments"
-    :title="modalTitle"
-  />
-    
-    <!-- ✅ NOVO: Modal específico para arquivos de campo -->
-    <FieldFileModal
-      v-model="fieldFileModal"
-      :file-data="selectedFieldFile"
-      :field-info="selectedField"
-    />
-</template>
+              </template>
               <v-list-item-title>Código</v-list-item-title>
               <v-list-item-subtitle>{{ process.code }}</v-list-item-subtitle>
             </v-list-item>
@@ -90,13 +71,7 @@
             <v-list-item>
               <template v-slot:prepend>
                 <v-icon>mdi-account</v-icon>
-                <!-- Modal de visualização de anexos -->
-  <AttachmentModal
-    v-model="modalOpen"
-    :attachments="modalAttachments"
-    :title="modalTitle"
-  />
-</template>
+              </template>
               <v-list-item-title>Solicitante</v-list-item-title>
               <v-list-item-subtitle>{{ process.createdBy.name }}</v-list-item-subtitle>
             </v-list-item>
@@ -104,13 +79,7 @@
             <v-list-item>
               <template v-slot:prepend>
                 <v-icon>mdi-email</v-icon>
-                <!-- Modal de visualização de anexos -->
-  <AttachmentModal
-    v-model="modalOpen"
-    :attachments="modalAttachments"
-    :title="modalTitle"
-  />
-</template>
+              </template>
               <v-list-item-title>E-mail</v-list-item-title>
               <v-list-item-subtitle>{{ process.createdBy.email }}</v-list-item-subtitle>
             </v-list-item>
@@ -118,13 +87,7 @@
             <v-list-item>
               <template v-slot:prepend>
                 <v-icon>mdi-calendar</v-icon>
-                <!-- Modal de visualização de anexos -->
-  <AttachmentModal
-    v-model="modalOpen"
-    :attachments="modalAttachments"
-    :title="modalTitle"
-  />
-</template>
+              </template>
               <v-list-item-title>Criado em</v-list-item-title>
               <v-list-item-subtitle>{{ formatDate(process.createdAt) }}</v-list-item-subtitle>
             </v-list-item>
@@ -132,13 +95,7 @@
             <v-list-item v-if="process.completedAt">
               <template v-slot:prepend>
                 <v-icon>mdi-calendar-check</v-icon>
-                <!-- Modal de visualização de anexos -->
-  <AttachmentModal
-    v-model="modalOpen"
-    :attachments="modalAttachments"
-    :title="modalTitle"
-  />
-</template>
+              </template>
               <v-list-item-title>Concluído em</v-list-item-title>
               <v-list-item-subtitle>{{ formatDate(process.completedAt) }}</v-list-item-subtitle>
             </v-list-item>
@@ -146,13 +103,7 @@
             <v-list-item v-if="estimatedCompletion">
               <template v-slot:prepend>
                 <v-icon>mdi-clock-outline</v-icon>
-                <!-- Modal de visualização de anexos -->
-  <AttachmentModal
-    v-model="modalOpen"
-    :attachments="modalAttachments"
-    :title="modalTitle"
-  />
-</template>
+              </template>
               <v-list-item-title>Previsão</v-list-item-title>
               <v-list-item-subtitle>{{ estimatedCompletion }}</v-list-item-subtitle>
             </v-list-item>
@@ -166,7 +117,7 @@
           </v-card-text>
         </v-card>
 
-        <!-- ✅ Dados do Formulário COMPLETAMENTE REFATORADO -->
+        <!-- Dados do Formulário -->
         <v-card v-if="process.formData || hasFormFieldFiles">
           <v-card-title>
             <v-icon class="mr-2">mdi-form-textbox</v-icon>
@@ -174,15 +125,15 @@
           </v-card-title>
           <v-divider />
           <v-list density="compact">
-            <!-- ✅ Campos normais (não-arquivo) -->
+            <!-- Campos normais (não-arquivo) -->
             <v-list-item v-for="(value, key) in formattedFormData" :key="key">
               <v-list-item-title class="text-caption">{{ key }}</v-list-item-title>
               <v-list-item-subtitle>{{ value }}</v-list-item-subtitle>
             </v-list-item>
             
-            <!-- ✅ Campos de arquivo - CORRIGIDO COMPLETAMENTE -->
+            <!-- Campos de arquivo -->
             <template v-for="field in fileFields" :key="field.name">
-              <!-- ✅ SUPORTE: Campo único -->
+              <!-- Campo único -->
               <v-list-item v-if="getFieldFileData(field) && !Array.isArray(getFieldFileData(field))">
                 <v-list-item-title class="text-caption">
                   {{ field.label }}
@@ -192,7 +143,7 @@
                     <v-icon size="16" class="mr-2" :color="getFileTypeColor(getFieldFileData(field).mimeType)">
                       {{ getFileIcon(getFieldFileData(field).mimeType) }}
                     </v-icon>
-                    <span class="file-link" @click="openAttachmentModal(field, 0)">
+                    <span class="file-link" @click="openFieldFileModal(field, 0)">
                       {{ field.label }}
                     </span>
                     <v-btn icon variant="text" size="x-small" class="ml-1" @click.stop="downloadFieldFile(field, 0)">
@@ -205,7 +156,7 @@
                 </v-list-item-subtitle>
               </v-list-item>
               
-              <!-- ✅ SUPORTE: Campo múltiplo -->
+              <!-- Campo múltiplo -->
               <template v-else-if="Array.isArray(getFieldFileData(field))">
                 <v-list-item v-for="(fileItem, index) in getFieldFileData(field)" :key="`${field.name}-${index}`">
                   <v-list-item-title class="text-caption">
@@ -216,7 +167,7 @@
                       <v-icon size="16" class="mr-2" :color="getFileTypeColor(fileItem.mimeType)">
                         {{ getFileIcon(fileItem.mimeType) }}
                       </v-icon>
-                      <span class="file-link" @click="openAttachmentModal(field, index)">
+                      <span class="file-link" @click="openFieldFileModal(field, index)">
                         {{ field.label }} ({{ index + 1 }})
                       </span>
                       <v-btn icon variant="text" size="x-small" class="ml-1" @click.stop="downloadFieldFile(field, index)">
@@ -228,21 +179,10 @@
                     </div>
                   </v-list-item-subtitle>
                 </v-list-item>
-                <!-- Modal de visualização de anexos -->
-  <AttachmentModal
-    v-model="modalOpen"
-    :attachments="modalAttachments"
-    :title="modalTitle"
-  />
-</template>  <!-- Modal de visualização de anexos -->
-  <AttachmentModal
-    v-model="modalOpen"
-    :attachments="modalAttachments"
-    :title="modalTitle"
-  />
-</template>
+              </template>
+            </template>
 
-            <!-- ✅ NOVO: Seção especial se não há dados -->
+            <!-- Seção especial se não há dados -->
             <v-list-item v-if="!process.formData && !hasFormFieldFiles">
               <v-list-item-title class="text-center text-medium-emphasis">
                 <v-icon class="mr-2">mdi-information-outline</v-icon>
@@ -253,134 +193,193 @@
         </v-card>
       </v-col>
 
-      <!-- Timeline das Etapas -->
+      <!-- ✅ TIMELINE DAS ETAPAS PROFISSIONAL -->
       <v-col cols="12" md="8">
-        <v-card>
-          <v-card-title>
-            <v-icon class="mr-2">mdi-timeline</v-icon>
-            Fluxo do Processo
+        <v-card class="workflow-timeline-card">
+          <v-card-title class="d-flex align-center pa-6">
+            <v-icon class="mr-3" color="primary" size="28">mdi-timeline-clock</v-icon>
+            <div>
+              <h3 class="text-h5 font-weight-bold">Fluxo do Processo</h3>
+              <p class="text-body-2 text-medium-emphasis mt-1">
+                Acompanhe o progresso e histórico de execução das etapas
+              </p>
+            </div>
           </v-card-title>
+          
           <v-divider />
 
-          <v-timeline side="end" density="comfortable" class="pa-4">
-            <v-timeline-item v-for="(execution, index) in process.stepExecutions" :key="execution.id"
-              :dot-color="getExecutionColor(execution)" :icon="getExecutionIcon(execution)"
-              :size="execution.status === 'IN_PROGRESS' ? 'large' : 'default'"
-              :line-color="execution.status === 'COMPLETED' ? 'success' : 'grey-lighten-2'">
-              <template v-slot:opposite>
-                <div class="text-caption">
-                  <div class="font-weight-medium">Etapa {{ index + 1 }}</div>
-                  <div v-if="execution.createdAt">{{ formatTimeAgo(execution.createdAt) }}</div>
-                </div>
-                <!-- Modal de visualização de anexos -->
-  <AttachmentModal
-    v-model="modalOpen"
-    :attachments="modalAttachments"
-    :title="modalTitle"
-  />
-</template>
-
-              <v-card :color="execution.status === 'IN_PROGRESS' ? 'primary' : ''"
-                :variant="execution.status === 'IN_PROGRESS' ? 'tonal' : 'outlined'"
-                :elevation="execution.status === 'IN_PROGRESS' ? 4 : 1">
-                <v-card-title class="text-h6 d-flex align-center justify-space-between">
-                  <div class="d-flex align-center">
-                    <v-icon :color="getStepTypeColor(execution.step.type)" class="mr-2" size="20">
-                      {{ getStepTypeIcon(execution.step.type) }}
+          <!-- ✅ WORKFLOW STEPS PROFISSIONAL -->
+          <div class="workflow-container pa-6">
+            <div class="workflow-steps">
+              <div 
+                v-for="(execution, index) in process.stepExecutions" 
+                :key="execution.id"
+                class="workflow-step"
+                :class="getStepClass(execution, index)"
+              >
+                <!-- Step Number/Icon -->
+                <div class="step-indicator">
+                  <div class="step-number" :class="getStepIndicatorClass(execution)">
+                    <v-icon v-if="execution.status === 'COMPLETED'" size="20" color="white">
+                      mdi-check
                     </v-icon>
-                    {{ execution.step.name }}
+                    <v-icon v-else-if="execution.status === 'IN_PROGRESS'" size="20" color="white">
+                      mdi-play
+                    </v-icon>
+                    <v-icon v-else-if="execution.status === 'REJECTED'" size="20" color="white">
+                      mdi-close
+                    </v-icon>
+                    <span v-else class="step-text">{{ index + 1 }}</span>
                   </div>
-
-                  <v-chip size="small" :color="getExecutionColor(execution)" variant="tonal">
-                    {{ getExecutionStatusText(execution.status) }}
-                  </v-chip>
-                </v-card-title>
-
-                <v-card-subtitle v-if="execution.step.description">
-                  {{ execution.step.description }}
-                </v-card-subtitle>
-
-                <v-card-text>
-                  <!-- Informações do Responsável -->
-                  <div class="d-flex align-center mb-2">
-                    <v-icon size="16" class="mr-2" color="primary">mdi-account-check</v-icon>
-                    <span class="text-body-2">
-                      <strong>Responsável:</strong> {{ getResponsibleName(execution) }}
-                    </span>
-                  </div>
-
-                  <!-- Executor -->
-                  <div v-if="execution.executor" class="d-flex align-center mb-2">
-                    <v-icon size="16" class="mr-2" color="success">mdi-account-edit</v-icon>
-                    <span class="text-body-2">
-                      <strong>Executado por:</strong> {{ execution.executor.name }}
-                    </span>
-                  </div>
-
-                  <!-- Data de conclusão -->
-                  <div v-if="execution.completedAt" class="d-flex align-center mb-2">
-                    <v-icon size="16" class="mr-2" color="info">mdi-clock-check</v-icon>
-                    <span class="text-body-2">
-                      <strong>Concluído em:</strong> {{ formatDate(execution.completedAt) }}
-                    </span>
-                  </div>
-
-                  <!-- Ação tomada -->
-                  <div v-if="execution.action" class="d-flex align-center mb-2">
-                    <v-icon size="16" class="mr-2" color="warning">mdi-gesture-tap</v-icon>
-                    <span class="text-body-2">
-                      <strong>Ação:</strong>
-                      <v-chip size="x-small" class="ml-1">{{ execution.action }}</v-chip>
-                    </span>
-                  </div>
-
-                  <!-- Comentário -->
-                  <div v-if="execution.comment" class="mt-3">
-                    <p class="text-caption text-medium-emphasis mb-1">
-                      <v-icon size="16" class="mr-1">mdi-comment-text</v-icon>
-                      Comentário:
-                    </p>
-                    <v-alert type="info" variant="tonal" density="compact">
-                      {{ execution.comment }}
-                    </v-alert>
-                  </div>
-
                   
+                  <!-- Connecting Line -->
+                  <div 
+                    v-if="index < process.stepExecutions.length - 1"
+                    class="step-connector"
+                    :class="getConnectorClass(execution)"
+                  />
+                </div>
 
-                  <!-- Indicadores especiais -->
-                  <div v-if="execution.step.requiresSignature || execution.step.allowAttachment" class="mt-3">
-                    <div class="d-flex flex-wrap gap-1">
-                      <v-chip v-if="execution.step.requiresSignature" size="x-small" color="error" variant="tonal">
-                        <v-icon start size="12">mdi-draw-pen</v-icon>
-                        Requer Assinatura
-                      </v-chip>
-                      <v-chip v-if="execution.step.allowAttachment" size="x-small" color="info" variant="tonal">
-                        <v-icon start size="12">mdi-paperclip</v-icon>
-                        Permite Anexos
-                      </v-chip>
+                <!-- Step Content -->
+                <div class="step-content">
+                  <v-card 
+                    class="step-card"
+                    :class="getStepCardClass(execution)"
+                    :elevation="execution.status === 'IN_PROGRESS' ? 8 : 2"
+                  >
+                    <!-- Card Header -->
+                    <div class="step-card-header" :class="getStepHeaderClass(execution)">
+                      <div class="d-flex align-center justify-space-between">
+                        <div class="d-flex align-center">
+                          <v-icon 
+                            :color="execution.status === 'IN_PROGRESS' ? 'white' : getStepTypeColor(execution.step.type)" 
+                            class="mr-3" 
+                            size="24"
+                          >
+                            {{ getStepTypeIcon(execution.step.type) }}
+                          </v-icon>
+                          
+                          <div>
+                            <h4 class="step-title" :class="execution.status === 'IN_PROGRESS' ? 'text-white' : ''">
+                              {{ execution.step.name }}
+                            </h4>
+                            <p v-if="execution.step.description" class="step-subtitle" :class="execution.status === 'IN_PROGRESS' ? 'text-white' : 'text-medium-emphasis'">
+                              {{ execution.step.description }}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div class="step-status-badge">
+                          <v-chip 
+                            size="small" 
+                            :color="getExecutionColor(execution)" 
+                            :variant="execution.status === 'IN_PROGRESS' ? 'flat' : 'tonal'"
+                          >
+                            <v-icon start size="16">{{ getExecutionIcon(execution) }}</v-icon>
+                            {{ getExecutionStatusText(execution.status) }}
+                          </v-chip>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </v-card-text>
 
-                <!-- Actions para etapa em progresso -->
-                <v-card-actions v-if="canExecuteStep(execution)">
-                  <v-spacer />
-                  <v-btn color="primary" variant="elevated" @click="executeStep(execution)">
-                    <v-icon start>mdi-play</v-icon>
-                    Executar Etapa
-                  </v-btn>
-                </v-card-actions>
-              </v-card>
-            </v-timeline-item>
-          </v-timeline>
+                    <!-- Card Body -->
+                    <div class="step-card-body pa-4">
+                      <!-- Informações do Responsável -->
+                      <div class="step-info-grid">
+                        <div class="info-item">
+                          <v-icon size="18" color="primary" class="mr-2">mdi-account-check</v-icon>
+                          <div>
+                            <span class="info-label">Responsável</span>
+                            <span class="info-value">{{ getResponsibleName(execution) }}</span>
+                          </div>
+                        </div>
+
+                        <!-- Executor -->
+                        <div v-if="execution.executor" class="info-item">
+                          <v-icon size="18" color="success" class="mr-2">mdi-account-edit</v-icon>
+                          <div>
+                            <span class="info-label">Executado por</span>
+                            <span class="info-value">{{ execution.executor.name }}</span>
+                          </div>
+                        </div>
+
+                        <!-- Data de conclusão -->
+                        <div v-if="execution.completedAt" class="info-item">
+                          <v-icon size="18" color="info" class="mr-2">mdi-clock-check</v-icon>
+                          <div>
+                            <span class="info-label">Concluído em</span>
+                            <span class="info-value">{{ formatDate(execution.completedAt) }}</span>
+                          </div>
+                        </div>
+
+                        <!-- Ação tomada -->
+                        <div v-if="execution.action" class="info-item">
+                          <v-icon size="18" color="warning" class="mr-2">mdi-gesture-tap</v-icon>
+                          <div>
+                            <span class="info-label">Ação</span>
+                            <v-chip size="x-small" class="ml-1" variant="tonal">{{ execution.action }}</v-chip>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Comentário -->
+                      <div v-if="execution.comment" class="step-comment mt-4">
+                        <div class="comment-header mb-2">
+                          <v-icon size="16" color="primary" class="mr-1">mdi-comment-text</v-icon>
+                          <span class="text-caption font-weight-medium">Comentário</span>
+                        </div>
+                        <div class="comment-body">
+                          {{ execution.comment }}
+                        </div>
+                      </div>
+
+                      <!-- Indicadores especiais -->
+                      <div v-if="execution.step.requiresSignature || execution.step.allowAttachment || hasStepAttachments(execution)" class="step-features mt-4">
+                        <div class="d-flex flex-wrap gap-2">
+                          <v-chip v-if="execution.step.requiresSignature" size="x-small" color="error" variant="tonal">
+                            <v-icon start size="12">mdi-draw-pen</v-icon>
+                            Requer Assinatura
+                          </v-chip>
+                          <v-chip v-if="execution.step.allowAttachment" size="x-small" color="info" variant="tonal">
+                            <v-icon start size="12">mdi-paperclip</v-icon>
+                            Permite Anexos
+                          </v-chip>
+                          <v-chip v-if="hasStepAttachments(execution)" size="x-small" color="success" variant="tonal">
+                            <v-icon start size="12">mdi-attachment</v-icon>
+                            {{ getStepAttachmentsCount(execution) }} anexo(s)
+                          </v-chip>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Actions para etapa em progresso -->
+                    <div v-if="canExecuteStep(execution)" class="step-card-actions pa-4 pt-0">
+                      <v-btn 
+                        color="primary" 
+                        variant="elevated" 
+                        block
+                        size="large"
+                        @click="executeStep(execution)"
+                        class="execute-button"
+                      >
+                        <v-icon start>mdi-play-circle</v-icon>
+                        Executar Esta Etapa
+                      </v-btn>
+                    </div>
+                  </v-card>
+                </div>
+              </div>
+            </div>
+          </div>
         </v-card>
       </v-col>
     </v-row>
 
-    <!-- ✅ Modal de anexos -->
-    <AttachmentModal
-      v-model="attachmentModal"
-      :attachments="selectedAttachments"
+    <!-- ✅ NOVO: Modal específico para arquivos de campo -->
+    <FieldFileModal
+      v-model="fieldFileModal"
+      :file-data="selectedFieldFile"
+      :field-info="selectedField"
     />
   </div>
 
@@ -399,12 +398,6 @@
       Voltar
     </v-btn>
   </div>
-  <!-- Modal de visualização de anexos -->
-  <AttachmentModal
-    v-model="modalOpen"
-    :attachments="modalAttachments"
-    :title="modalTitle"
-  />
 </template>
 
 <script setup>
@@ -417,9 +410,7 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/pt-br'
 
-// ✅ Importar componentes de anexos
-import AttachmentButton from '@/components/AttachmentButton.vue'
-import AttachmentModal from '@/components/AttachmentModal.vue'
+// Importar componente de modal de arquivo de campo
 import FieldFileModal from '@/components/FieldFileModal.vue'
 
 dayjs.extend(relativeTime)
@@ -431,8 +422,6 @@ const authStore = useAuthStore()
 const processStore = useProcessStore()
 
 // Estado
-const attachmentModal = ref(false)
-const selectedAttachments = ref([])
 const fieldFileModal = ref(false)
 const selectedFieldFile = ref(null)
 const selectedField = ref(null)
@@ -476,7 +465,7 @@ const estimatedCompletion = computed(() => {
   return dayjs().add(estimatedDays, 'day').format('DD/MM/YYYY')
 })
 
-// ✅ COMPUTED COMPLETAMENTE REFATORADO para campos de arquivo
+// Computed para campos de arquivo
 const fileFields = computed(() => {
   if (!process.value?.processType?.formFields) return []
   return process.value.processType.formFields.filter(field => field.type === 'FILE')
@@ -498,7 +487,7 @@ const formattedFormData = computed(() => {
     const label = field?.label || key
     const value = formData[key]
 
-    // ✅ CRÍTICO: Pular campos de arquivo (serão mostrados separadamente)
+    // Pular campos de arquivo (serão mostrados separadamente)
     if (field?.type === 'FILE') return
 
     if (value !== null && value !== undefined && value !== '') {
@@ -509,7 +498,7 @@ const formattedFormData = computed(() => {
   return formatted
 })
 
-// Métodos auxiliares
+// Métodos auxiliares de status
 function getStatusColor(status) {
   const colors = {
     DRAFT: 'grey',
@@ -530,6 +519,51 @@ function getStatusText(status) {
     REJECTED: 'Rejeitado'
   }
   return texts[status] || status
+}
+
+// ✅ MÉTODOS DE ESTILO PARA WORKFLOW PROFISSIONAL
+function getStepClass(execution, index) {
+  const classes = ['workflow-step']
+  if (execution.status === 'IN_PROGRESS') classes.push('step-active')
+  if (execution.status === 'COMPLETED') classes.push('step-completed')
+  if (execution.status === 'REJECTED') classes.push('step-rejected')
+  if (index === process.value.stepExecutions.length - 1) classes.push('step-last')
+  return classes.join(' ')
+}
+
+function getStepIndicatorClass(execution) {
+  const classes = ['step-indicator-circle']
+  switch (execution.status) {
+    case 'COMPLETED':
+      classes.push('indicator-completed')
+      break
+    case 'IN_PROGRESS':
+      classes.push('indicator-active')
+      break
+    case 'REJECTED':
+      classes.push('indicator-rejected')
+      break
+    default:
+      classes.push('indicator-pending')
+  }
+  return classes.join(' ')
+}
+
+function getConnectorClass(execution) {
+  return execution.status === 'COMPLETED' ? 'connector-completed' : 'connector-pending'
+}
+
+function getStepCardClass(execution) {
+  const classes = ['elevation-transition']
+  if (execution.status === 'IN_PROGRESS') classes.push('card-active')
+  if (execution.status === 'COMPLETED') classes.push('card-completed')
+  return classes.join(' ')
+}
+
+function getStepHeaderClass(execution) {
+  const classes = ['step-header']
+  if (execution.status === 'IN_PROGRESS') classes.push('header-active')
+  return classes.join(' ')
 }
 
 function getExecutionColor(execution) {
@@ -623,6 +657,15 @@ function canExecuteStep(execution) {
   return false
 }
 
+// ✅ MÉTODOS PARA ANEXOS DAS ETAPAS
+function hasStepAttachments(execution) {
+  return execution.attachments && execution.attachments.length > 0
+}
+
+function getStepAttachmentsCount(execution) {
+  return execution.attachments ? execution.attachments.length : 0
+}
+
 function formatDate(date) {
   return dayjs(date).format('DD/MM/YYYY HH:mm')
 }
@@ -631,56 +674,24 @@ function formatTimeAgo(date) {
   return dayjs(date).fromNow()
 }
 
-
-
-// ✅ Modal de visualização de anexos
-const modalOpen = ref(false)
-const modalTitle = ref('Anexos do Processo')
-const modalAttachments = ref([])
-// Opcional: índice inicial para navegação
-const modalStartIndex = ref(0)
-
-// Monta lista de anexos a partir de um campo específico
-function buildAttachmentsForField(field) {
-  const data = getFieldFileData(field)
-  if (!data) return []
-  const items = Array.isArray(data) ? data : [data]
-  return items
-    .filter(it => it && it.attachmentId)
-    .map(it => ({
-      id: it.attachmentId,
-      originalName: it.originalName || 'Arquivo',
-      mimeType: it.mimeType || 'application/octet-stream',
-      size: it.size || 0,
-      createdAt: it.createdAt || new Date().toISOString(),
-      isSigned: Boolean(it.isSigned)
-    }))
-}
-
-function openAttachmentModal(field, index = 0) {
-  modalAttachments.value = buildAttachmentsForField(field)
-  modalStartIndex.value = index
-  modalTitle.value = `Anexos - ${field.label}`
-  modalOpen.value = true
-}
-// ✅ MÉTODOS COMPLETAMENTE REFATORADOS para manipular arquivos dos campos
+// Métodos para campos de arquivo
 function getFieldFileData(field) {
   const formData = process.value?.formData
   if (!formData || !formData[field.name]) return null
   
   const fieldData = formData[field.name]
   
-  // ✅ SUPORTE: Campo único (objeto AttachmentMeta)
+  // Campo único (objeto AttachmentMeta)
   if (typeof fieldData === 'object' && !Array.isArray(fieldData) && fieldData.attachmentId) {
     return fieldData
   }
   
-  // ✅ SUPORTE: Campo múltiplo (array de AttachmentMeta)
+  // Campo múltiplo (array de AttachmentMeta)
   if (Array.isArray(fieldData)) {
     return fieldData.filter(item => item && item.attachmentId)
   }
   
-  // ✅ COMPATIBILIDADE: Se é string (ID direto - formato legado)
+  // Compatibilidade: Se é string (ID direto - formato legado)
   if (typeof fieldData === 'string') {
     return {
       attachmentId: fieldData,
@@ -691,12 +702,9 @@ function getFieldFileData(field) {
   }
   
   return null
-
 }
 
-
-
-// ✅ NOVO: Abrir modal específico para arquivo de campo
+// Abrir modal específico para arquivo de campo
 function openFieldFileModal(field, index = 0) {
   const fieldData = getFieldFileData(field)
   let fileData = fieldData
@@ -712,6 +720,7 @@ function openFieldFileModal(field, index = 0) {
     fieldFileModal.value = true
   }
 }
+
 async function downloadFieldFile(field, index = 0) {
   const fieldData = getFieldFileData(field)
   let fileData = fieldData
@@ -751,7 +760,6 @@ async function downloadFieldFile(field, index = 0) {
     console.error('Error downloading field file:', error)
     window.showSnackbar?.('Erro ao baixar arquivo', 'error')
   }
-
 }
 
 function getFileIcon(mimeType) {
@@ -835,15 +843,11 @@ onMounted(async () => {
   gap: 8px;
 }
 
-.v-timeline-item {
-  padding-bottom: 24px;
-}
-
 .max-width{
   max-width: 610px;
 }
 
-/* ✅ Estilos para links de arquivo */
+
 .file-link {
   cursor: pointer;
   color: rgb(var(--v-theme-primary));
@@ -854,5 +858,341 @@ onMounted(async () => {
 
 .file-link:hover {
   text-decoration-color: rgb(var(--v-theme-primary));
+}
+
+
+.workflow-timeline-card {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.workflow-container {
+  background: linear-gradient(135deg, rgba(25, 118, 210, 0.02), rgba(66, 165, 245, 0.01));
+  border-radius: 0 0 16px 16px;
+}
+
+.workflow-steps {
+  position: relative;
+}
+
+.workflow-step {
+  display: flex;
+  margin-bottom: 32px;
+  position: relative;
+}
+
+.workflow-step.step-last {
+  margin-bottom: 0;
+}
+
+
+.step-indicator {
+  position: relative;
+  margin-right: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 2;
+}
+
+.step-number {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+}
+
+.step-text {
+  color: white;
+  font-weight: 700;
+}
+
+.indicator-completed {
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  border: 3px solid #e8f5e8;
+}
+
+.indicator-active {
+  background: linear-gradient(135deg, #FF9800, #f57c00);
+  border: 3px solid #fff3e0;
+  animation: pulse 2s infinite;
+}
+
+.indicator-rejected {
+  background: linear-gradient(135deg, #f44336, #d32f2f);
+  border: 3px solid #ffebee;
+}
+
+.indicator-pending {
+  background: linear-gradient(135deg, #9E9E9E, #757575);
+  border: 3px solid #f5f5f5;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 0 rgba(255, 152, 0, 0.7);
+  }
+  70% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 10px rgba(255, 152, 0, 0);
+  }
+  100% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 0 rgba(255, 152, 0, 0);
+  }
+}
+
+
+.step-connector {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 32px;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+
+.connector-completed {
+  background: linear-gradient(180deg, #4CAF50, #45a049);
+}
+
+.connector-pending {
+  background: linear-gradient(180deg, #e0e0e0, #bdbdbd);
+}
+
+
+.step-content {
+  flex: 1;
+  max-width: calc(100% - 72px);
+}
+
+.step-card {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.card-active {
+  border-color: rgba(255, 152, 0, 0.3);
+  box-shadow: 0 8px 24px rgba(255, 152, 0, 0.15);
+}
+
+.card-completed {
+  border-color: rgba(76, 175, 80, 0.3);
+  background: rgba(76, 175, 80, 0.02);
+}
+
+.step-card-header {
+  padding: 20px 24px;
+  background: white;
+  transition: all 0.3s ease;
+}
+
+.header-active {
+  background: linear-gradient(135deg, #FF9800, #f57c00);
+  color: white;
+}
+
+.step-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.step-subtitle {
+  font-size: 0.875rem;
+  margin: 4px 0 0 0;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+.step-status-badge {
+  flex-shrink: 0;
+}
+
+.step-card-body {
+  background: white;
+}
+
+.step-info-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(25, 118, 210, 0.04);
+  border-radius: 12px;
+  border: 1px solid rgba(25, 118, 210, 0.1);
+}
+
+.info-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-value {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.87);
+  margin-top: 2px;
+}
+
+
+.step-comment {
+  background: rgba(33, 150, 243, 0.04);
+  border: 1px solid rgba(33, 150, 243, 0.12);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+}
+
+.comment-body {
+  background: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border-left: 4px solid rgb(var(--v-theme-primary));
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: rgba(0, 0, 0, 0.8);
+}
+
+
+.step-features {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding-top: 16px;
+}
+
+.step-card-actions {
+  background: rgba(25, 118, 210, 0.02);
+  border-top: 1px solid rgba(25, 118, 210, 0.1);
+}
+
+.execute-button {
+  border-radius: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.25px;
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+}
+
+.execute-button:hover {
+  box-shadow: 0 6px 16px rgba(25, 118, 210, 0.4);
+  transform: translateY(-1px);
+}
+
+
+@media (max-width: 768px) {
+  .workflow-step {
+    flex-direction: column;
+    margin-bottom: 24px;
+  }
+  
+  .step-indicator {
+    margin-right: 0;
+    margin-bottom: 16px;
+    flex-direction: row;
+    justify-content: center;
+  }
+  
+  .step-connector {
+    display: none;
+  }
+  
+  .step-content {
+    max-width: 100%;
+  }
+  
+  .step-info-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .info-item {
+    padding: 10px;
+  }
+  
+  .step-number {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+  
+  .step-title {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .workflow-container {
+    padding: 16px;
+  }
+  
+  .step-card-header {
+    padding: 16px;
+  }
+  
+  .step-card-body {
+    padding: 16px;
+  }
+  
+  .step-card-actions {
+    padding: 16px;
+  }
+}
+
+
+.elevation-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.step-card:hover {
+  transform: translateY(-2px);
+}
+
+.card-active:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(255, 152, 0, 0.2);
+}
+
+
+.workflow-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.workflow-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.workflow-container::-webkit-scrollbar-thumb {
+  background: rgba(25, 118, 210, 0.3);
+  border-radius: 3px;
+}
+
+.workflow-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(25, 118, 210, 0.5);
 }
 </style>
