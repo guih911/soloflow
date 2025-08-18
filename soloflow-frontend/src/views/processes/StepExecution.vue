@@ -1,6 +1,5 @@
 <template>
   <div v-if="stepExecution && process" class="step-execution-container">
-    <!-- ✅ HEADER PROFISSIONAL -->
     <div class="execution-header mb-8">
       <div class="d-flex align-center">
         <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" class="mr-4" size="large" />
@@ -25,7 +24,6 @@
             </div>
           </div>
           
-          <!-- Step Info Chips -->
           <div class="d-flex flex-wrap gap-2 mt-3">
             <v-chip size="small" :color="getStepTypeColor(stepExecution.step.type)" variant="tonal">
               <v-icon start size="16">{{ getStepTypeIcon(stepExecution.step.type) }}</v-icon>
@@ -52,10 +50,8 @@
     </div>
 
     <v-row>
-      <!-- ✅ FORMULÁRIO DE EXECUÇÃO PRINCIPAL -->
       <v-col cols="12" lg="8">
         <v-card class="execution-form-card mb-6" elevation="4">
-          <!-- Card Header -->
           <div class="form-card-header pa-6">
             <div class="d-flex align-center">
               <v-icon color="primary" size="32" class="mr-3">mdi-clipboard-edit</v-icon>
@@ -70,9 +66,49 @@
           
           <v-divider />
 
-          <!-- Card Content -->
           <div class="form-card-content pa-6">
-            <!-- Descrição da Etapa -->
+            <v-alert
+              v-if="stepExecution.step.instructions"
+              type="info"
+              variant="tonal"
+              class="mb-6"
+              rounded="lg"
+            >
+              <v-icon start>mdi-text-box</v-icon>
+              <div class="ml-2">
+                <div class="font-weight-medium mb-1">Instruções para Execução</div>
+                <div class="instructions-text">{{ stepExecution.step.instructions }}</div>
+              </div>
+            </v-alert>
+
+            <v-alert
+              v-if="slaStatus.isOverdue"
+              type="error"
+              variant="tonal"
+              class="mb-6"
+              rounded="lg"
+            >
+              <v-icon start>mdi-clock-alert</v-icon>
+              <div class="ml-2">
+                <div class="font-weight-medium mb-1">⚠️ Etapa em Atraso</div>
+                <div>Prazo venceu {{ slaStatus.overdueText }}. Tempo limite: {{ slaStatus.deadline }}</div>
+              </div>
+            </v-alert>
+
+            <v-alert
+              v-else-if="slaStatus.hasDeadline && slaStatus.isNearDeadline"
+              type="warning"
+              variant="tonal"
+              class="mb-6"
+              rounded="lg"
+            >
+              <v-icon start>mdi-clock-outline</v-icon>
+              <div class="ml-2">
+                <div class="font-weight-medium mb-1">Prazo Próximo do Vencimento</div>
+                <div>Tempo restante: {{ slaStatus.remainingText }}. Prazo: {{ slaStatus.deadline }}</div>
+              </div>
+            </v-alert>
+
             <v-alert
               v-if="stepExecution.step.description"
               type="info"
@@ -87,9 +123,7 @@
               </div>
             </v-alert>
 
-            <!-- Formulário Principal -->
             <v-form ref="form" v-model="valid" class="execution-form">
-              <!-- Seção de Ações -->
               <div v-if="availableActions.length > 0" class="form-section mb-6">
                 <div class="section-header mb-4">
                   <h3 class="text-h6 font-weight-bold d-flex align-center">
@@ -129,7 +163,6 @@
                 </v-card>
               </div>
 
-              <!-- Seção de Comentário -->
               <div class="form-section mb-6">
                 <div class="section-header mb-4">
                   <h3 class="text-h6 font-weight-bold d-flex align-center">
@@ -161,7 +194,6 @@
                 />
               </div>
 
-              <!-- Seção de Anexos -->
               <div v-if="stepExecution.step.allowAttachment" class="form-section">
                 <div class="section-header mb-4">
                   <h3 class="text-h6 font-weight-bold d-flex align-center">
@@ -183,7 +215,6 @@
                   </p>
                 </div>
 
-                <!-- Upload Area -->
                 <v-card variant="outlined" class="attachment-upload-area mb-4">
                   <v-card-text class="pa-6 text-center">
                     <v-btn
@@ -217,7 +248,6 @@
                   </v-card-text>
                 </v-card>
 
-                <!-- Lista de Anexos -->
                 <div v-if="attachments.length > 0" class="attachments-list">
                   <v-card variant="outlined">
                     <v-card-title class="text-subtitle-1 pa-4">
@@ -287,7 +317,6 @@
                   </v-card>
                 </div>
 
-                <!-- Alert de Assinatura -->
                 <v-alert
                   v-if="stepExecution.step.requiresSignature"
                   type="warning"
@@ -305,7 +334,6 @@
             </v-form>
           </div>
 
-          <!-- Card Actions -->
           <v-divider />
           
           <div class="form-card-actions pa-6">
@@ -346,9 +374,7 @@
         </v-card>
       </v-col>
 
-      <!-- ✅ SIDEBAR COM INFORMAÇÕES CONTEXTUAIS -->
       <v-col cols="12" lg="4">
-        <!-- Informações da Etapa -->
         <v-card class="info-card mb-4" elevation="2">
           <v-card-title class="d-flex align-center pa-4">
             <v-icon color="primary" class="mr-2">mdi-information-outline</v-icon>
@@ -393,7 +419,6 @@
           </v-card-text>
         </v-card>
 
-        <!-- Histórico do Processo -->
         <v-card class="history-card" elevation="2">
           <v-card-title class="d-flex align-center pa-4">
             <v-icon color="primary" class="mr-2">mdi-history</v-icon>
@@ -441,7 +466,6 @@
       </v-col>
     </v-row>
 
-    <!-- ✅ DIALOG DE ASSINATURA DIGITAL PROFISSIONAL -->
     <v-dialog v-model="signatureDialog" max-width="700" persistent>
       <v-card class="signature-dialog-card" rounded="lg">
         <v-card-title class="d-flex align-center pa-6">
@@ -469,7 +493,6 @@
           </v-tabs>
 
           <v-window v-model="signatureTab">
-            <!-- Assinatura por Desenho -->
             <v-window-item value="draw">
               <v-card variant="outlined" class="signature-canvas-container">
                 <v-card-text class="pa-4 text-center">
@@ -493,7 +516,6 @@
               </v-card>
             </v-window-item>
 
-            <!-- Assinatura por Texto -->
             <v-window-item value="text">
               <v-text-field
                 v-model="textSignature"
@@ -555,7 +577,6 @@
     </v-dialog>
   </div>
 
-  <!-- Loading State -->
   <div v-else-if="loading" class="loading-container">
     <div class="text-center py-12">
       <v-progress-circular indeterminate color="primary" size="64" width="6" />
@@ -624,6 +645,46 @@ const availableActions = computed(() => {
 const completedExecutions = computed(() => {
   if (!process.value) return []
   return process.value.stepExecutions.filter(e => e.status === 'COMPLETED')
+})
+
+// 🆕 Computed para status do SLA
+const slaStatus = computed(() => {
+  if (!stepExecution.value?.dueAt) {
+    return {
+      hasDeadline: false,
+      isOverdue: false,
+      isNearDeadline: false,
+      remainingText: '',
+      overdueText: '',
+      deadline: ''
+    }
+  }
+  
+  const now = dayjs()
+  const dueAt = dayjs(stepExecution.value.dueAt)
+  const deadline = dueAt.format('DD/MM/YYYY HH:mm')
+  
+  const isOverdue = now.isAfter(dueAt)
+  const diffHours = Math.abs(dueAt.diff(now, 'hours'))
+  const isNearDeadline = !isOverdue && diffHours <= 4 // 4 horas antes do prazo
+  
+  let remainingText = ''
+  let overdueText = ''
+  
+  if (isOverdue) {
+    overdueText = dueAt.fromNow()
+  } else {
+    remainingText = dueAt.fromNow()
+  }
+  
+  return {
+    hasDeadline: true,
+    isOverdue,
+    isNearDeadline,
+    remainingText,
+    overdueText,
+    deadline
+  }
 })
 
 const isCommentRequired = computed(() => {
@@ -1381,5 +1442,12 @@ onMounted(async () => {
 
 .history-content::-webkit-scrollbar-thumb:hover {
   background: rgba(25, 118, 210, 0.5);
+}
+
+/* Instructions text formatting */
+.instructions-text {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 0.95rem;
 }
 </style>

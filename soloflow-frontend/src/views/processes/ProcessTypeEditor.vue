@@ -1,6 +1,5 @@
 <template>
   <div>
-    <!-- Header -->
     <div class="d-flex align-center mb-6">
       <v-btn
         icon="mdi-arrow-left"
@@ -18,7 +17,6 @@
     </div>
 
     <v-form ref="form" v-model="valid">
-      <!-- Tabs para organizar as configurações -->
       <v-tabs v-model="activeTab" class="mb-6">
         <v-tab value="basic">
           <v-icon start>mdi-information</v-icon>
@@ -41,7 +39,6 @@
       </v-tabs>
 
       <v-window v-model="activeTab">
-        <!-- Tab: Informações Básicas -->
         <v-window-item value="basic">
           <v-card>
             <v-card-text>
@@ -67,7 +64,6 @@
           </v-card>
         </v-window-item>
 
-        <!-- Tab: Campos do Formulário -->
         <v-window-item value="fields">
           <v-card>
             <v-card-title class="d-flex align-center justify-space-between">
@@ -96,7 +92,6 @@
             </v-card-text>
 
             <v-list v-else lines="three">
-              <!-- Lista de campos sem draggable temporariamente -->
               <template v-for="(field, index) in formData.formFields" :key="field.tempId || index">
                 <v-list-item class="px-4 py-3">
                   <template v-slot:prepend>
@@ -149,7 +144,6 @@
           </v-card>
         </v-window-item>
 
-        <!-- Tab: Etapas do Processo -->
         <v-window-item value="steps">
           <v-card>
             <v-card-title class="d-flex align-center justify-space-between">
@@ -178,7 +172,6 @@
             </v-card-text>
 
             <v-list v-else lines="three">
-              <!-- Lista de steps sem draggable temporariamente -->
               <template v-for="(step, index) in formData.steps" :key="step.tempId || index">
                 <v-list-item class="px-4 py-3">
                   <template v-slot:prepend>
@@ -199,6 +192,14 @@
                     <div v-if="step.assignedToSectorId || step.assignedToUserId">
                       <v-icon size="16">mdi-account-check</v-icon>
                       Responsável: {{ getResponsibleName(step) }}
+                    </div>
+                    <div v-if="step.slaHours" class="mt-1">
+                      <v-icon size="16">mdi-clock-outline</v-icon>
+                      SLA: {{ formatSlaText(step.slaHours) }}
+                    </div>
+                    <div v-if="step.instructions" class="mt-1">
+                      <v-icon size="16">mdi-text-box</v-icon>
+                      Instruções: {{ step.instructions.substring(0, 50) }}{{ step.instructions.length > 50 ? '...' : '' }}
                     </div>
                     <div class="mt-1">
                       <v-chip v-if="step.allowAttachment" size="x-small" class="mr-1">
@@ -238,7 +239,6 @@
         </v-window-item>
       </v-window>
 
-      <!-- Ações -->
       <div class="d-flex justify-end mt-6 gap-2">
         <v-btn variant="text" @click="goBack">
           Cancelar
@@ -255,7 +255,6 @@
       </div>
     </v-form>
 
-    <!-- Dialog de Campo de Formulário -->
     <v-dialog v-model="fieldDialog" max-width="800" persistent>
       <v-card>
         <v-card-title>
@@ -342,7 +341,6 @@
       </v-card>
     </v-dialog>
 
-    <!-- Dialog Simples de Etapa (temporário) -->
     <v-dialog v-model="stepDialog" max-width="600" persistent>
       <v-card>
         <v-card-title>
@@ -454,6 +452,8 @@ const stepData = ref({
   name: '',
   description: '',
   type: 'INPUT',
+  instructions: '',
+  slaHours: null,
   allowAttachment: false,
   requiresSignature: false,
   requireAttachment: false,
@@ -566,6 +566,14 @@ function getResponsibleName(step) {
     return sector?.name || 'Setor'
   }
   return 'Não definido'
+}
+
+// 🆕 Formatar texto do SLA
+function formatSlaText(hours) {
+  if (hours <= 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  const remainingHours = hours % 24
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days} dia(s)`
 }
 
 // Métodos - Campos
@@ -686,6 +694,8 @@ function resetStepData() {
   stepData.value = {
     name: '',
     description: '',
+    instructions: '',
+    slaHours: null,
     type: 'INPUT',
     allowAttachment: false,
     requiresSignature: false,
@@ -711,6 +721,8 @@ function saveStep() {
     ...stepData.value,
     name: stepData.value.name.trim(),
     description: stepData.value.description?.trim() || null,
+    instructions: stepData.value.instructions?.trim() || null,
+    slaHours: stepData.value.slaHours || null,
     tempId: editingStepIndex.value !== null
       ? formData.value.steps[editingStepIndex.value].tempId
       : Date.now() + Math.random(),
@@ -832,6 +844,8 @@ async function loadData() {
         steps: processType.steps?.map((step, index) => ({
           ...step,
           tempId: Date.now() + index,
+          instructions: step.instructions || '',
+          slaHours: step.slaHours || null,
           actions: (() => {
             try {
               return Array.isArray(step.actions) ? step.actions : JSON.parse(step.actions || '[]')
@@ -864,6 +878,8 @@ async function loadData() {
       formData.value = {
         name: '',
         description: '',
+        instructions: '',
+        slaHours: null,
         steps: [],
         formFields: []
       }

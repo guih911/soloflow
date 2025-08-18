@@ -15,12 +15,12 @@
         <v-card-text>
           <v-tabs v-model="tab" class="mb-4">
             <v-tab value="basic">Informações Básicas</v-tab>
+            <v-tab value="instructions">Instruções e SLA</v-tab>
             <v-tab value="attachment">Anexos</v-tab>
             <v-tab value="flow">Fluxo e Condições</v-tab>
           </v-tabs>
 
           <v-window v-model="tab">
-            <!-- Tab: Informações Básicas -->
             <v-window-item value="basic">
               <v-row>
                 <v-col cols="12" md="6">
@@ -98,7 +98,57 @@
               </v-row>
             </v-window-item>
 
-            <!-- Tab: Anexos -->
+            <v-window-item value="instructions">
+              <v-row>
+                <v-col cols="12">
+                  <h3 class="text-h6 mb-4 d-flex align-center">
+                    <v-icon color="primary" class="mr-2">mdi-text-box</v-icon>
+                    Instruções para Execução
+                  </h3>
+                  <v-textarea
+                    v-model="localStepData.instructions"
+                    label="Instruções detalhadas"
+                    placeholder="Descreva como executar esta etapa, quais informações são importantes, critérios de aprovação, etc."
+                    rows="4"
+                    counter="2000"
+                    :rules="[v => !v || v.length <= 2000 || 'Máximo 2000 caracteres']"
+                    hint="Texto que será exibido ao executar esta etapa para orientar o usuário"
+                    persistent-hint
+                  />
+                </v-col>
+                
+                <v-col cols="12" md="6">
+                  <h3 class="text-h6 mb-4 d-flex align-center">
+                    <v-icon color="warning" class="mr-2">mdi-clock-alert</v-icon>
+                    SLA (Prazo)
+                  </h3>
+                  <v-text-field
+                    v-model.number="localStepData.slaHours"
+                    label="Prazo em horas"
+                    type="number"
+                    min="1"
+                    max="8760"
+                    :rules="slaRules"
+                    hint="Tempo limite para conclusão desta etapa (1 a 8760 horas)"
+                    persistent-hint
+                    suffix="horas"
+                  />
+                </v-col>
+                
+                <v-col cols="12" md="6">
+                  <v-alert 
+                    v-if="localStepData.slaHours"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                  >
+                    <v-icon start>mdi-information</v-icon>
+                    Prazo: {{ formatSlaDescription(localStepData.slaHours) }}
+                  </v-alert>
+                </v-col>
+              </v-row>
+            </v-window-item>
+
             <v-window-item value="attachment">
               <v-row>
                 <v-col cols="12">
@@ -156,7 +206,6 @@
               </v-row>
             </v-window-item>
 
-            <!-- Tab: Fluxo e Condições -->
             <v-window-item value="flow">
               <v-row>
                 <v-col cols="12">
@@ -266,6 +315,8 @@ const localStepData = ref({
   name: '',
   description: '',
   type: 'INPUT',
+  instructions: '',
+  slaHours: null,
   allowAttachment: false,
   requiresSignature: false,
   requireAttachment: false,
@@ -296,6 +347,20 @@ const fileTypes = [
 ]
 
 // Computed
+const slaRules = computed(() => {
+  return [
+    v => !v || (v >= 1 && v <= 8760) || 'SLA deve estar entre 1 e 8760 horas',
+    v => !v || Number.isInteger(Number(v)) || 'SLA deve ser um número inteiro'
+  ]
+})
+
+function formatSlaDescription(hours) {
+  if (hours <= 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  const remainingHours = hours % 24
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days} dia(s)`
+}
+
 const attachmentRules = computed(() => {
   return [
     () => {

@@ -67,6 +67,8 @@ export class ProcessTypesService {
               data: {
                 ...step,
                 processTypeId: processType.id,
+                instructions: step.instructions?.trim() || undefined,
+                slaHours: step.slaHours || undefined,
                 order: step.order || (i + 1),
                 actions: step.actions ? JSON.stringify(step.actions) : '[]', // ✅ JSON como string
                 conditions: step.conditions ? JSON.stringify(step.conditions) : undefined, // ✅ Correto
@@ -286,6 +288,8 @@ export class ProcessTypesService {
         data: {
           ...dto,
           processTypeId,
+          instructions: dto.instructions?.trim() || undefined,
+          slaHours: dto.slaHours || undefined,
           actions: dto.actions ? JSON.stringify(dto.actions) : '[]', // ✅ JSON como string
           conditions: dto.conditions ? JSON.stringify(dto.conditions) : undefined, // ✅ JSON como string
           allowedFileTypes: dto.allowedFileTypes ? JSON.stringify(dto.allowedFileTypes) : undefined, // ✅ JSON como string
@@ -324,6 +328,8 @@ export class ProcessTypesService {
         data: {
           ...dto,
           actions: dto.actions ? JSON.stringify(dto.actions) : undefined, // ✅ JSON como string
+          instructions: dto.instructions?.trim() || undefined,
+          slaHours: dto.slaHours || undefined,
           conditions: dto.conditions ? JSON.stringify(dto.conditions) : undefined, // ✅ JSON como string
           allowedFileTypes: dto.allowedFileTypes ? JSON.stringify(dto.allowedFileTypes) : undefined, // ✅ JSON como string
           description: dto.description || undefined, // ✅ null -> undefined

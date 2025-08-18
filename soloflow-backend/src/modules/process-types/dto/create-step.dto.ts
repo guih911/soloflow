@@ -1,4 +1,5 @@
-import { IsString, IsEnum, IsBoolean, IsOptional, IsInt, IsUUID, IsArray, Min, Length, IsObject } from 'class-validator';
+// soloflow-backend/src/modules/process-types/dto/create-step.dto.ts
+import { IsString, IsEnum, IsBoolean, IsOptional, IsInt, IsUUID, IsArray, Min, Max, Length, IsObject } from 'class-validator';
 import { StepType } from '@prisma/client';
 
 export class CreateStepDto {
@@ -9,6 +10,17 @@ export class CreateStepDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 2000, { message: 'Instruções devem ter no máximo 2000 caracteres' })
+  instructions?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1, { message: 'SLA deve ser no mínimo 1 hora' })
+  @Max(8760, { message: 'SLA deve ser no máximo 8760 horas (1 ano)' })
+  slaHours?: number;
 
   @IsEnum(StepType)
   type: StepType;

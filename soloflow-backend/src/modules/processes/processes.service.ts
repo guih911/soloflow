@@ -85,18 +85,25 @@ export class ProcessesService {
     });
 
     // Criar step executions
-    await this.prisma.stepExecution.createMany({
-      data: processType.steps.map((step) => ({
+    const stepExecutionsData = processType.steps.map((step) => {
+      const now = new Date();
+      const dueAt = step.slaHours ? new Date(now.getTime() + (step.slaHours * 60 * 60 * 1000)) : null;
+      
+      return {
         processInstanceId: createdInstance.id,
         stepId: step.id,
-        status: step.order === 1 ? 'IN_PROGRESS' : 'PENDING',
-      })),
+        status: step.order === 1 ? StepExecutionStatus.IN_PROGRESS : StepExecutionStatus.PENDING,
+        dueAt: step.order === 1 ? dueAt : null, 
+      };
+    });
+
+    await this.prisma.stepExecution.createMany({
+      data: stepExecutionsData,
     });
 
     return this.findOne(createdInstance.id, userId);
   }
 
-  // ✅ MÉTODO REFATORADO: Upload de arquivo único para campo específico
   async uploadProcessFile(
     processInstanceId: string,
     fieldName: string,
@@ -810,7 +817,13 @@ export class ProcessesService {
       if (nextStep) {
         await tx.stepExecution.updateMany({
           where: { processInstanceId: stepExecution.processInstanceId, stepId: nextStep.id },
-          data: { status: StepExecutionStatus.IN_PROGRESS },
+          data: { 
+            status: StepExecutionStatus.IN_PROGRESS,
+            // 🆕 Calcular dueAt baseado no SLA da próxima etapa
+            dueAt: nextStep.slaHours ? 
+              new Date(Date.now() + (nextStep.slaHours * 60 * 60 * 1000)) : 
+              null
+          },
         });
         await tx.processInstance.update({
           where: { id: stepExecution.processInstanceId },

@@ -162,8 +162,6 @@ async function main() {
           {
             name: 'Preencher Solicitação',
             description: 'Colaborador preenche os dados da solicitação',
-            instructions: 'Preencha todos os campos obrigatórios com atenção. Certifique-se de que as informações estão corretas antes de enviar.',
-            slaHours: 24,
             type: StepType.INPUT,
             order: 1,
             allowAttachment: false,
@@ -173,8 +171,6 @@ async function main() {
           {
             name: 'Aprovação do Gestor',
             description: 'Gestor imediato aprova ou rejeita a solicitação',
-            instructions: 'Analise cuidadosamente a solicitação. Verifique se está dentro das políticas da empresa e se as informações estão completas.',
-            slaHours: 48,
             type: StepType.APPROVAL,
             order: 2,
             allowAttachment: true,
@@ -189,8 +185,6 @@ async function main() {
           {
             name: 'Validação RH',
             description: 'RH valida disponibilidade e documentação',
-            instructions: 'Confirme a disponibilidade de férias no sistema. Verifique se todos os documentos necessários foram anexados e estão corretos.',
-            slaHours: 72,
             type: StepType.REVIEW,
             order: 3,
             allowAttachment: true,
@@ -266,8 +260,6 @@ async function main() {
           {
             name: 'Criar Solicitação',
             description: 'Preencher dados da compra',
-            instructions: 'Detalhe claramente o item desejado, quantidade e justificativa. Anexe cotações se já possuir.',
-            slaHours: 12,
             type: StepType.INPUT,
             order: 1,
             allowAttachment: true,
@@ -277,8 +269,6 @@ async function main() {
           {
             name: 'Cotação',
             description: 'Anexar cotações dos fornecedores',
-            instructions: 'Obtenha pelo menos 3 cotações de fornecedores diferentes. Anexe os orçamentos em PDF e preencha a planilha comparativa.',
-            slaHours: 120,
             type: StepType.UPLOAD,
             order: 2,
             allowAttachment: true,
@@ -291,8 +281,6 @@ async function main() {
           {
             name: 'Aprovação Financeira',
             description: 'Aprovar orçamento',
-            instructions: 'Analise o orçamento e as cotações anexadas. Verifique se está dentro do budget aprovado e se os fornecedores são homologados.',
-            slaHours: 24,
             type: StepType.APPROVAL,
             order: 3,
             allowAttachment: true,

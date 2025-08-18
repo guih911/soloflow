@@ -1,6 +1,5 @@
 <template>
   <div v-if="process">
-    <!-- Header -->
     <div class="d-flex align-center mb-6">
       <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" />
       <div class="ml-4 flex-grow-1">
@@ -17,16 +16,12 @@
         </p>
       </div>
 
-      <!-- Actions -->
       <div class="d-flex gap-2">
         <v-btn variant="text" @click="refreshProcess" :loading="loading">
           <v-icon start>mdi-refresh</v-icon>
           Atualizar
         </v-btn>
 
-        <!-- ✅ REMOVIDO: Botão de anexos das etapas -->
-
-        <!-- Botão de ação principal baseado no status -->
         <v-btn v-if="currentStepExecution" color="primary" variant="elevated" @click="executeCurrentStep"
           :disabled="!canExecuteCurrentStep">
           <v-icon start>mdi-play</v-icon>
@@ -35,7 +30,6 @@
       </div>
     </div>
 
-    <!-- Progress Bar -->
     <v-card class="mb-6">
       <v-card-text>
         <div class="d-flex align-center justify-space-between mb-2">
@@ -51,7 +45,6 @@
     </v-card>
 
     <v-row>
-      <!-- Informações do Processo -->
       <v-col cols="12" md="4">
         <v-card class="mb-4">
           <v-card-title>
@@ -117,7 +110,6 @@
           </v-card-text>
         </v-card>
 
-        <!-- Dados do Formulário -->
         <v-card v-if="process.formData || hasFormFieldFiles">
           <v-card-title>
             <v-icon class="mr-2">mdi-form-textbox</v-icon>
@@ -125,15 +117,12 @@
           </v-card-title>
           <v-divider />
           <v-list density="compact">
-            <!-- Campos normais (não-arquivo) -->
             <v-list-item v-for="(value, key) in formattedFormData" :key="key">
               <v-list-item-title class="text-caption">{{ key }}</v-list-item-title>
               <v-list-item-subtitle>{{ value }}</v-list-item-subtitle>
             </v-list-item>
             
-            <!-- Campos de arquivo -->
             <template v-for="field in fileFields" :key="field.name">
-              <!-- Campo único -->
               <v-list-item v-if="getFieldFileData(field) && !Array.isArray(getFieldFileData(field))">
                 <v-list-item-title class="text-caption">
                   {{ field.label }}
@@ -156,7 +145,6 @@
                 </v-list-item-subtitle>
               </v-list-item>
               
-              <!-- Campo múltiplo -->
               <template v-else-if="Array.isArray(getFieldFileData(field))">
                 <v-list-item v-for="(fileItem, index) in getFieldFileData(field)" :key="`${field.name}-${index}`">
                   <v-list-item-title class="text-caption">
@@ -182,7 +170,6 @@
               </template>
             </template>
 
-            <!-- Seção especial se não há dados -->
             <v-list-item v-if="!process.formData && !hasFormFieldFiles">
               <v-list-item-title class="text-center text-medium-emphasis">
                 <v-icon class="mr-2">mdi-information-outline</v-icon>
@@ -193,7 +180,6 @@
         </v-card>
       </v-col>
 
-      <!-- ✅ TIMELINE DAS ETAPAS PROFISSIONAL -->
       <v-col cols="12" md="8">
         <v-card class="workflow-timeline-card">
           <v-card-title class="d-flex align-center pa-6">
@@ -208,7 +194,6 @@
           
           <v-divider />
 
-          <!-- ✅ WORKFLOW STEPS PROFISSIONAL -->
           <div class="workflow-container pa-6">
             <div class="workflow-steps">
               <div 
@@ -217,7 +202,6 @@
                 class="workflow-step"
                 :class="getStepClass(execution, index)"
               >
-                <!-- Step Number/Icon -->
                 <div class="step-indicator">
                   <div class="step-number" :class="getStepIndicatorClass(execution)">
                     <v-icon v-if="execution.status === 'COMPLETED'" size="20" color="white">
@@ -232,7 +216,6 @@
                     <span v-else class="step-text">{{ index + 1 }}</span>
                   </div>
                   
-                  <!-- Connecting Line -->
                   <div 
                     v-if="index < process.stepExecutions.length - 1"
                     class="step-connector"
@@ -240,14 +223,12 @@
                   />
                 </div>
 
-                <!-- Step Content -->
                 <div class="step-content">
                   <v-card 
                     class="step-card"
                     :class="getStepCardClass(execution)"
                     :elevation="execution.status === 'IN_PROGRESS' ? 8 : 2"
                   >
-                    <!-- Card Header -->
                     <div class="step-card-header" :class="getStepHeaderClass(execution)">
                       <div class="d-flex align-center justify-space-between">
                         <div class="d-flex align-center">
@@ -282,9 +263,7 @@
                       </div>
                     </div>
 
-                    <!-- Card Body -->
                     <div class="step-card-body pa-4">
-                      <!-- Informações do Responsável -->
                       <div class="step-info-grid">
                         <div class="info-item">
                           <v-icon size="18" color="primary" class="mr-2">mdi-account-check</v-icon>
@@ -294,7 +273,6 @@
                           </div>
                         </div>
 
-                        <!-- Executor -->
                         <div v-if="execution.executor" class="info-item">
                           <v-icon size="18" color="success" class="mr-2">mdi-account-edit</v-icon>
                           <div>
@@ -303,7 +281,6 @@
                           </div>
                         </div>
 
-                        <!-- Data de conclusão -->
                         <div v-if="execution.completedAt" class="info-item">
                           <v-icon size="18" color="info" class="mr-2">mdi-clock-check</v-icon>
                           <div>
@@ -312,7 +289,6 @@
                           </div>
                         </div>
 
-                        <!-- Ação tomada -->
                         <div v-if="execution.action" class="info-item">
                           <v-icon size="18" color="warning" class="mr-2">mdi-gesture-tap</v-icon>
                           <div>
@@ -322,7 +298,27 @@
                         </div>
                       </div>
 
-                      <!-- Comentário -->
+                      <div v-if="getExecutionSlaStatus(execution).hasDeadline" class="step-sla-info mt-3">
+                        <v-alert
+                          v-if="getExecutionSlaStatus(execution).isOverdue"
+                          type="error"
+                          variant="tonal"
+                          density="compact"
+                        >
+                          <v-icon start size="16">mdi-clock-alert</v-icon>
+                          Atrasado: {{ getExecutionSlaStatus(execution).overdueText }}
+                        </v-alert>
+                        <v-alert
+                          v-else-if="getExecutionSlaStatus(execution).isNearDeadline"
+                          type="warning"
+                          variant="tonal"
+                          density="compact"
+                        >
+                          <v-icon start size="16">mdi-clock-outline</v-icon>
+                          Prazo: {{ getExecutionSlaStatus(execution).remainingText }}
+                        </v-alert>
+                      </div>
+
                       <div v-if="execution.comment" class="step-comment mt-4">
                         <div class="comment-header mb-2">
                           <v-icon size="16" color="primary" class="mr-1">mdi-comment-text</v-icon>
@@ -333,7 +329,6 @@
                         </div>
                       </div>
 
-                      <!-- Indicadores especiais -->
                       <div v-if="execution.step.requiresSignature || execution.step.allowAttachment || hasStepAttachments(execution)" class="step-features mt-4">
                         <div class="d-flex flex-wrap gap-2">
                           <v-chip v-if="execution.step.requiresSignature" size="x-small" color="error" variant="tonal">
@@ -352,7 +347,6 @@
                       </div>
                     </div>
 
-                    <!-- Actions para etapa em progresso -->
                     <div v-if="canExecuteStep(execution)" class="step-card-actions pa-4 pt-0">
                       <v-btn 
                         color="primary" 
@@ -375,7 +369,6 @@
       </v-col>
     </v-row>
 
-    <!-- ✅ NOVO: Modal específico para arquivos de campo -->
     <FieldFileModal
       v-model="fieldFileModal"
       :file-data="selectedFieldFile"
@@ -383,13 +376,11 @@
     />
   </div>
 
-  <!-- Loading -->
   <div v-else-if="loading" class="text-center py-12">
     <v-progress-circular indeterminate color="primary" size="64" />
     <p class="text-body-2 text-grey mt-4">Carregando processo...</p>
   </div>
 
-  <!-- Erro -->
   <div v-else class="text-center py-12">
     <v-icon size="64" color="error">mdi-alert-circle</v-icon>
     <p class="text-h6 mt-4 text-error">Processo não encontrado</p>
@@ -672,6 +663,47 @@ function formatDate(date) {
 
 function formatTimeAgo(date) {
   return dayjs(date).fromNow()
+}
+
+// 🆕 Função para calcular status do SLA por execução
+function getExecutionSlaStatus(execution) {
+  if (!execution.dueAt) {
+    return {
+      hasDeadline: false,
+      isOverdue: false,
+      isNearDeadline: false,
+      remainingText: '',
+      overdueText: ''
+    }
+  }
+  
+  const now = dayjs()
+  const dueAt = dayjs(execution.dueAt)
+  
+  const isOverdue = now.isAfter(dueAt)
+  const diffHours = Math.abs(dueAt.diff(now, 'hours'))
+  const isNearDeadline = !isOverdue && diffHours <= 4
+  
+  let remainingText = ''
+  let overdueText = ''
+  
+  if (isOverdue) {
+    overdueText = dueAt.fromNow()
+  } else {
+    remainingText = dueAt.fromNow()
+  }
+  
+  return {
+    hasDeadline: true,
+    isOverdue,
+    isNearDeadline,
+    remainingText,
+    overdueText
+  }
+}
+
+function getCurrentStep(process) {
+  return process.stepExecutions?.find(se => se.status === 'IN_PROGRESS')
 }
 
 // Métodos para campos de arquivo

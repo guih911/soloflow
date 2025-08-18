@@ -181,8 +181,6 @@ model Step {
   id                String     @id @default(uuid())
   name              String
   description       String?
-  instructions      String?    
-  slaHours          Int?       
   type              StepType   @default(INPUT)
   order             Int
   allowAttachment   Boolean    @default(false)
@@ -242,7 +240,6 @@ model StepExecution {
   id               String              @id @default(uuid())
   status           StepExecutionStatus @default(PENDING)
   action           String?
-  dueAt            DateTime?           
   comment          String?
   metadata         Json?
   signedAt         DateTime?
