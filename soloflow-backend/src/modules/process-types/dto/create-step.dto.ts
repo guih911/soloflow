@@ -1,4 +1,4 @@
-// soloflow-backend/src/modules/process-types/dto/create-step.dto.ts
+// soloflow-backend/src/modules/process-types/dto/create-step.dto.ts - MELHORADO
 import { IsString, IsEnum, IsBoolean, IsOptional, IsInt, IsUUID, IsArray, Min, Max, Length, IsObject } from 'class-validator';
 import { StepType } from '@prisma/client';
 
@@ -14,13 +14,19 @@ export class CreateStepDto {
   @IsOptional()
   @IsString()
   @Length(0, 2000, { message: 'Instruções devem ter no máximo 2000 caracteres' })
-  instructions?: string;
+  instructions?: string; // ✅ Texto explicativo para orientar execução
+
+  @IsOptional()
+  @IsInt()
+  @Min(0, { message: 'SLA deve ser maior ou igual a 0 minutos' })
+  @Max(43200, { message: 'SLA deve ser no máximo 43200 minutos (30 dias)' })
+  slaMinutes?: number; // ✅ SLA em minutos para maior precisão
 
   @IsOptional()
   @IsInt()
   @Min(1, { message: 'SLA deve ser no mínimo 1 hora' })
   @Max(8760, { message: 'SLA deve ser no máximo 8760 horas (1 ano)' })
-  slaHours?: number;
+  slaHours?: number; // ✅ Mantido para compatibilidade
 
   @IsEnum(StepType)
   type: StepType;
@@ -73,5 +79,29 @@ export class CreateStepDto {
   @IsObject()
   conditions?: {
     [action: string]: number | 'END' | 'PREVIOUS';
+  };
+
+  // ✅ NOVOS CAMPOS PARA TIPOS ESPECÍFICOS
+  @IsOptional()
+  @IsObject()
+  typeConfig?: {
+    // Para INPUT: campos específicos
+    requiredFields?: string[];
+    validation?: Record<string, any>;
+    
+    // Para APPROVAL: critérios
+    approvalCriteria?: string;
+    requireJustification?: boolean;
+    
+    // Para UPLOAD: configurações de arquivo
+    maxFileSize?: number;
+    acceptedFormats?: string[];
+    
+    // Para SIGNATURE: configurações de assinatura
+    signatureType?: 'digital' | 'electronic';
+    requireCertificate?: boolean;
+    
+    // Para REVIEW: checklist
+    reviewChecklist?: string[];
   };
 }
