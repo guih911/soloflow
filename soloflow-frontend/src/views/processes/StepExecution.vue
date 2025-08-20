@@ -131,8 +131,8 @@
               </template>
               
               <div class="description-content">
-                <div class="font-weight-medium mb-2 text-success">Sobre esta Etapa</div>
-                <div class="text-body-1">{{ stepExecution.step.description }}</div>
+                <div class="font-weight-medium mb-2 text-success"><strong>Orieções para esta Etapa:</strong> {{ stepExecution.step.description }}</div>
+                <div class="text-body-1"></div>
               </div>
             </v-alert>
 
@@ -222,7 +222,7 @@
                       variant="tonal"
                       class="mt-4"
                     >
-                      <v-icon start>mdi-alert</v-icon>
+                      
                       <strong>Atenção:</strong> A reprovação encerrará definitivamente este processo.
                       Certifique-se de adicionar uma justificativa detalhada no comentário.
                     </v-alert>
@@ -1174,8 +1174,8 @@ onMounted(async () => {
 
 /* ✅ APROVAÇÃO ESPECÍFICA */
 .approval-decision-card {
-  border-radius: 16px;
   background: rgba(255, 152, 0, 0.02);
+  border:none
 }
 
 .approval-options {
