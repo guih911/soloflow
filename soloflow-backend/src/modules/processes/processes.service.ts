@@ -739,7 +739,6 @@ export class ProcessesService {
   }
 
 async executeStep(executeDto: ExecuteStepDto, userId: string): Promise<StepExecution> {
-  console.log('🔍 ProcessesService.executeStep called:', { executeDto, userId });
 
   const stepExecution = await this.prisma.stepExecution.findUnique({
     where: { id: executeDto.stepExecutionId },
@@ -754,42 +753,72 @@ async executeStep(executeDto: ExecuteStepDto, userId: string): Promise<StepExecu
   });
 
   if (!stepExecution) {
-    console.log('❌ Step execution not found:', executeDto.stepExecutionId);
+
     throw new NotFoundException('Execução de etapa não encontrada');
   }
 
-  console.log('✅ Step execution found:', {
-    id: stepExecution.id,
-    status: stepExecution.status,
-    stepName: stepExecution.step.name,
-    stepType: stepExecution.step.type
-  });
+
 
   await this.checkExecutePermission(stepExecution, userId);
   
   if (stepExecution.status !== StepExecutionStatus.IN_PROGRESS) {
-    console.log('❌ Step not in progress:', stepExecution.status);
     throw new BadRequestException('Esta etapa não está em progresso');
   }
 
-  // ✅ VALIDAÇÃO DE AÇÃO MELHORADA
-  if (executeDto.action && stepExecution.step.actions) {
-    try {
-      const allowedActions = Array.isArray(stepExecution.step.actions)
-        ? stepExecution.step.actions
-        : JSON.parse(stepExecution.step.actions as any);
-      
-      console.log('🔍 Checking action:', {
-        providedAction: executeDto.action,
-        allowedActions: allowedActions
-      });
-      
-      if (!allowedActions.includes(executeDto.action)) {
-        throw new BadRequestException(`Ação "${executeDto.action}" não permitida. Ações disponíveis: ${allowedActions.join(', ')}`);
+  // ✅ VALIDAÇÃO DE AÇÃO CORRIGIDA PARA APROVAÇÃO
+  if (executeDto.action) {
+    let allowedActions: string[] = [];
+    
+    // ✅ Para etapas de APPROVAL, definir ações padrão se não configuradas
+    if (stepExecution.step.type === 'APPROVAL') {
+      if (stepExecution.step.actions) {
+        try {
+          allowedActions = Array.isArray(stepExecution.step.actions)
+            ? stepExecution.step.actions
+            : JSON.parse(stepExecution.step.actions as any);
+        } catch (parseError) {
+          allowedActions = ['aprovar', 'reprovar'];
+        }
       }
-    } catch (parseError) {
-      console.error('❌ Error parsing actions:', parseError);
-      throw new BadRequestException('Erro ao validar ações disponíveis');
+      
+      // ✅ Se não há ações configuradas para APPROVAL, usar padrão
+      if (!allowedActions || allowedActions.length === 0) {
+        allowedActions = ['aprovar', 'reprovar'];
+      }
+    } else {
+      // ✅ Para outros tipos, usar ações configuradas
+      if (stepExecution.step.actions) {
+        try {
+          allowedActions = Array.isArray(stepExecution.step.actions)
+            ? stepExecution.step.actions
+            : JSON.parse(stepExecution.step.actions as any);
+        } catch (parseError) {
+          console.error('❌ Error parsing actions:', parseError);
+          throw new BadRequestException('Erro ao validar ações disponíveis');
+        }
+      }
+    }
+    
+    console.log('🔍 Action validation:', {
+      providedAction: executeDto.action,
+      allowedActions: allowedActions,
+      stepType: stepExecution.step.type
+    });
+    
+    // ✅ Validar se a ação é permitida
+    if (allowedActions.length > 0 && !allowedActions.includes(executeDto.action)) {
+      throw new BadRequestException(`Ação "${executeDto.action}" não permitida. Ações disponíveis: ${allowedActions.join(', ')}`);
+    }
+  }
+
+  // ✅ VALIDAÇÃO ESPECÍFICA PARA APROVAÇÃO
+  if (stepExecution.step.type === 'APPROVAL') {
+    if (!executeDto.action || !['aprovar', 'reprovar'].includes(executeDto.action)) {
+      throw new BadRequestException('Etapa de aprovação requer ação "aprovar" ou "reprovar"');
+    }
+    
+    if (executeDto.action === 'reprovar' && !executeDto.comment?.trim()) {
+      throw new BadRequestException('Reprovação requer justificativa no comentário');
     }
   }
 
@@ -811,9 +840,26 @@ async executeStep(executeDto: ExecuteStepDto, userId: string): Promise<StepExecu
     }
   }
 
-  console.log('🚀 Starting transaction to execute step...');
+  
+
 
   return this.prisma.$transaction(async (tx) => {
+    // ✅ PROCESSAR DADOS ESPECÍFICOS DO TIPO DE ETAPA
+    let processedMetadata = executeDto.metadata || {};
+
+    // ✅ PROCESSAMENTO ESPECÍFICO PARA APROVAÇÃO
+    if (stepExecution.step.type === 'APPROVAL') {
+      processedMetadata = {
+        ...processedMetadata,
+        approvalResult: executeDto.action,
+        approvalTimestamp: new Date().toISOString(),
+        approvalComment: executeDto.comment,
+        approvalDecision: executeDto.action === 'aprovar' ? 'APPROVED' : 'REJECTED',
+      };
+      
+    
+    }
+
     // ✅ ATUALIZAR EXECUÇÃO DA ETAPA
     const updatedExecution = await tx.stepExecution.update({
       where: { id: executeDto.stepExecutionId },
@@ -821,44 +867,52 @@ async executeStep(executeDto: ExecuteStepDto, userId: string): Promise<StepExecu
         status: StepExecutionStatus.COMPLETED,
         action: executeDto.action,
         comment: executeDto.comment,
-        metadata: executeDto.metadata ?? undefined,
+        metadata: processedMetadata,
         executorId: userId,
         completedAt: new Date(),
       },
     });
 
-    console.log('✅ Step execution updated:', {
-      id: updatedExecution.id,
-      status: updatedExecution.status,
-      action: updatedExecution.action
-    });
+ 
 
     const currentStep = stepExecution.step;
     const allSteps = stepExecution.processInstance.processType.steps;
 
     let nextStepOrder: number | null = null;
     let shouldEnd = false;
+    let finalStatus: ProcessStatus = ProcessStatus.COMPLETED;
 
-    // ✅ LÓGICA DE FLUXO MELHORADA
-    if (currentStep.conditions && executeDto.action) {
+    // ✅ LÓGICA DE FLUXO CORRIGIDA PARA APROVAÇÃO
+    if (stepExecution.step.type === 'APPROVAL') {
+      
+      
+      if (executeDto.action === 'reprovar') {
+        shouldEnd = true;
+        finalStatus = ProcessStatus.REJECTED;
+       
+      } else if (executeDto.action === 'aprovar') {
+        
+        nextStepOrder = currentStep.order + 1;
+        
+      }
+    } else if (currentStep.conditions && executeDto.action) {
+      
       try {
         const conditions = typeof currentStep.conditions === 'string'
           ? JSON.parse(currentStep.conditions)
           : currentStep.conditions;
 
-        console.log('🔍 Processing conditions:', {
-          action: executeDto.action,
-          conditions: conditions
-        });
+  
 
         const condition = conditions[executeDto.action];
         
         if (condition === 'END') {
           shouldEnd = true;
-          console.log('🏁 Flow condition: END');
+          finalStatus = ProcessStatus.COMPLETED;
+        
         } else if (condition === 'PREVIOUS' && currentStep.order > 1) {
           nextStepOrder = currentStep.order - 1;
-          console.log('⬅️ Flow condition: PREVIOUS to step', nextStepOrder);
+        
           
           await tx.stepExecution.updateMany({
             where: { 
@@ -869,18 +923,21 @@ async executeStep(executeDto: ExecuteStepDto, userId: string): Promise<StepExecu
           });
         } else if (typeof condition === 'number') {
           nextStepOrder = condition;
-          console.log('➡️ Flow condition: GOTO step', nextStepOrder);
+          
+        } else {
+          // Fluxo padrão se condição não encontrada
+          nextStepOrder = currentStep.order + 1;
+          
         }
       } catch (conditionError) {
-        console.error('❌ Error processing conditions:', conditionError);
+        
         // Continua com fluxo padrão se houver erro nas condições
+        nextStepOrder = currentStep.order + 1;
       }
-    }
-
-    // ✅ FLUXO PADRÃO SE NÃO HOUVER CONDIÇÕES ESPECIAIS
-    if (!shouldEnd && nextStepOrder === null) {
+    } else {
+      // ✅ FLUXO PADRÃO PARA OUTROS TIPOS SEM CONDIÇÕES
       nextStepOrder = currentStep.order + 1;
-      console.log('➡️ Default flow: next step', nextStepOrder);
+     
     }
 
     const nextStep = nextStepOrder ? allSteps.find(s => s.order === nextStepOrder) : null;
@@ -907,18 +964,15 @@ async executeStep(executeDto: ExecuteStepDto, userId: string): Promise<StepExecu
 
       await tx.processInstance.update({
         where: { id: stepExecution.processInstanceId },
-        data: { currentStepOrder: nextStepOrder ?? undefined },
+        data: { currentStepOrder: nextStepOrder || undefined },
       });
     } else {
       console.log('🏁 Process ending:', {
         shouldEnd,
         hasNextStep: !!nextStep,
-        action: executeDto.action
+        action: executeDto.action,
+        finalStatus: finalStatus
       });
-
-      const finalStatus = shouldEnd || executeDto.action === 'reprovar'
-        ? ProcessStatus.REJECTED
-        : ProcessStatus.COMPLETED;
 
       await tx.processInstance.update({
         where: { id: stepExecution.processInstanceId },

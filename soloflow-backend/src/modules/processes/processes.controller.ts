@@ -158,16 +158,46 @@ export class ProcessesController {
     return this.processesService.getDashboardStats(req.user.id, req.user.companyId);
   }
   // Executar etapa
-
   @Post('execute-step')
 async executeStep(@Body() executeDto: ExecuteStepDto, @Request() req) {
-  console.log('🚀 ExecuteStep called with:', executeDto);
-  console.log('👤 User:', req.user.id);
-  
+  console.log('🚀 ExecuteStep called with:', {
+    executeDto,
+    user: req.user.id,
+    userEmail: req.user.email,
+    timestamp: new Date().toISOString()
+  });
+
+  // ✅ VALIDAÇÃO ADICIONAL NO CONTROLLER
+  if (!executeDto.stepExecutionId) {
+    console.log('❌ Missing stepExecutionId');
+    throw new BadRequestException('stepExecutionId é obrigatório');
+  }
+
+  // Verificar se stepExecutionId é um UUID válido
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(executeDto.stepExecutionId)) {
+    console.log('❌ Invalid stepExecutionId format:', executeDto.stepExecutionId);
+    throw new BadRequestException('stepExecutionId deve ser um UUID válido');
+  }
+
   try {
-    return this.processesService.executeStep(executeDto, req.user.id);
+    console.log('✅ Calling service with validated data');
+    const result = await this.processesService.executeStep(executeDto, req.user.id);
+    
+    console.log('✅ Step executed successfully:', {
+      stepExecutionId: executeDto.stepExecutionId,
+      action: executeDto.action,
+      resultId: result.id
+    });
+    
+    return result;
   } catch (error) {
-    console.error('❌ Error in executeStep controller:', error);
+    console.error('❌ Error in executeStep controller:', {
+      error: error.message,
+      stack: error.stack,
+      executeDto,
+      userId: req.user.id
+    });
     throw error;
   }
 }

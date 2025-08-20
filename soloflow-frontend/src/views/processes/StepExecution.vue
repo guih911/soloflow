@@ -1,4 +1,4 @@
-<!-- StepExecution.vue - CORREÇÃO COMPLETA -->
+<!-- StepExecution.vue - COMPLETO COM CORREÇÕES -->
 
 <template>
   <div v-if="stepExecution && process" class="step-execution-container">
@@ -131,8 +131,8 @@
               </template>
               
               <div class="description-content">
-                <div class="font-weight-medium mb-2 text-success"><strong>Orieções para esta Etapa:</strong> {{ stepExecution.step.description }}</div>
-                <div class="text-body-1"></div>
+                <div class="font-weight-medium mb-2 text-success"><strong>Orientações para esta Etapa:</strong></div>
+                <div class="text-body-1">{{ stepExecution.step.description }}</div>
               </div>
             </v-alert>
 
@@ -222,7 +222,6 @@
                       variant="tonal"
                       class="mt-4"
                     >
-                      
                       <strong>Atenção:</strong> A reprovação encerrará definitivamente este processo.
                       Certifique-se de adicionar uma justificativa detalhada no comentário.
                     </v-alert>
@@ -576,8 +575,6 @@
         </v-card>
       </v-col>
     </v-row>
-
-    <!-- Dialogs mantidos iguais... -->
   </div>
 
   <div v-else-if="loading" class="loading-container">
@@ -590,7 +587,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
 import dayjs from 'dayjs'
@@ -609,7 +606,7 @@ const valid = ref(false)
 const saving = ref(false)
 const attachments = ref([])
 const uploadedAttachments = ref([])
-const instructionsExpanded = ref(false) // ✅ NOVO para expandir instruções
+const instructionsExpanded = ref(false)
 
 const form = ref(null)
 const fileInput = ref(null)
@@ -684,11 +681,15 @@ const slaStatus = computed(() => {
   }
 })
 
-// ✅ VALIDAÇÃO CORRIGIDA
+// ✅ COMPUTED PARA COMENTÁRIO OBRIGATÓRIO CORRIGIDO
 const isCommentRequired = computed(() => {
-  // Comentário obrigatório para aprovação e quando reprovar
-  return stepExecution.value?.step.type === 'APPROVAL' || 
-         formData.value.action === 'reprovar'
+  // ✅ REGRA ESPECÍFICA: Aprovação com reprovação sempre requer comentário
+  if (stepExecution.value?.step.type === 'APPROVAL' && formData.value.action === 'reprovar') {
+    return true
+  }
+  
+  // Para outros tipos, verificar se há regras específicas configuradas
+  return false
 })
 
 const allowedFileTypes = computed(() => {
@@ -706,38 +707,78 @@ const allowedFileTypes = computed(() => {
 
 // ✅ VALIDAÇÃO PRINCIPAL CORRIGIDA
 const canSubmit = computed(() => {
-  if (!valid.value) return false
-  
-  // Para aprovação, deve ter uma ação selecionada
-  if (stepExecution.value?.step.type === 'APPROVAL' && !formData.value.action) {
+  console.log('🔍 Validating canSubmit:', {
+    valid: valid.value,
+    stepType: stepExecution.value?.step.type,
+    action: formData.value.action,
+    comment: formData.value.comment,
+    isCommentRequired: isCommentRequired.value,
+    attachmentsCount: attachments.value.length,
+    requiresAttachment: stepExecution.value?.step.requireAttachment
+  })
+
+  if (!valid.value) {
+    console.log('❌ Form is not valid')
     return false
   }
   
-  // Para outros tipos com ações disponíveis
-  if (stepExecution.value?.step.type !== 'APPROVAL' && 
-      availableActions.value.length > 0 && 
-      !formData.value.action) {
-    return false
-  }
-  
-  // Verificar comentário obrigatório
-  if (isCommentRequired.value && !formData.value.comment?.trim()) {
-    return false
-  }
-  
-  // Verificar anexos obrigatórios
-  if (stepExecution.value?.step.requireAttachment && attachments.value.length === 0) {
-    return false
-  }
-  
-  // Verificar assinaturas obrigatórias
-  if (stepExecution.value?.step.requiresSignature) {
-    const pdfs = attachments.value.filter(f => f.type === 'application/pdf')
-    if (pdfs.length > 0 && !pdfs.every(f => f.signed)) {
+  // ✅ VALIDAÇÃO ESPECÍFICA PARA APROVAÇÃO
+  if (stepExecution.value?.step.type === 'APPROVAL') {
+    // Deve ter uma ação selecionada (aprovar ou reprovar)
+    if (!formData.value.action) {
+      console.log('❌ APPROVAL: No action selected')
+      return false
+    }
+    
+    // Verificar se a ação é válida
+    if (!['aprovar', 'reprovar'].includes(formData.value.action)) {
+      console.log('❌ APPROVAL: Invalid action:', formData.value.action)
+      return false
+    }
+    
+    // Reprovação requer comentário obrigatório
+    if (formData.value.action === 'reprovar' && !formData.value.comment?.trim()) {
+      console.log('❌ APPROVAL: Reproval requires comment')
       return false
     }
   }
   
+  // ✅ PARA OUTROS TIPOS COM AÇÕES DISPONÍVEIS
+  else if (availableActions.value.length > 0) {
+    if (!formData.value.action) {
+      console.log('❌ OTHER: No action selected, but actions available')
+      return false
+    }
+    
+    // Verificar se a ação está nas disponíveis
+    if (!availableActions.value.includes(formData.value.action)) {
+      console.log('❌ OTHER: Action not in available actions')
+      return false
+    }
+  }
+  
+  // ✅ VERIFICAR COMENTÁRIO OBRIGATÓRIO (independente do tipo)
+  if (isCommentRequired.value && !formData.value.comment?.trim()) {
+    console.log('❌ Required comment is missing')
+    return false
+  }
+  
+  // ✅ VERIFICAR ANEXOS OBRIGATÓRIOS
+  if (stepExecution.value?.step.requireAttachment && attachments.value.length === 0) {
+    console.log('❌ Required attachments are missing')
+    return false
+  }
+  
+  // ✅ VERIFICAR ASSINATURAS OBRIGATÓRIAS
+  if (stepExecution.value?.step.requiresSignature) {
+    const pdfs = attachments.value.filter(f => f.type === 'application/pdf')
+    if (pdfs.length > 0 && !pdfs.every(f => f.signed)) {
+      console.log('❌ Required signatures are missing')
+      return false
+    }
+  }
+  
+  console.log('✅ All validations passed')
   return true
 })
 
@@ -781,9 +822,12 @@ function getCommentHelpText() {
 
 function getCommentPlaceholder() {
   if (stepExecution.value?.step.type === 'APPROVAL') {
-    return formData.value.action === 'aprovar'
-      ? 'Ex: Processo analisado e aprovado conforme critérios estabelecidos...'
-      : 'Ex: Processo reprovado devido a inconsistências na documentação...'
+    if (formData.value.action === 'aprovar') {
+      return 'Ex: Processo analisado e aprovado conforme critérios estabelecidos. Documentação está completa e em conformidade...'
+    } else if (formData.value.action === 'reprovar') {
+      return 'Ex: Processo reprovado devido a inconsistências na documentação apresentada. Necessário revisar os seguintes pontos...'
+    }
+    return 'Adicione suas observações sobre a análise realizada...'
   }
   return 'Descreva sua análise, observações ou justificativa para a ação tomada...'
 }
@@ -796,6 +840,11 @@ function getCommentRules() {
   }
   
   rules.push(v => !v || v.length <= 1000 || 'Máximo 1000 caracteres')
+  
+  // ✅ REGRA ESPECÍFICA PARA REPROVAÇÃO
+  if (stepExecution.value?.step.type === 'APPROVAL' && formData.value.action === 'reprovar') {
+    rules.push(v => (v && v.trim().length >= 10) || 'Justificativa deve ter pelo menos 10 caracteres')
+  }
   
   return rules
 }
@@ -930,9 +979,9 @@ function formatTimeAgo(date) {
 function getExecutionStatusMessage() {
   if (stepExecution.value?.step.type === 'APPROVAL') {
     if (formData.value.action === 'aprovar') {
-      return 'Pronto para aprovar este processo'
+      return 'Processo será aprovado e seguirá para próxima etapa'
     } else if (formData.value.action === 'reprovar') {
-      return 'Processo será reprovado e encerrado'
+      return 'Processo será reprovado e encerrado definitivamente'
     }
     return 'Selecione sua decisão de aprovação'
   }
@@ -998,7 +1047,12 @@ function removeFile(index) {
   window.showSnackbar?.(`Arquivo "${fileName}" removido`, 'info')
 }
 
-// ✅ MÉTODO PRINCIPAL CORRIGIDO
+function openSignatureDialog(file, index) {
+  // Implementar dialog de assinatura
+  console.log('Opening signature dialog for:', file.name)
+}
+
+
 async function executeStep() {
   console.log('🔍 Debug executeStep:', {
     valid: valid.value,
@@ -1007,11 +1061,40 @@ async function executeStep() {
     action: formData.value.action,
     comment: formData.value.comment,
     stepType: stepExecution.value?.step.type,
-    availableActions: availableActions.value
+    availableActions: availableActions.value,
+    isApproval: stepExecution.value?.step.type === 'APPROVAL'
   })
 
   if (!valid.value || !canSubmit.value) {
     window.showSnackbar?.('Por favor, corrija os erros antes de continuar', 'warning')
+    return
+  }
+  
+  // ✅ VALIDAÇÃO ADICIONAL PARA APROVAÇÃO
+  if (stepExecution.value?.step.type === 'APPROVAL') {
+    if (!formData.value.action || !['aprovar', 'reprovar'].includes(formData.value.action)) {
+      window.showSnackbar?.('Selecione uma decisão de aprovação válida', 'warning')
+      return
+    }
+    
+    if (formData.value.action === 'reprovar' && !formData.value.comment?.trim()) {
+      window.showSnackbar?.('Justificativa é obrigatória para reprovação', 'warning')
+      return
+    }
+  }
+
+  // ✅ VALIDAÇÃO DO stepExecutionId
+  if (!stepExecution.value?.id) {
+    console.error('❌ stepExecutionId is missing:', stepExecution.value)
+    window.showSnackbar?.('Erro: ID da execução da etapa não encontrado', 'error')
+    return
+  }
+
+  // Verificar se é um UUID válido
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  if (!uuidRegex.test(stepExecution.value.id)) {
+    console.error('❌ Invalid stepExecutionId format:', stepExecution.value.id)
+    window.showSnackbar?.('Erro: ID da execução da etapa em formato inválido', 'error')
     return
   }
   
@@ -1040,29 +1123,81 @@ async function executeStep() {
       }
     }
     
-    // ✅ PAYLOAD CORRETO - SEM processInstanceId
+    // ✅ PAYLOAD VALIDADO E LIMPO
     const executeData = {
       stepExecutionId: stepExecution.value.id,
-      action: formData.value.action,
+      action: formData.value.action || null,
       comment: formData.value.comment?.trim() || null,
-      metadata: formData.value.metadata || {}
+      metadata: formData.value.metadata && Object.keys(formData.value.metadata).length > 0 
+        ? formData.value.metadata 
+        : {}
     }
 
-    console.log('🚀 Executing step with payload:', executeData)
+    // ✅ VALIDAÇÃO FINAL DO PAYLOAD
+    console.log('🚀 Final payload validation:', {
+      executeData,
+      stepExecutionIdType: typeof executeData.stepExecutionId,
+      stepExecutionIdLength: executeData.stepExecutionId?.length,
+      actionType: typeof executeData.action,
+      commentType: typeof executeData.comment,
+      metadataType: typeof executeData.metadata
+    })
+
+    // Verificar se todos os campos obrigatórios estão presentes
+    if (!executeData.stepExecutionId) {
+      throw new Error('stepExecutionId é obrigatório')
+    }
+
+    if (stepExecution.value?.step.type === 'APPROVAL' && !executeData.action) {
+      throw new Error('Ação é obrigatória para etapas de aprovação')
+    }
+
+    console.log('🚀 Executing step with validated payload:', executeData)
     
     await processStore.executeStep(executeData)
     
-    window.showSnackbar?.('Etapa concluída com sucesso! 🎉', 'success')
+    // ✅ MENSAGEM ESPECÍFICA PARA APROVAÇÃO
+    let successMessage = 'Etapa concluída com sucesso! 🎉'
+    if (stepExecution.value?.step.type === 'APPROVAL') {
+      if (formData.value.action === 'aprovar') {
+        successMessage = 'Processo aprovado com sucesso! ✅'
+      } else if (formData.value.action === 'reprovar') {
+        successMessage = 'Processo reprovado. ❌'
+      }
+    }
+    
+    window.showSnackbar?.(successMessage, 'success')
     
     setTimeout(() => {
       router.push(`/processes/${route.params.id}`)
     }, 1000)
     
   } catch (error) {
-    console.error('❌ Error executing step:', error)
+    console.error('❌ Error executing step:', {
+      error: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      executeData: {
+        stepExecutionId: stepExecution.value?.id,
+        action: formData.value.action,
+        comment: formData.value.comment
+      }
+    })
     
     let errorMessage = 'Erro ao executar etapa'
-    if (error.response?.data?.message) {
+    
+    // ✅ TRATAMENTO ESPECÍFICO DE ERROS 400
+    if (error.response?.status === 400) {
+      if (error.response?.data?.message) {
+        if (Array.isArray(error.response.data.message)) {
+          errorMessage = error.response.data.message.join(', ')
+        } else {
+          errorMessage = error.response.data.message
+        }
+      } else {
+        errorMessage = 'Dados inválidos. Verifique os campos preenchidos.'
+      }
+    } else if (error.response?.data?.message) {
       errorMessage = error.response.data.message
     } else if (error.message) {
       errorMessage = error.message
@@ -1175,7 +1310,7 @@ onMounted(async () => {
 /* ✅ APROVAÇÃO ESPECÍFICA */
 .approval-decision-card {
   background: rgba(255, 152, 0, 0.02);
-  border:none
+  border: none;
 }
 
 .approval-options {
@@ -1225,7 +1360,7 @@ onMounted(async () => {
   line-height: 1.4;
 }
 
-/* Cards e outros estilos mantidos iguais... */
+/* Cards e outros estilos */
 .execution-form-card,
 .info-card,
 .history-card {
@@ -1275,6 +1410,44 @@ onMounted(async () => {
   transform: translateY(-1px);
 }
 
+/* Actions grid para outros tipos */
+.actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.action-option {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 12px;
+  border: 2px solid rgba(0, 0, 0, 0.08);
+}
+
+.action-option:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+.action-option.action-selected {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.04);
+  box-shadow: 0 6px 20px rgba(var(--v-theme-primary), 0.2);
+  transform: translateY(-2px);
+}
+
+.action-label {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.action-description {
+  font-size: 0.8rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
 /* Responsividade */
 @media (max-width: 768px) {
   .step-execution-container {
@@ -1292,6 +1465,10 @@ onMounted(async () => {
   
   .approval-option {
     min-height: 120px;
+  }
+  
+  .actions-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

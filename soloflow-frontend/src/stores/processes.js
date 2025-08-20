@@ -265,33 +265,72 @@ console.log('📤 Sending clean payload:', cleanPayload)
     }
   }
 
-  async function executeStep(data) {
-    loading.value = true
-    error.value = null
-    
-    try {
-      console.log('Executing step with data:', data)
-      
-      const response = await api.post('/processes/execute-step', data)
-      
-      // Atualizar processo atual se estiver carregado
-      if (currentProcess.value && currentProcess.value.id === data.processInstanceId) {
-        await fetchProcess(currentProcess.value.id)
-      }
-      
-      // Recarregar tarefas
-      await fetchMyTasks()
-      
-      console.log('Step executed:', response.data)
-      return response.data
-    } catch (err) {
-      console.error('Error executing step:', err)
-      error.value = err.response?.data?.message || 'Erro ao executar etapa'
-      throw err
-    } finally {
-      loading.value = false
+async function executeStep(data) {
+  loading.value = true
+  error.value = null
+  
+  try {
+    console.log('🚀 Store.executeStep called with data:', {
+      data,
+      dataType: typeof data,
+      keys: Object.keys(data),
+      stepExecutionId: data.stepExecutionId,
+      stepExecutionIdType: typeof data.stepExecutionId
+    })
+
+    // ✅ VALIDAÇÃO NO STORE
+    if (!data.stepExecutionId) {
+      throw new Error('stepExecutionId é obrigatório')
     }
+
+    if (typeof data.stepExecutionId !== 'string') {
+      throw new Error('stepExecutionId deve ser uma string')
+    }
+
+    // ✅ LIMPEZA DO PAYLOAD
+    const cleanPayload = {
+      stepExecutionId: data.stepExecutionId,
+      action: data.action || null,
+      comment: data.comment || null,
+      metadata: data.metadata && typeof data.metadata === 'object' ? data.metadata : {}
+    }
+
+    // Remover campos undefined/null desnecessários
+    Object.keys(cleanPayload).forEach(key => {
+      if (cleanPayload[key] === undefined) {
+        delete cleanPayload[key]
+      }
+    })
+
+    console.log('📤 Sending clean payload to API:', cleanPayload)
+    
+    const response = await api.post('/processes/execute-step', cleanPayload)
+    
+    // Atualizar processo atual se estiver carregado
+    if (currentProcess.value && response.data.processInstanceId) {
+      console.log('🔄 Reloading process after step execution')
+      await fetchProcess(currentProcess.value.id)
+    }
+    
+    // Recarregar tarefas
+    await fetchMyTasks()
+    
+    console.log('✅ Step executed successfully:', response.data)
+    return response.data
+  } catch (err) {
+    console.error('❌ Error in store executeStep:', {
+      error: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
+      originalData: data
+    })
+    
+    error.value = err.response?.data?.message || 'Erro ao executar etapa'
+    throw err
+  } finally {
+    loading.value = false
   }
+}
 
   async function uploadAttachment(file, stepExecutionId) {
     loading.value = true
