@@ -160,7 +160,15 @@ export class ProcessesController {
   // Executar etapa
 
   @Post('execute-step')
-  executeStep(@Body() executeDto: ExecuteStepDto, @Request() req) {
+async executeStep(@Body() executeDto: ExecuteStepDto, @Request() req) {
+  console.log('🚀 ExecuteStep called with:', executeDto);
+  console.log('👤 User:', req.user.id);
+  
+  try {
     return this.processesService.executeStep(executeDto, req.user.id);
+  } catch (error) {
+    console.error('❌ Error in executeStep controller:', error);
+    throw error;
   }
+}
 }
