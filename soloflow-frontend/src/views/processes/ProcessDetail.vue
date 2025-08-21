@@ -4,12 +4,10 @@
       <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" />
       <div class="ml-4 flex-grow-1">
         <div class="d-flex align-center">
-          <h1 class="text-h4 font-weight-bold max-width">
+          <h1 class="text-h4 font-weight-bold ">
             {{ process.title || process.code }}
           </h1>
-          <v-chip :color="getStatusColor(process.status)" class="ml-3" label>
-            {{ getStatusText(process.status) }}
-          </v-chip>
+        
         </div>
         <p class="text-subtitle-1 text-medium-emphasis">
           {{ process.processType.name }}
@@ -17,6 +15,9 @@
       </div>
 
       <div class="d-flex gap-2">
+          <v-chip :color="getStatusColor(process.status)" class="ml-3" label>
+            {{ getStatusText(process.status) }}
+          </v-chip>
         <v-btn variant="text" @click="refreshProcess" :loading="loading">
           <v-icon start>mdi-refresh</v-icon>
           Atualizar
@@ -829,7 +830,7 @@ function formatFileSize(bytes) {
 
 // Métodos principais
 function goBack() {
-  router.push('/processes')
+  router.push('/manage-processes')
 }
 
 function executeCurrentStep() {

@@ -1,6 +1,57 @@
-// soloflow-backend/src/modules/process-types/dto/create-step.dto.ts - MELHORADO
-import { IsString, IsEnum, IsBoolean, IsOptional, IsInt, IsUUID, IsArray, Min, Max, Length, IsObject } from 'class-validator';
-import { StepType } from '@prisma/client';
+import { IsString, IsEnum, IsBoolean, IsOptional, IsInt, IsUUID, IsArray, Min, Max, Length, IsObject, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { StepType, FieldType } from '@prisma/client';
+
+// ✅ NOVO: DTO para campos da etapa INPUT
+export class StepFieldDto {
+  @IsString()
+  @Length(1, 50)
+  name: string;
+
+  @IsString()
+  @Length(1, 100)
+  label: string;
+
+  @IsEnum(FieldType)
+  type: FieldType;
+
+  @IsOptional()
+  @IsString()
+  placeholder?: string;
+
+  @IsBoolean()
+  required: boolean = false;
+
+  @IsInt()
+  @Min(1)
+  order: number;
+
+  @IsOptional()
+  @IsArray()
+  options?: any[]; // Para dropdown/checkbox
+
+  @IsOptional()
+  @IsObject()
+  validations?: {
+    min?: number;
+    max?: number;
+    minLength?: number;
+    maxLength?: number;
+    pattern?: string;
+    customMessage?: string;
+    maxFiles?: number;
+    maxSize?: number;
+    allowedTypes?: string[];
+  };
+
+  @IsOptional()
+  @IsString()
+  defaultValue?: string;
+
+  @IsOptional()
+  @IsString()
+  helpText?: string;
+}
 
 export class CreateStepDto {
   @IsString()
@@ -14,19 +65,13 @@ export class CreateStepDto {
   @IsOptional()
   @IsString()
   @Length(0, 2000, { message: 'Instruções devem ter no máximo 2000 caracteres' })
-  instructions?: string; // ✅ Texto explicativo para orientar execução
-
-  @IsOptional()
-  @IsInt()
-  @Min(0, { message: 'SLA deve ser maior ou igual a 0 minutos' })
-  @Max(43200, { message: 'SLA deve ser no máximo 43200 minutos (30 dias)' })
-  slaMinutes?: number; // ✅ SLA em minutos para maior precisão
+  instructions?: string;
 
   @IsOptional()
   @IsInt()
   @Min(1, { message: 'SLA deve ser no mínimo 1 hora' })
   @Max(8760, { message: 'SLA deve ser no máximo 8760 horas (1 ano)' })
-  slaHours?: number; // ✅ Mantido para compatibilidade
+  slaHours?: number;
 
   @IsEnum(StepType)
   type: StepType;
@@ -81,11 +126,18 @@ export class CreateStepDto {
     [action: string]: number | 'END' | 'PREVIOUS';
   };
 
-  // ✅ NOVOS CAMPOS PARA TIPOS ESPECÍFICOS
+  // ✅ NOVO: Configuração de campos para etapas INPUT
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StepFieldDto)
+  inputFields?: StepFieldDto[];
+
+  // ✅ MANTIDO: typeConfig genérico para outros tipos
   @IsOptional()
   @IsObject()
   typeConfig?: {
-    // Para INPUT: campos específicos
+    // Para INPUT: campos específicos (AGORA USANDO inputFields)
     requiredFields?: string[];
     validation?: Record<string, any>;
     

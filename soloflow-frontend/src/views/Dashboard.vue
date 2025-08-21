@@ -6,14 +6,14 @@
         Bem-vindo(a), {{ user?.name }}!
       </h1>
       <p class="text-subtitle-1 text-medium-emphasis">
-        {{ greeting }} Aqui está um resumo das suas atividades em <strong>{{ activeCompany?.name }}</strong>.
+        {{ greeting }} Aqui está um resumo das suas atividades pessoais em <strong>{{ activeCompany?.name }}</strong>.
       </p>
     </div>
 
-    <!-- SoloFlow Cards de estatísticas dinâmicas -->
+    <!-- Cards de estatísticas do usuário -->
     <v-row class="mb-6">
       <v-col
-        v-for="stat in stats"
+        v-for="stat in userStats"
         :key="stat.title"
         cols="12"
         sm="6"
@@ -51,7 +51,7 @@
               </v-avatar>
             </div>
 
-            <!-- SoloFlow Progress bar para alguns cards -->
+            <!-- Progress bar para alguns cards -->
             <v-progress-linear
               v-if="stat.progress !== undefined"
               :model-value="stat.progress"
@@ -66,7 +66,7 @@
     </v-row>
 
     <v-row>
-      <!-- SoloFlow Minhas Tarefas Pendentes -->
+      <!-- Minhas Tarefas Pendentes -->
       <v-col cols="12" lg="8">
         <v-card>
           <v-card-title class="d-flex align-center justify-space-between">
@@ -209,7 +209,7 @@
         </v-card>
       </v-col>
 
-      <!-- SoloFlow Painel lateral com estatísticas e ações rápidas -->
+      <!-- Painel lateral com ações rápidas e atividades -->
       <v-col cols="12" lg="4">
        
         <!-- Ações Rápidas -->
@@ -236,39 +236,38 @@
               variant="outlined"
               class="mb-3"
               @click="goToSignatures"
-              :disabled="pendingSignatures === 0"
+              :disabled="userPendingSignatures === 0"
             >
               <v-icon start>mdi-draw-pen</v-icon>
               Assinar Documentos
-              <v-chip v-if="pendingSignatures > 0" size="x-small" color="error" class="ml-2">
-                {{ pendingSignatures }}
+              <v-chip v-if="userPendingSignatures > 0" size="x-small" color="error" class="ml-2">
+                {{ userPendingSignatures }}
               </v-chip>
             </v-btn>
             
             <v-btn
               block
               variant="outlined"
-              @click="goToManageProcesses"
-              v-if="canManageProcesses"
+              @click="goToMyProcesses"
             >
-              <v-icon start>mdi-clipboard-edit</v-icon>
-              Gerenciar Processos
+              <v-icon start>mdi-folder-account</v-icon>
+              Meus Processos
             </v-btn>
           </v-card-text>
         </v-card>
 
-        <!-- Processos Recentes -->
+        <!-- Atividade Recente dos Meus Processos -->
         <v-card>
           <v-card-title class="d-flex align-center justify-space-between">
             <div class="d-flex align-center">
               <v-icon class="mr-2">mdi-history</v-icon>
-              <span>Atividade Recente</span>
+              <span>Meus Processos Recentes</span>
             </div>
             <v-btn
               variant="text"
               size="small"
               color="primary"
-              @click="goToProcesses"
+              @click="goToMyProcesses"
             >
               Ver todos
             </v-btn>
@@ -276,53 +275,87 @@
           
           <v-divider />
 
+          <!-- Loading -->
+          <v-progress-linear
+            v-if="loadingMyProcesses"
+            indeterminate
+            color="primary"
+          />
+
           <v-list
-            v-if="recentActivity.length > 0"
-            density="compact"
-            lines="two"
+            v-if="!loadingMyProcesses && myRecentProcesses.length > 0"
+            density="comfortable"
+            lines="three"
           >
             <v-list-item
-              v-for="(activity, index) in recentActivity.slice(0, 8)"
-              :key="activity.id"
-              @click="viewActivity(activity)"
+              v-for="(process, index) in myRecentProcesses.slice(0, 6)"
+              :key="process.id"
+              @click="viewProcess(process)"
+              class="cursor-pointer"
             >
               <template v-slot:prepend>
-                <v-icon
-                  :color="getActivityColor(activity.type)"
-                  size="20"
+                <v-avatar
+                  :color="getProcessStatusColor(process.status)"
+                  size="32"
                 >
-                  {{ getActivityIcon(activity.type) }}
-                </v-icon>
+                  <v-icon
+                    :icon="getProcessStatusIcon(process.status)"
+                    size="16"
+                    color="white"
+                  />
+                </v-avatar>
               </template>
 
-              <v-list-item-title class="text-body-2">
-                {{ activity.title }}
+              <v-list-item-title class="text-body-2 font-weight-medium">
+                {{ process.title || process.code }}
               </v-list-item-title>
               
               <v-list-item-subtitle class="text-caption">
-                {{ activity.description }} • {{ getTimeAgo(activity.createdAt) }}
+                <div>
+                  <v-icon size="12">mdi-file-document-outline</v-icon>
+                  {{ process.processType.name }}
+                </div>
+                <div class="mt-1">
+                  <v-icon size="12">mdi-calendar</v-icon>
+                  {{ getTimeAgo(process.createdAt) }}
+                  <span class="mx-1">•</span>
+                  <v-icon size="12">mdi-progress-check</v-icon>
+                  {{ getCurrentStepName(process) }}
+                </div>
               </v-list-item-subtitle>
 
               <template v-slot:append>
                 <v-chip
-                  :color="getStatusColor(activity.status)"
+                  :color="getProcessStatusColor(process.status)"
                   size="x-small"
-                  variant="dot"
-                />
+                  variant="flat"
+                  class="text-white"
+                >
+                  {{ getProcessStatusText(process.status) }}
+                </v-chip>
               </template>
             </v-list-item>
           </v-list>
 
           <v-card-text
-            v-else
+            v-else-if="!loadingMyProcesses && myRecentProcesses.length === 0"
             class="text-center py-6"
           >
             <v-icon size="48" color="grey-lighten-1">
-              mdi-history
+              mdi-folder-outline
             </v-icon>
             <p class="text-body-2 text-grey mt-2">
-              Nenhuma atividade recente
+              Nenhum processo criado ainda
             </p>
+            <v-btn
+              size="small"
+              color="primary"
+              variant="text"
+              @click="createNewProcess"
+              class="mt-2"
+            >
+              Criar primeiro processo
+            </v-btn>
           </v-card-text>
         </v-card>
       </v-col>
@@ -348,17 +381,15 @@ const processStore = useProcessStore()
 
 // Estado
 const loadingTasks = ref(false)
-const recentActivity = ref([])
-const pendingSignatures = ref(0)
+const loadingMyProcesses = ref(false)
+const myRecentProcesses = ref([])
 
 // Computed
 const user = computed(() => authStore.user)
 const activeCompany = computed(() => authStore.activeCompany)
 const myTasks = computed(() => processStore.myTasks)
-const dashboardStats = computed(() => processStore.dashboardStats)
-const canManageProcesses = computed(() => authStore.canManageProcessTypes)
 
-// SoloFlow Saudação baseada no horário
+// Saudação baseada no horário
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 12) return 'Bom dia!'
@@ -366,78 +397,72 @@ const greeting = computed(() => {
   return 'Boa noite!'
 })
 
-// SoloFlow Estatísticas dinâmicas reais
-const stats = computed(() => [
+// ✅ DADOS ESPECÍFICOS DO USUÁRIO - CORRIGIDOS
+const userPendingTasks = computed(() => {
+  return myTasks.value?.length || 0
+})
+
+const userPendingSignatures = computed(() => {
+  if (!myTasks.value) return 0
+  return myTasks.value.filter(task => task.step?.requiresSignature === true).length
+})
+
+const userActiveProcesses = computed(() => {
+  return myRecentProcesses.value.filter(p => p.status === 'IN_PROGRESS').length
+})
+
+const userCompletedProcesses = computed(() => {
+  return myRecentProcesses.value.filter(p => p.status === 'COMPLETED').length
+})
+
+// ✅ ESTATÍSTICAS FOCADAS NO USUÁRIO
+const userStats = computed(() => [
   {
-    title: 'Tarefas Pendentes',
-    value: myTasks.value.length,
-    subtitle: myTasks.value.filter(t => t.step.requiresSignature).length > 0 
-      ? `${myTasks.value.filter(t => t.step.requiresSignature).length} requerem assinatura`
-      : 'Todas em andamento',
-    icon: 'mdi-clock-alert-outline',
-    color: myTasks.value.length > 5 ? 'warning' : 'info',
+    title: 'Minhas Tarefas',
+    value: userPendingTasks.value,
+    subtitle: userPendingSignatures.value > 0 
+      ? `${userPendingSignatures.value} requerem assinatura`
+      : 'Tarefas aguardando sua ação',
+    icon: 'mdi-clipboard-account',
+    color: userPendingTasks.value > 5 ? 'warning' : 'info',
     action: () => router.push('/mytasks'),
   },
   {
-    title: 'Processos Ativos',
-    value: dashboardStats.value.activeProcesses || 0,
-    subtitle: 'Em andamento na empresa',
-    icon: 'mdi-file-document-multiple',
-    color: 'primary',
-    action: () => router.push('/manageprocesses'),
+    title: 'Assinaturas Pendentes',
+    value: userPendingSignatures.value,
+    subtitle: userPendingSignatures.value === 0 
+      ? 'Nenhuma assinatura pendente' 
+      : 'Documentos aguardando assinatura',
+    icon: 'mdi-draw-pen',
+    color: userPendingSignatures.value > 0 ? 'error' : 'success',
+    action: () => router.push('/signatures/pending'),
   },
   {
-    title: 'Concluídos Hoje',
-    value: getTodayCompleted(),
-    subtitle: `${getThisWeekCompleted()} esta semana`,
+    title: 'Processos Ativos',
+    value: userActiveProcesses.value,
+    subtitle: 'Processos criados por você em andamento',
+    icon: 'mdi-rocket-launch',
+    color: 'primary',
+    action: () => router.push('/processes/my?status=IN_PROGRESS'),
+    progress: userActiveProcesses.value > 0 ? Math.min((userActiveProcesses.value / 10) * 100, 100) : 0,
+  },
+  {
+    title: 'Processos Concluídos',
+    value: userCompletedProcesses.value,
+    subtitle: getCompletionInsight(),
     icon: 'mdi-check-circle',
     color: 'success',
-    progress: getCompletionProgress(),
-    action: () => router.push('/manageprocesses?status=COMPLETED'),
-  },
-  {
-    title: 'Total do Mês',
-    value: dashboardStats.value.totalProcesses || 0,
-    subtitle: getMonthComparison(),
-    icon: 'mdi-chart-line',
-    color: 'info',
-    action: () => router.push('/manageprocesses'),
+    action: () => router.push('/processes/my?status=COMPLETED'),
   }
 ])
 
-// SoloFlow Progresso do mês
-const monthProgress = computed(() => {
-  const completed = dashboardStats.value.completedProcesses || 0
-  const total = dashboardStats.value.totalProcesses || 1
-  return {
-    completed,
-    total,
-    percentage: Math.round((completed / total) * 100)
-  }
-})
-
-const productivityProgress = computed(() => {
-  // Meta: 85% dos processos concluídos
-  return Math.min(monthProgress.value.percentage * 1.2, 100)
-})
-
 // Métodos auxiliares
-function getTodayCompleted() {
-  // Simular processos concluídos hoje
-  return Math.floor(Math.random() * 5) + 1
-}
-
-function getThisWeekCompleted() {
-  return Math.floor(Math.random() * 15) + 5
-}
-
-function getCompletionProgress() {
-  return Math.random() * 100
-}
-
-function getMonthComparison() {
-  const increase = Math.floor(Math.random() * 20) + 5
-  return `+${increase}% vs mês anterior`
+function getCompletionInsight() {
+  const total = myRecentProcesses.value.length
+  const completed = userCompletedProcesses.value
+  if (total === 0) return 'Nenhum processo criado ainda'
+  const percentage = Math.round((completed / total) * 100)
+  return `${percentage}% dos seus processos`
 }
 
 function getStepTypeColor(type) {
@@ -484,34 +509,42 @@ function getTimeAgo(date) {
   return dayjs(date).fromNow()
 }
 
-function getActivityColor(type) {
+function getProcessStatusColor(status) {
   const colors = {
-    'process_created': 'info',
-    'process_completed': 'success',
-    'step_executed': 'primary',
-    'document_signed': 'warning'
-  }
-  return colors[type] || 'grey'
-}
-
-function getActivityIcon(type) {
-  const icons = {
-    'process_created': 'mdi-plus-circle',
-    'process_completed': 'mdi-check-circle',
-    'step_executed': 'mdi-play-circle',
-    'document_signed': 'mdi-draw-pen'
-  }
-  return icons[type] || 'mdi-circle'
-}
-
-function getStatusColor(status) {
-  const colors = {
-    'completed': 'success',
-    'in_progress': 'info',
-    'pending': 'warning',
-    'error': 'error'
+    'DRAFT': 'grey',
+    'IN_PROGRESS': 'info',
+    'COMPLETED': 'success',
+    'CANCELLED': 'warning',
+    'REJECTED': 'error'
   }
   return colors[status] || 'grey'
+}
+
+function getProcessStatusIcon(status) {
+  const icons = {
+    'DRAFT': 'mdi-file-outline',
+    'IN_PROGRESS': 'mdi-play-circle',
+    'COMPLETED': 'mdi-check-circle',
+    'CANCELLED': 'mdi-cancel',
+    'REJECTED': 'mdi-close-circle'
+  }
+  return icons[status] || 'mdi-help-circle'
+}
+
+function getProcessStatusText(status) {
+  const texts = {
+    'DRAFT': 'Rascunho',
+    'IN_PROGRESS': 'Em Andamento',
+    'COMPLETED': 'Concluído',
+    'CANCELLED': 'Cancelado',
+    'REJECTED': 'Rejeitado'
+  }
+  return texts[status] || status
+}
+
+function getCurrentStepName(process) {
+  const currentStep = process.stepExecutions?.find(se => se.status === 'IN_PROGRESS')
+  return currentStep?.step?.name || 'Concluído'
 }
 
 // Métodos de navegação
@@ -527,25 +560,19 @@ function goToSignatures() {
   router.push('/signatures/pending')
 }
 
-function goToManageProcesses() {
-  router.push('/manageprocesses')
-}
-
-function goToProcesses() {
-  router.push('/processes')
+function goToMyProcesses() {
+  router.push('/processes/my')
 }
 
 function openTask(task) {
   router.push(`/processes/${task.processInstance.id}/execute/${task.id}`)
 }
 
-function viewActivity(activity) {
-  if (activity.processId) {
-    router.push(`/processes/${activity.processId}`)
-  }
+function viewProcess(process) {
+  router.push(`/processes/${process.id}`)
 }
 
-// Métodos de carregamento de dados
+// ✅ CARREGAR DADOS - USANDO ENDPOINTS CORRETOS
 async function refreshTasks() {
   loadingTasks.value = true
   try {
@@ -555,49 +582,56 @@ async function refreshTasks() {
   }
 }
 
+async function loadMyProcesses() {
+  loadingMyProcesses.value = true
+  try {
+    // ✅ USANDO ENDPOINT CORRETO DO SEU BACKEND
+    const response = await fetch('/api/processes/my/created', {
+      headers: {
+        'Authorization': `Bearer ${authStore.token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      myRecentProcesses.value = data
+    } else {
+      // ✅ FALLBACK: Extrair processos únicos das tarefas do usuário
+      if (myTasks.value && myTasks.value.length > 0) {
+        const processesFromTasks = myTasks.value.map(task => task.processInstance)
+        const uniqueProcesses = processesFromTasks.filter((process, index, self) => 
+          self.findIndex(p => p.id === process.id) === index
+        ).filter(process => process.createdBy?.id === user.value?.id)
+        
+        myRecentProcesses.value = uniqueProcesses
+      } else {
+        myRecentProcesses.value = []
+      }
+    }
+  } catch (error) {
+    // Fallback: extrair de tarefas existentes
+    if (myTasks.value && myTasks.value.length > 0) {
+      const processesFromTasks = myTasks.value.map(task => task.processInstance)
+      const uniqueProcesses = processesFromTasks.filter((process, index, self) => 
+        self.findIndex(p => p.id === process.id) === index
+      ).filter(process => process.createdBy?.id === user.value?.id)
+      
+      myRecentProcesses.value = uniqueProcesses
+    } else {
+      myRecentProcesses.value = []
+    }
+  } finally {
+    loadingMyProcesses.value = false
+  }
+}
+
 async function loadDashboardData() {
   try {
-    await Promise.all([
-      processStore.fetchMyTasks(),
-      processStore.fetchDashboardStats()
-    ])
-    
-    // Simular atividade recente
-    recentActivity.value = [
-      {
-        id: 1,
-        type: 'process_created',
-        title: 'Processo PROC-2025-0001 criado',
-        description: 'Solicitação de Férias',
-        status: 'in_progress',
-        createdAt: dayjs().subtract(1, 'hour').toDate(),
-        processId: 'proc-1'
-      },
-      {
-        id: 2,
-        type: 'document_signed',
-        title: 'Documento assinado',
-        description: 'Contrato de Trabalho',
-        status: 'completed',
-        createdAt: dayjs().subtract(2, 'hours').toDate(),
-        processId: 'proc-2'
-      },
-      {
-        id: 3,
-        type: 'process_completed',
-        title: 'Processo PROC-2025-0002 concluído',
-        description: 'Solicitação de Compra',
-        status: 'completed',
-        createdAt: dayjs().subtract(4, 'hours').toDate(),
-        processId: 'proc-3'
-      }
-    ]
-    
-    // Simular assinaturas pendentes
-    pendingSignatures.value = myTasks.value.filter(t => t.step.requiresSignature).length
-    
+    await refreshTasks()
+    await loadMyProcesses()
   } catch (error) {
-    console.error('Error loading dashboard data:', error)
+    // Falha silenciosa
   }
 }
 

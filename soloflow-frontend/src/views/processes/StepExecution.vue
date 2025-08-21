@@ -1,5 +1,3 @@
-<!-- StepExecution.vue - COMPLETO COM CORREÇÕES -->
-
 <template>
   <div v-if="stepExecution && process" class="step-execution-container">
     <div class="execution-header mb-8">
@@ -10,7 +8,7 @@
             <v-avatar 
               :color="getStepTypeColor(stepExecution.step.type)" 
               size="56" 
-              class="mr-4 step-avatar"
+              class="mr-8 step-avatar"
             >
               <v-icon size="28" color="white">
                 {{ getStepTypeIcon(stepExecution.step.type) }}
@@ -27,7 +25,7 @@
           </div>
           
           <div class="d-flex flex-wrap gap-2 mt-3">
-            <v-chip size="small" :color="getStepTypeColor(stepExecution.step.type)" variant="tonal">
+            <v-chip size="small" :color="getStepTypeColor(stepExecution.step.type)" variant="tonal"  class="mr-4">
               <v-icon start size="16">{{ getStepTypeIcon(stepExecution.step.type) }}</v-icon>
               {{ getStepTypeText(stepExecution.step.type) }}
             </v-chip>

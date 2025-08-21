@@ -1,8 +1,5 @@
-<!-- src/views/processes/CreateProcess.vue - CORRIGIDO -->
-
 <template>
   <div class="create-process-container">
-    <!-- ✨ Header (mantido igual) -->
     <div class="header-section mb-6">
       <div class="d-flex align-center">
         <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" class="mr-3" />
@@ -23,15 +20,15 @@
       </div>
     </div>
 
-    <!-- Type Selection (mantido igual quando não pré-selecionado) -->
+    
     <div v-if="!selectedProcessType">
-      <!-- ... código de seleção mantido igual ... -->
+      
     </div>
 
-    <!-- ✅ FORMULÁRIO PRINCIPAL - CORRIGIDO -->
+   
     <div v-else>
       <v-card class="form-card" elevation="2">
-        <!-- Header do Processo (mantido) -->
+       
         <div class="selected-process-header pa-6">
           <div class="d-flex align-center">
             <v-avatar color="primary" size="56" class="mr-4">
@@ -144,7 +141,7 @@
                     class="mb-3"
                   />
 
-                  <!-- ✅ CAMPO DE ARQUIVO - CORRIGIDO COMPLETAMENTE -->
+                 
                   <div v-else-if="field.type === 'FILE'" class="file-field-container mb-4">
                     <FileUploadField
                       v-model="formData[field.name]"
@@ -333,7 +330,7 @@ const processData = ref({
 })
 const formData = ref({})
 
-// Computed (mantidos iguais)
+
 const loadingTypes = computed(() => processTypeStore.loading)
 const processTypes = computed(() => processTypeStore.processTypes)
 const preselectedType = computed(() => props.typeId || route.params.typeId)
@@ -347,7 +344,7 @@ const hasFormFields = computed(() => {
   return getVisibleFieldsCount(selectedProcessType.value) > 0
 })
 
-// ✅ MÉTODO PRINCIPAL COMPLETAMENTE REFATORADO
+
 async function createProcessWithFiles() {
   if (!formValid.value || !selectedProcessType.value) {
     window.showSnackbar?.('Por favor, corrija os erros no formulário', 'error')
@@ -359,15 +356,13 @@ async function createProcessWithFiles() {
   uploadErrors.value = []
   
   try {
-    // ✅ ETAPA 1: Separar dados limpos de arquivos
-    console.log('📄 Step 1/2: Preparing clean data and file mapping...')
+    
+    
     
     const { sanitizedFormData, filesMap } = separateFormDataAndFiles()
     
-    console.log('📝 Regular fields:', Object.keys(sanitizedFormData))
-    console.log('📁 File fields:', Object.keys(filesMap))
-    
-    // ✅ ETAPA 1: Criar processo apenas com dados JSON
+
+   
     uploadStatusText.value = 'Criando processo...'
     uploadDetailText.value = 'Salvando informações básicas'
     
@@ -375,16 +370,16 @@ async function createProcessWithFiles() {
       processTypeId: selectedProcessType.value.id,
       title: generateProcessTitle(),
       description: processData.value.observations?.trim() || null,
-      formData: sanitizedFormData // Dados limpos (sem arquivos)
+      formData: sanitizedFormData 
     }
 
-    console.log('📤 Creating process with base payload:', basePayload)
+    
     const createdProcess = await processStore.createProcess(basePayload)
-    console.log('✅ Process created (step 1/2):', createdProcess.code)
+   
 
     // ✅ ETAPA 2: Upload de arquivos por campo (se existirem)
     if (Object.keys(filesMap).length > 0) {
-      console.log('📄 Step 2/2: Uploading files by field...')
+      
       isUploading.value = true
       
       uploadStatusText.value = 'Enviando arquivos...'
@@ -402,18 +397,18 @@ async function createProcessWithFiles() {
       // ✅ ETAPA 2: Upload usando método correto do store
       await processStore.uploadProcessFiles(createdProcess.id, filesMap)
       
-      console.log('✅ All files uploaded successfully (step 2/2)')
+      
       uploadStatusText.value = 'Arquivos enviados!'
       uploadDetailText.value = 'Processo criado com sucesso'
       globalUploadProgress.value = 100
     } else {
-      console.log('ℹ️ No files to upload, skipping step 2/2')
+      
     }
 
-    // ✅ SUCESSO COMPLETO
+   
     window.showSnackbar?.('Processo criado com sucesso! 🎉', 'success')
     
-    // Navegar para o processo criado
+
     setTimeout(() => {
       router.push(`/processes/${createdProcess.id}`)
     }, 500)
@@ -486,7 +481,7 @@ function handleFileError(errors) {
   })
 }
 
-// ✅ Método para gerar título automaticamente
+
 function generateProcessTitle() {
   const now = new Date()
   const dateStr = now.toLocaleDateString('pt-BR')
@@ -495,7 +490,7 @@ function generateProcessTitle() {
   return `${selectedProcessType.value?.name} - ${dateStr} ${timeStr}`
 }
 
-// Métodos auxiliares (mantidos iguais)
+
 function getVisibleFormFields(processType) {
   if (!processType?.formFields) return []
   return processType.formFields
@@ -520,7 +515,7 @@ function getFieldFileConfig(field) {
   const defaultConfig = {
     multiple: false,
     maxFiles: 1,
-    maxSize: 10 * 1024 * 1024, // 10MB
+    maxSize: 10 * 1024 * 1024, 
     allowedTypes: ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.xls', '.xlsx']
   }
 
@@ -574,7 +569,7 @@ function getFieldRules(field) {
     })
   }
 
-  // Validações específicas por tipo...
+  
   switch (field.type) {
     case 'EMAIL':
       rules.push(v => !v || /.+@.+\..+/.test(v) || 'E-mail inválido')
