@@ -68,7 +68,7 @@
                   :key="field.id"
                   :cols="getFieldCols(field)"
                 >
-                  <!-- Campos normais (mantidos iguais) -->
+               
                   <v-text-field
                     v-if="field.type === 'TEXT'"
                     v-model="formData[field.name]"
@@ -232,11 +232,7 @@
           
           <v-spacer />
           
-          <!-- Preview Button (mantido) -->
-          <v-btn variant="outlined" color="info" @click="showPreview = true" class="mr-3">
-            <v-icon start>mdi-eye</v-icon>
-            Visualizar
-          </v-btn>
+        
           
           <!-- ✅ CREATE BUTTON - CORRIGIDO -->
           <v-btn
@@ -314,7 +310,7 @@ const searchType = ref('')
 const selectedProcessTypeId = ref(null)
 const formValid = ref(true)
 const creating = ref(false)
-const showPreview = ref(false)
+
 
 // ✅ Estado de upload
 const isUploading = ref(false)

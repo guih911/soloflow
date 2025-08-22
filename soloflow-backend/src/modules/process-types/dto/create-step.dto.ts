@@ -122,11 +122,9 @@ export class CreateStepDto {
 
   @IsOptional()
   @IsObject()
-  conditions?: {
-    [action: string]: number | 'END' | 'PREVIOUS';
-  };
+  conditions?: Record<string, any>;
 
-  // ✅ NOVO: Configuração de campos para etapas INPUT
+  
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

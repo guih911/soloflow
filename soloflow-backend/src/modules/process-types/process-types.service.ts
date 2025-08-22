@@ -17,9 +17,9 @@ export class ProcessTypesService {
   constructor(private prisma: PrismaService) {}
 
   async create(createProcessTypeDto: CreateProcessTypeDto): Promise<ProcessType> {
-    console.log('Creating process type with data:', createProcessTypeDto);
+    
 
-    const { steps, formFields, ...processTypeData } = createProcessTypeDto;
+    const { steps = [], formFields = [], ...processTypeData } = createProcessTypeDto;
 
     // Verificar se a empresa existe e está ativa
     const company = await this.prisma.company.findUnique({

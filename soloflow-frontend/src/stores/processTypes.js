@@ -271,20 +271,28 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     
     try {
       const cleanStepData = {
-        name: stepData.name?.trim(),
-        description: stepData.description?.trim() || null,
-        type: stepData.type || 'INPUT',
-        allowAttachment: Boolean(stepData.allowAttachment),
-        requiresSignature: Boolean(stepData.requiresSignature),
-        requireAttachment: Boolean(stepData.requireAttachment),
-        minAttachments: stepData.minAttachments || null,
-        maxAttachments: stepData.maxAttachments || null,
-        assignedToUserId: stepData.assignedToUserId || null,
-        assignedToSectorId: stepData.assignedToSectorId || null,
-        actions: Array.isArray(stepData.actions) ? stepData.actions : [],
-        conditions: typeof stepData.conditions === 'object' ? stepData.conditions : {},
-        allowedFileTypes: Array.isArray(stepData.allowedFileTypes) ? stepData.allowedFileTypes : [],
-      }
+  processTypeId,
+  name: stepData.name?.trim(),
+  description: stepData.description?.trim() || null,
+  type: stepData.type,
+  order: steps.length + 1,
+  // NOVOS: manter design/rotas, só enviando campos extras
+  instructions: stepData.instructions?.trim() || null,
+  slaHours: Number(stepData.slaHours) || null,
+
+  assignedToUserId: stepData.assignedToUserId || null,
+  assignedToSectorId: stepData.assignedToSectorId || null,
+
+  // conditions pode ser o JSON de INPUT (visibleFields, requiredFields, etc.)
+  conditions: stepData.conditions || null,
+  actions: stepData.actions || [],
+
+  allowAttachment: !!stepData.allowAttachment,
+  requireAttachment: !!stepData.requireAttachment,
+  minAttachments: stepData.minAttachments ?? null,
+  maxAttachments: stepData.maxAttachments ?? null,
+  allowedFileTypes: stepData.allowedFileTypes || []
+}
       
       const response = await api.post(`/process-types/${processTypeId}/steps`, cleanStepData)
       

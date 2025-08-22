@@ -51,29 +51,8 @@
               @click="startProcessCreation(processType)"
             >
 
-              <!-- ✨ Badges de Status Melhorados -->
-              <div class="status-badges">
-                <v-chip 
-                  v-if="isFeaturedProcess(processType)" 
-                  size="small" 
-                  variant="outlined"
-                  class="featured-badge"
-                >
-                  <v-icon start size="14">mdi-star</v-icon>
-                  Popular
-                </v-chip>
-
-                <v-chip 
-                  v-if="!canCreateProcess(processType)" 
-                  size="small" 
-                  color="error" 
-                  variant="flat"
-                  class="status-badge"
-                >
-                  <v-icon start size="14">mdi-alert</v-icon>
-                  Incompleto
-                </v-chip>
-              </div>
+           
+               
 
               <!-- ✨ Header do Card Redesenhado -->
               <div class="card-header">
@@ -399,9 +378,7 @@ onMounted(async () => {
   border-color: rgba(0, 0, 0, 0.08) !important;
 }
 
-.card-featured {
-  /* Sem cor de fundo, mantém apenas a lógica de ordenação */
-}
+
 
 /* ✨ Status Badges */
 .status-badges {
