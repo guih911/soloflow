@@ -1282,6 +1282,76 @@ export class ProcessesService {
 
     throw new ForbiddenException('Sem permissão para executar esta etapa');
   }
+  async executeStepWithTransitions(executeDto: ExecuteStepDto, userId: string) {
+  const stepExecution = await this.prisma.stepExecution.findUnique({
+    where: { id: executeDto.stepExecutionId },
+    include: {
+      stepVersion: {
+        include: {
+          outgoingTransitions: {
+            where: { isActive: true },
+            orderBy: { priority: 'asc' }
+          }
+        }
+      },
+      processInstance: true
+    }
+  });
+
+  // Executar a etapa
+  const updatedExecution = await this.prisma.stepExecution.update({
+    where: { id: executeDto.stepExecutionId },
+    data: {
+      status: 'COMPLETED',
+      action: executeDto.action,
+      comment: executeDto.comment,
+      metadata: executeDto.metadata,
+      executorId: userId,
+      completedAt: new Date()
+    }
+  });
+
+  // Resolver próxima etapa via transições
+  const nextStep = await this.resolveNextStep(
+    stepExecution.stepVersion.outgoingTransitions,
+    executeDto,
+    stepExecution.processInstance
+  );
+
+  if (nextStep) {
+    await this.activateStep(nextStep.id, stepExecution.processInstanceId);
+  } else {
+    // Finalizar processo
+    await this.prisma.processInstance.update({
+      where: { id: stepExecution.processInstanceId },
+      data: { 
+        status: 'COMPLETED',
+        completedAt: new Date()
+      }
+    });
+  }
+
+  return updatedExecution;
+}
+
+private async resolveNextStep(
+  transitions: StepTransition[],
+  executeDto: ExecuteStepDto,
+  processInstance: ProcessInstance
+): Promise<StepVersion | null> {
+  for (const transition of transitions) {
+    if (await this.evaluateTransitionCondition(transition, executeDto, processInstance)) {
+      if (transition.targetStepId) {
+        return this.prisma.stepVersion.findUnique({
+          where: { id: transition.targetStepId }
+        });
+      }
+      return null; // Fim do processo
+    }
+  }
+  
+  return null;
+}
 
   private async validateFormData(
     formData: Record<string, any>,

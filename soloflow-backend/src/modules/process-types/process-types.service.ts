@@ -384,6 +384,104 @@ export class ProcessTypesService {
     }
   }
 
+  async createNewVersion(processTypeId: string, changes: any) {
+  const processType = await this.prisma.processType.findUnique({
+    where: { id: processTypeId },
+    include: { 
+      versions: { 
+        orderBy: { version: 'desc' }, 
+        take: 1 
+      }
+    }
+  });
+
+  const nextVersion = (processType.versions[0]?.version || 0) + 1;
+  
+  return this.prisma.processTypeVersion.create({
+    data: {
+      processTypeId,
+      version: nextVersion,
+      versionLabel: `v${nextVersion}.0`,
+      ...changes,
+      steps: {
+        create: changes.steps.map((step, index) => ({
+          ...step,
+          assignments: {
+            create: this.buildStepAssignments(step)
+          }
+        }))
+      }
+    }
+  });
+}
+
+async resolveStepAssignments(
+  stepVersionId: string, 
+  processInstance: ProcessInstance
+): Promise<string[]> {
+  const assignments = await this.prisma.stepAssignment.findMany({
+    where: { stepVersionId, isActive: true },
+    orderBy: { priority: 'asc' }
+  });
+
+  const resolvedUserIds: string[] = [];
+
+  for (const assignment of assignments) {
+    switch (assignment.type) {
+      case 'USER':
+        if (assignment.userId) {
+          resolvedUserIds.push(assignment.userId);
+        }
+        break;
+        
+      case 'ROLE':
+        const roleUserIds = await this.resolveDynamicRole(
+          assignment.dynamicRole, 
+          processInstance
+        );
+        resolvedUserIds.push(...roleUserIds);
+        break;
+        
+      case 'SECTOR':
+        const sectorUserIds = await this.getUsersBySector(assignment.sectorId);
+        resolvedUserIds.push(...sectorUserIds);
+        break;
+    }
+  }
+
+  return [...new Set(resolvedUserIds)]; // Remove duplicados
+}
+
+private async resolveDynamicRole(
+  role: DynamicRole, 
+  processInstance: ProcessInstance
+): Promise<string[]> {
+  switch (role) {
+    case 'PROCESS_CREATOR':
+      return [processInstance.createdById];
+      
+    case 'SECTOR_MANAGER':
+      // Buscar gerente do setor do criador
+      const creatorCompany = await this.prisma.userCompany.findFirst({
+        where: { 
+          userId: processInstance.createdById,
+          companyId: processInstance.companyId 
+        },
+        include: { sector: true }
+      });
+      
+      if (creatorCompany?.sectorId) {
+        return this.getManagersBySector(creatorCompany.sectorId);
+      }
+      break;
+      
+    case 'COMPANY_ADMIN':
+      return this.getCompanyAdmins(processInstance.companyId);
+  }
+  
+  return [];
+}
+
   async removeStep(stepId: string): Promise<void> {
     const step = await this.prisma.step.findUnique({ where: { id: stepId } });
     if (!step) {
