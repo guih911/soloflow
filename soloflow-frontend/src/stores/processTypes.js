@@ -8,46 +8,78 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
   const loading = ref(false)
   const error = ref(null)
 
-  // 🔧 HELPER: Garantir que dados estão na estrutura correta
   function normalizeProcessType(processType) {
     return {
       ...processType,
-      // Garantir que arrays existam
       steps: Array.isArray(processType.steps) ? processType.steps : [],
       formFields: Array.isArray(processType.formFields) ? processType.formFields : [],
-      // Garantir contadores
       _count: processType._count || { instances: 0 },
-      // Processar company se existir
       company: processType.company || null,
     }
   }
 
-  // 🔧 HELPER: Normalizar step (já vem com JSON parseado do backend)
   function normalizeStep(step) {
+    let actions = [];
+    if (step.actions) {
+      try {
+        if (typeof step.actions === 'string') {
+          actions = JSON.parse(step.actions);
+        } else if (Array.isArray(step.actions)) {
+          actions = step.actions;
+        }
+      } catch (e) {
+        console.warn('Erro ao processar step.actions:', e);
+        actions = [];
+      }
+    }
+
+    let conditions = {};
+    if (step.conditions) {
+      try {
+        if (typeof step.conditions === 'string') {
+          conditions = JSON.parse(step.conditions);
+        } else if (typeof step.conditions === 'object') {
+          conditions = step.conditions;
+        }
+      } catch (e) {
+        console.warn('Erro ao processar step.conditions:', e);
+        conditions = {};
+      }
+    }
+
+    let allowedFileTypes = [];
+    if (step.allowedFileTypes) {
+      try {
+        if (typeof step.allowedFileTypes === 'string') {
+          allowedFileTypes = JSON.parse(step.allowedFileTypes);
+        } else if (Array.isArray(step.allowedFileTypes)) {
+          allowedFileTypes = step.allowedFileTypes;
+        }
+      } catch (e) {
+        console.warn('Erro ao processar step.allowedFileTypes:', e);
+        allowedFileTypes = [];
+      }
+    }
+
     return {
       ...step,
-      // Backend já faz parse, mas garantir fallbacks
-      actions: Array.isArray(step.actions) ? step.actions : [],
-      conditions: typeof step.conditions === 'object' ? step.conditions : {},
-      allowedFileTypes: Array.isArray(step.allowedFileTypes) ? step.allowedFileTypes : [],
-      // Garantir campos obrigatórios
+      actions: actions,
+      conditions: conditions,
+      allowedFileTypes: allowedFileTypes,
       name: step.name || '',
       type: step.type || 'INPUT',
       order: step.order || 1,
       allowAttachment: Boolean(step.allowAttachment),
       requiresSignature: Boolean(step.requiresSignature),
       requireAttachment: Boolean(step.requireAttachment),
-    }
+    };
   }
 
-  // 🔧 HELPER: Normalizar form field (já vem com JSON parseado do backend)
   function normalizeFormField(field) {
     return {
       ...field,
-      // Backend já faz parse, mas garantir fallbacks
       options: Array.isArray(field.options) ? field.options : [],
       validations: typeof field.validations === 'object' ? field.validations : {},
-      // Garantir campos obrigatórios
       name: field.name || '',
       label: field.label || '',
       type: field.type || 'TEXT',
@@ -61,17 +93,15 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     error.value = null
     
     try {
-      console.log('🔄 Fetching process types...')
+      console.log('📄 Fetching process types...')
       
       const response = await api.get('/process-types')
       
       console.log('📋 Raw response:', response.data.length, 'items')
       
-      // 🔧 Normalizar todos os process types
       processTypes.value = response.data.map(pt => {
         const normalized = normalizeProcessType(pt)
         
-        // Normalizar steps e form fields
         normalized.steps = normalized.steps.map(normalizeStep)
         normalized.formFields = normalized.formFields.map(normalizeFormField)
         
@@ -85,7 +115,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       console.error('❌ Error fetching process types:', err)
       error.value = err.response?.data?.message || 'Erro ao buscar tipos de processo'
       
-      // Reset em caso de erro
       processTypes.value = []
       
       throw err
@@ -103,7 +132,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
       const response = await api.get(`/process-types/${id}`)
       
-      // 🔧 Normalizar process type individual
       const normalized = normalizeProcessType(response.data)
       normalized.steps = normalized.steps.map(normalizeStep)
       normalized.formFields = normalized.formFields.map(normalizeFormField)
@@ -129,13 +157,11 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     try {
       console.log('🚀 Creating process type:', data.name)
       
-      // 🔧 Limpar e estruturar dados antes de enviar
       const cleanData = {
         name: data.name?.trim(),
         description: data.description?.trim() || null,
         companyId: data.companyId,
         
-        // Processar steps
         steps: (data.steps || []).map((step, index) => ({
           name: step.name?.trim(),
           description: step.description?.trim() || null,
@@ -148,13 +174,13 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
           maxAttachments: step.maxAttachments || null,
           assignedToUserId: step.assignedToUserId || null,
           assignedToSectorId: step.assignedToSectorId || null,
-          // Arrays serão convertidos em JSON pelo backend
+          instructions: step.instructions?.trim() || null,
+          slaHours: step.slaHours || null,
           actions: Array.isArray(step.actions) ? step.actions : [],
-          conditions: typeof step.conditions === 'object' ? step.conditions : {},
+          conditions: step.conditions || null,
           allowedFileTypes: Array.isArray(step.allowedFileTypes) ? step.allowedFileTypes : [],
         })),
         
-        // Processar form fields
         formFields: (data.formFields || []).map((field, index) => ({
           name: field.name?.trim(),
           label: field.label?.trim(),
@@ -164,13 +190,11 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
           placeholder: field.placeholder?.trim() || null,
           defaultValue: field.defaultValue?.trim() || null,
           helpText: field.helpText?.trim() || null,
-          // Arrays/Objects serão convertidos em JSON pelo backend
           options: Array.isArray(field.options) ? field.options : [],
           validations: typeof field.validations === 'object' ? field.validations : {},
         }))
       }
       
-      // Validações básicas
       if (!cleanData.name) {
         throw new Error('Nome é obrigatório')
       }
@@ -189,12 +213,10 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
       console.log('✅ Process type created:', response.data.id)
       
-      // 🔧 Normalizar resposta
       const created = normalizeProcessType(response.data)
       created.steps = created.steps.map(normalizeStep)
       created.formFields = created.formFields.map(normalizeFormField)
       
-      // Adicionar à lista local
       processTypes.value.unshift(created)
       
       return created
@@ -202,7 +224,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     } catch (err) {
       console.error('❌ Error creating process type:', err)
       
-      // Extrair mensagem de erro
       let errorMessage = 'Erro ao criar tipo de processo'
       if (err.response?.data?.message) {
         errorMessage = err.response.data.message
@@ -222,16 +243,14 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     error.value = null
     
     try {
-      console.log('📝 Updating process type:', id)
+      console.log('🔧 Updating process type:', id)
       
-      // 🔧 Limpar dados para update (apenas campos permitidos)
       const cleanData = {
         name: data.name?.trim(),
         description: data.description?.trim() || null,
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : undefined,
       }
       
-      // Remover campos undefined
       Object.keys(cleanData).forEach(key => {
         if (cleanData[key] === undefined) {
           delete cleanData[key]
@@ -242,12 +261,10 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
       console.log('✅ Process type updated')
       
-      // 🔧 Normalizar resposta
       const updated = normalizeProcessType(response.data)
       updated.steps = updated.steps.map(normalizeStep)
       updated.formFields = updated.formFields.map(normalizeFormField)
       
-      // Atualizar na lista local
       const index = processTypes.value.findIndex(pt => pt.id === id)
       if (index !== -1) {
         processTypes.value[index] = updated
@@ -264,35 +281,29 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     }
   }
 
-  // 🔧 Métodos auxiliares para steps e form fields
   async function addStep(processTypeId, stepData) {
     loading.value = true
     error.value = null
     
     try {
       const cleanStepData = {
-  processTypeId,
-  name: stepData.name?.trim(),
-  description: stepData.description?.trim() || null,
-  type: stepData.type,
-  order: steps.length + 1,
-  // NOVOS: manter design/rotas, só enviando campos extras
-  instructions: stepData.instructions?.trim() || null,
-  slaHours: Number(stepData.slaHours) || null,
-
-  assignedToUserId: stepData.assignedToUserId || null,
-  assignedToSectorId: stepData.assignedToSectorId || null,
-
-  // conditions pode ser o JSON de INPUT (visibleFields, requiredFields, etc.)
-  conditions: stepData.conditions || null,
-  actions: stepData.actions || [],
-
-  allowAttachment: !!stepData.allowAttachment,
-  requireAttachment: !!stepData.requireAttachment,
-  minAttachments: stepData.minAttachments ?? null,
-  maxAttachments: stepData.maxAttachments ?? null,
-  allowedFileTypes: stepData.allowedFileTypes || []
-}
+        processTypeId,
+        name: stepData.name?.trim(),
+        description: stepData.description?.trim() || null,
+        type: stepData.type,
+        order: stepData.order || 1,
+        instructions: stepData.instructions?.trim() || null,
+        slaHours: Number(stepData.slaHours) || null,
+        assignedToUserId: stepData.assignedToUserId || null,
+        assignedToSectorId: stepData.assignedToSectorId || null,
+        conditions: stepData.conditions || null,
+        actions: stepData.actions || [],
+        allowAttachment: !!stepData.allowAttachment,
+        requireAttachment: !!stepData.requireAttachment,
+        minAttachments: stepData.minAttachments ?? null,
+        maxAttachments: stepData.maxAttachments ?? null,
+        allowedFileTypes: stepData.allowedFileTypes || []
+      }
       
       const response = await api.post(`/process-types/${processTypeId}/steps`, cleanStepData)
       
@@ -339,7 +350,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     }
   }
 
-  // 🔧 Método para duplicar process type
   async function duplicateProcessType(processType) {
     try {
       const duplicateData = {
@@ -348,13 +358,13 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         companyId: processType.companyId,
         steps: processType.steps.map(step => ({
           ...step,
-          id: undefined, // Remover ID para criar novo
+          id: undefined,
           processTypeId: undefined,
           tempId: undefined,
         })),
         formFields: processType.formFields.map(field => ({
           ...field,
-          id: undefined, // Remover ID para criar novo
+          id: undefined,
           processTypeId: undefined,
           tempId: undefined,
         }))
@@ -377,13 +387,11 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
   }
 
   return {
-    // State
     processTypes,
     currentProcessType,
     loading,
     error,
     
-    // Actions
     fetchProcessTypes,
     fetchProcessType,
     createProcessType,
@@ -392,7 +400,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     addFormField,
     duplicateProcessType,
     
-    // Utils
     clearError,
     clearCurrentProcessType,
   }

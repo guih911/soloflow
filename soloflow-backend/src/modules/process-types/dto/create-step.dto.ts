@@ -2,7 +2,34 @@ import { IsString, IsEnum, IsBoolean, IsOptional, IsInt, IsUUID, IsArray, Min, M
 import { Type } from 'class-transformer';
 import { StepType, FieldType } from '@prisma/client';
 
-// ✅ NOVO: DTO para campos da etapa INPUT
+export interface InputStepConditions {
+  // Campos dinâmicos para a etapa
+  fields?: StepFieldDto[];
+  
+  // Lista de nomes de campos visíveis nesta etapa
+  visibleFields?: string[];
+  
+  // Lista de nomes de campos obrigatórios nesta etapa
+  requiredFields?: string[];
+  
+  // Campos que serão armazenados apenas no metadata da execução
+  stepLocalFields?: string[];
+  
+  // Configurações especiais para validações específicas de campos
+  overrides?: Record<string, {
+    regex?: string;
+    min?: number;
+    max?: number;
+    errorMessage?: string;
+  }>;
+  
+  // Campos para pré-preencher com dados de outras etapas
+  prefillFrom?: Array<{
+    stepOrder: number;
+    fields: string[];
+  }>;
+}
+
 export class StepFieldDto {
   @IsString()
   @Length(1, 50)

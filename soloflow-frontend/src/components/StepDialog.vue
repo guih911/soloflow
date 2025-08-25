@@ -11,11 +11,11 @@
         <v-card-text>
           <v-tabs v-model="tab" class="mb-4">
             <v-tab value="basic">Informações Básicas</v-tab>
-            <v-tab value="instructions">Instruções e SLA</v-tab>
+            <v-tab value="instructions">Instruções e Prazo</v-tab>
             <v-tab value="attachment">Anexos</v-tab>
             <v-tab value="flow">Fluxo e Condições</v-tab>
             <v-tab v-if="localStepData.type === 'INPUT'" value="input-config">
-              Entrada de Dados
+              Formulário da Etapa
             </v-tab>
           </v-tabs>
 
@@ -35,19 +35,6 @@
                     { title: 'Assinatura', value: 'SIGNATURE' }
                   ]" item-title="title" item-value="value" label="Tipo de Etapa" :rules="[v => !!v || 'Tipo é obrigatório']"
                     required />
-                  <template v-if="isInputType">
-                    <v-divider class="my-4" />
-                    <h3 class="text-subtitle-1 mb-2">Entrada de Dados</h3>
-
-                    <v-autocomplete v-model="inputConfig.visibleFields" :items="formFields" item-title="label"
-                      item-value="name" label="Campos visíveis" multiple chips closable-chips />
-
-                    <v-autocomplete class="mt-4" v-model="inputConfig.requiredFields"
-                      :items="formFields.filter(f => inputConfig.visibleFields.includes(f.name))" item-title="label"
-                      item-value="name" label="Campos obrigatórios" multiple chips closable-chips />
-                  </template>
-
-
                 </v-col>
                 <v-col cols="12">
                   <v-textarea v-model="localStepData.description" label="Descrição" rows="2" />
@@ -97,18 +84,18 @@
 
                 <v-col cols="12" md="6">
                   <h3 class="text-h6 mb-4 d-flex align-center">
-                    <v-icon color="warning" class="mr-2">mdi-clock-alert</v-icon>
-                    SLA (Prazo)
+                    <v-icon color="warning" class="mr-2">mdi-calendar-clock</v-icon>
+                    Prazo (SLA)
                   </h3>
-                  <v-text-field v-model.number="localStepData.slaHours" label="Prazo em horas" type="number" min="1"
-                    max="8760" :rules="slaRules" hint="Tempo limite para conclusão desta etapa (1 a 8760 horas)"
-                    persistent-hint suffix="horas" />
+                  <v-text-field v-model.number="localStepData.slaDays" label="Prazo em dias" type="number" min="1"
+                    max="365" :rules="slaRules" hint="Tempo limite para conclusão desta etapa (1 a 365 dias)"
+                    persistent-hint suffix="dias" />
                 </v-col>
 
                 <v-col cols="12" md="6">
-                  <v-alert v-if="localStepData.slaHours" type="info" variant="tonal" density="compact">
+                  <v-alert v-if="localStepData.slaDays" type="info" variant="tonal" density="compact">
                     <v-icon start>mdi-information</v-icon>
-                    Prazo: {{ formatSlaDescription(localStepData.slaHours) }}
+                    Prazo: {{ formatSlaDescription(localStepData.slaDays) }}
                   </v-alert>
                 </v-col>
               </v-row>
@@ -190,111 +177,63 @@
               </v-row>
             </v-window-item>
 
-            <!-- Aba de configuração para etapa INPUT -->
             <v-window-item value="input-config">
               <v-row>
                 <v-col cols="12">
-                  <h3 class="text-h6 mb-4">Configuração de Campos da Entrada de Dados</h3>
+                  <h3 class="text-h6 mb-4">Formulário Específico da Etapa</h3>
+                  <p class="text-body-2 text-medium-emphasis mb-4">
+                    Configure campos específicos que serão exibidos apenas nesta etapa de entrada de dados.
+                    Estes campos são independentes do formulário principal do processo.
+                  </p>
 
-                  <!-- Campos Visíveis -->
                   <v-card variant="outlined" class="mb-4">
-                    <v-card-title class="text-subtitle-1">
-                      <v-icon start color="primary">mdi-eye</v-icon>
-                      Campos Visíveis nesta Etapa
+                    <v-card-title class="text-subtitle-1 d-flex align-center justify-space-between">
+                      <span>
+                        <v-icon start color="primary">mdi-form-textbox</v-icon>
+                        Campos da Etapa ({{ inputConfig.fields.length }})
+                      </span>
+                      <v-btn color="primary" size="small" @click="addInputField" prepend-icon="mdi-plus">
+                        Adicionar Campo
+                      </v-btn>
                     </v-card-title>
-                    <v-card-text>
-                      <v-autocomplete v-model="inputConfig.visibleFields" :items="availableFormFields"
-                        item-title="label" item-value="name" label="Selecione os campos que serão exibidos" multiple
-                        chips closable-chips hint="Apenas estes campos serão visíveis ao executar esta etapa"
-                        persistent-hint>
-                        <template v-slot:chip="{ item, props }">
-                          <v-chip v-bind="props" closable>
-                            {{ item.raw.label }}
-                          </v-chip>
-                        </template>
-                      </v-autocomplete>
+                    
+                    <v-card-text v-if="inputConfig.fields.length === 0" class="text-center py-6">
+                      <v-icon size="48" color="grey-lighten-1">mdi-form-select</v-icon>
+                      <p class="text-body-1 text-grey mt-2">Nenhum campo específico</p>
+                      <p class="text-body-2 text-grey">
+                        Adicione campos que aparecerão apenas nesta etapa
+                      </p>
                     </v-card-text>
-                  </v-card>
 
-                  <!-- Campos Obrigatórios -->
-                  <v-card variant="outlined" class="mb-4">
-                    <v-card-title class="text-subtitle-1">
-                      <v-icon start color="error">mdi-asterisk</v-icon>
-                      Campos Obrigatórios
-                    </v-card-title>
-                    <v-card-text>
-                      <v-autocomplete v-model="inputConfig.requiredFields" :items="visibleFieldsOptions"
-                        item-title="label" item-value="name" label="Marque os campos obrigatórios" multiple chips
-                        closable-chips hint="Estes campos devem ser preenchidos para concluir a etapa" persistent-hint>
-                        <template v-slot:chip="{ item, props }">
-                          <v-chip v-bind="props" color="error" variant="tonal" closable>
-                            {{ item.raw.label }} *
-                          </v-chip>
-                        </template>
-                      </v-autocomplete>
-                    </v-card-text>
-                  </v-card>
+                    <v-list v-else lines="two" class="py-0">
+                      <template v-for="(field, index) in inputConfig.fields" :key="field.tempId || index">
+                        <v-list-item>
+                          <template #prepend>
+                            <v-avatar :color="getFieldTypeColor(field.type)" size="36">
+                              <v-icon :icon="getFieldTypeIcon(field.type)" size="18" />
+                            </v-avatar>
+                          </template>
 
-                  <!-- Personalização de Campos -->
-                  <v-card variant="outlined" class="mb-4">
-                    <v-card-title class="text-subtitle-1">
-                      <v-icon start color="info">mdi-pencil</v-icon>
-                      Personalizar Campos
-                    </v-card-title>
-                    <v-card-text>
-                      <v-expansion-panels variant="accordion">
-                        <v-expansion-panel v-for="field in visibleFieldsOptions" :key="field.name">
-                          <v-expansion-panel-title>
+                          <v-list-item-title class="font-weight-medium">
                             {{ field.label }}
-                            <v-chip v-if="hasOverride(field.name)" size="x-small" color="info" class="ml-2">
-                              Personalizado
+                            <v-chip v-if="field.required" size="x-small" color="error" class="ml-2">
+                              Obrigatório
                             </v-chip>
-                          </v-expansion-panel-title>
-                          <v-expansion-panel-text>
-                            <v-row>
-                              <v-col cols="12" md="6">
-                                <v-text-field v-model="inputConfig.overrides[field.name].label"
-                                  label="Label personalizado" :placeholder="field.label" density="compact" />
-                              </v-col>
-                              <v-col cols="12" md="6">
-                                <v-text-field v-model="inputConfig.overrides[field.name].hint"
-                                  label="Dica personalizada" :placeholder="field.helpText" density="compact" />
-                              </v-col>
-                              <v-col cols="12" md="6" v-if="field.type === 'NUMBER'">
-                                <v-text-field v-model.number="inputConfig.overrides[field.name].min"
-                                  label="Valor mínimo" type="number" density="compact" />
-                              </v-col>
-                              <v-col cols="12" md="6" v-if="field.type === 'NUMBER'">
-                                <v-text-field v-model.number="inputConfig.overrides[field.name].max"
-                                  label="Valor máximo" type="number" density="compact" />
-                              </v-col>
-                              <v-col cols="12" v-if="field.type === 'TEXT'">
-                                <v-text-field v-model="inputConfig.overrides[field.name].regex"
-                                  label="Expressão regular (validação)" placeholder="Ex: ^[A-Z]{2}\d{4}$"
-                                  density="compact" />
-                              </v-col>
-                              <v-col cols="12" v-if="inputConfig.overrides[field.name].regex">
-                                <v-text-field v-model="inputConfig.overrides[field.name].errorMessage"
-                                  label="Mensagem de erro personalizada" density="compact" />
-                              </v-col>
-                            </v-row>
-                          </v-expansion-panel-text>
-                        </v-expansion-panel>
-                      </v-expansion-panels>
-                    </v-card-text>
-                  </v-card>
+                          </v-list-item-title>
 
-                  <!-- Pré-preenchimento -->
-                  <v-card variant="outlined">
-                    <v-card-title class="text-subtitle-1">
-                      <v-icon start color="success">mdi-content-copy</v-icon>
-                      Pré-preenchimento
-                    </v-card-title>
-                    <v-card-text>
-                      <v-select v-model="inputConfig.prefillFrom" :items="prefillOptions"
-                        label="Origem dos dados para pré-preenchimento" multiple chips closable-chips
-                        hint="Os campos serão pré-preenchidos com dados existentes" persistent-hint />
-                    </v-card-text>
+                          <v-list-item-subtitle>
+                            Nome: {{ field.name }} • Tipo: {{ getFieldTypeText(field.type) }}
+                            <span v-if="field.placeholder"> • Placeholder: {{ field.placeholder }}</span>
+                          </v-list-item-subtitle>
+
+                          <template #append>
+                            <v-btn icon="mdi-pencil" size="small" variant="text" @click="editInputField(index)" />
+                            <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="removeInputField(index)" />
+                          </template>
+                        </v-list-item>
+                        <v-divider v-if="index < inputConfig.fields.length - 1" />
+                      </template>
+                    </v-list>
                   </v-card>
                 </v-col>
               </v-row>
@@ -315,20 +254,79 @@
         </v-card-actions>
       </v-form>
     </v-card>
+
+    <v-dialog v-model="fieldDialog" max-width="600" persistent>
+      <v-card>
+        <v-card-title>
+          {{ editingFieldIndex !== null ? 'Editar' : 'Novo' }} Campo do Formulário
+        </v-card-title>
+        <v-divider />
+
+        <v-form ref="fieldForm" v-model="fieldValid">
+          <v-card-text>
+            <v-row>
+              <v-col cols="12" md="6">
+                <v-text-field 
+                  v-model="fieldData.name" 
+                  label="Nome do Campo" 
+                  :rules="[
+                    v => !!v || 'Nome é obrigatório',
+                    v => /^[a-zA-Z][a-zA-Z0-9_]*$/.test(v) || 'Use apenas letras, números e _'
+                  ]"
+                  hint="Ex: valor_total, data_vencimento"
+                  persistent-hint
+                  required 
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field 
+                  v-model="fieldData.label" 
+                  label="Rótulo" 
+                  :rules="[v => !!v || 'Rótulo é obrigatório']"
+                  required 
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-select 
+                  v-model="fieldData.type" 
+                  :items="fieldTypes" 
+                  label="Tipo do Campo"
+                  :rules="[v => !!v || 'Tipo é obrigatório']"
+                  required 
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-switch v-model="fieldData.required" label="Campo Obrigatório" color="primary" />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="fieldData.placeholder" label="Placeholder" />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="fieldData.defaultValue" label="Valor Padrão" />
+              </v-col>
+              <v-col cols="12">
+                <v-textarea v-model="fieldData.helpText" label="Texto de Ajuda" rows="2" />
+              </v-col>
+            </v-row>
+          </v-card-text>
+
+          <v-divider />
+
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" @click="closeFieldDialog">Cancelar</v-btn>
+            <v-btn color="primary" variant="elevated" :disabled="!fieldValid" @click="saveInputField">
+              {{ editingFieldIndex !== null ? 'Salvar' : 'Adicionar' }}
+            </v-btn>
+          </v-card-actions>
+        </v-form>
+      </v-card>
+    </v-dialog>
   </v-dialog>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-
-const isInputType = computed(() =>
-  localStepData.value?.type === 'INPUT' || localStepData.value?.type === 'Entrada de Dados'
-)
-
-const inputConfig = ref({
-  visibleFields: [],
-  requiredFields: []
-})
 
 const props = defineProps({
   modelValue: Boolean,
@@ -345,17 +343,19 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'save', 'close'])
 
-// Estado
 const stepValid = ref(false)
+const fieldValid = ref(false)
 const tab = ref('basic')
 const responsibleType = ref('sector')
+const fieldDialog = ref(false)
+const editingFieldIndex = ref(null)
 
 const localStepData = ref({
   name: '',
   description: '',
   type: 'INPUT',
   instructions: '',
-  slaHours: null,
+  slaDays: null,
   allowAttachment: false,
   requiresSignature: false,
   requireAttachment: false,
@@ -368,15 +368,31 @@ const localStepData = ref({
   conditions: {}
 })
 
+const inputConfig = ref({
+  fields: []
+})
 
+const fieldData = ref({
+  name: '',
+  label: '',
+  type: 'TEXT',
+  required: false,
+  placeholder: '',
+  defaultValue: '',
+  helpText: ''
+})
 
-// Opções
-const stepTypes = [
-  { title: 'Entrada de Dados', value: 'INPUT' },
-  { title: 'Aprovação', value: 'APPROVAL' },
-  { title: 'Upload de Arquivo', value: 'UPLOAD' },
-  { title: 'Revisão', value: 'REVIEW' },
-  { title: 'Assinatura', value: 'SIGNATURE' }
+const fieldTypes = [
+  { title: 'Texto', value: 'TEXT' },
+  { title: 'Número', value: 'NUMBER' },
+  { title: 'Data', value: 'DATE' },
+  { title: 'E-mail', value: 'EMAIL' },
+  { title: 'CPF', value: 'CPF' },
+  { title: 'CNPJ', value: 'CNPJ' },
+  { title: 'Telefone', value: 'PHONE' },
+  { title: 'Lista Suspensa', value: 'DROPDOWN' },
+  { title: 'Área de Texto', value: 'TEXTAREA' },
+  { title: 'Moeda', value: 'CURRENCY' }
 ]
 
 const fileTypes = [
@@ -387,40 +403,12 @@ const fileTypes = [
   { title: 'Texto', value: 'text/plain' }
 ]
 
-const prefillOptions = [
-  { title: 'Dados do formulário inicial', value: 'formData' },
-  { title: 'Etapa anterior', value: 'previousStep' },
-  { title: 'Dados do usuário', value: 'userData' }
-]
-
-// Computed
-const availableFormFields = computed(() => {
-  return props.formFields || []
-})
-
-const visibleFieldsOptions = computed(() => {
-  return availableFormFields.value.filter(field =>
-    inputConfig.value.visibleFields.includes(field.name)
-  )
-})
-
 const slaRules = computed(() => {
   return [
-    v => !v || (v >= 1 && v <= 8760) || 'SLA deve estar entre 1 e 8760 horas',
-    v => !v || Number.isInteger(Number(v)) || 'SLA deve ser um número inteiro'
+    v => !v || (v >= 1 && v <= 365) || 'Prazo deve estar entre 1 e 365 dias',
+    v => !v || Number.isInteger(Number(v)) || 'Prazo deve ser um número inteiro'
   ]
 })
-
-function formatSlaDescription(hours) {
-  if (!hours) return ''
-  if (hours <= 24) return `${hours} hora(s)`
-  const days = Math.floor(hours / 24)
-  const remainingHours = hours % 24
-  if (remainingHours > 0) {
-    return `${days} dia(s) e ${remainingHours} hora(s)`
-  }
-  return `${days} dia(s)`
-}
 
 const attachmentRules = computed(() => {
   return [
@@ -435,112 +423,64 @@ const attachmentRules = computed(() => {
   ]
 })
 
-// Watch
-watch(() => props.modelValue, (newVal) => {
-  if (newVal) {
-    if (props.stepData) {
-      localStepData.value = { ...props.stepData }
-      responsibleType.value = props.stepData.assignedToUserId ? 'user' : 'sector'
-
-      // Carregar configurações INPUT se existirem
-      if (props.stepData.type === 'INPUT' && props.stepData.conditions) {
-        try {
-          const conditions = typeof props.stepData.conditions === 'string'
-            ? JSON.parse(props.stepData.conditions)
-            : props.stepData.conditions
-
-          // Carregar configurações INPUT ou usar padrões
-          inputConfig.value = {
-            visibleFields: conditions.visibleFields || [],
-            requiredFields: conditions.requiredFields || [],
-            overrides: conditions.overrides || {},
-            stepLocalFields: conditions.stepLocalFields || [],
-            prefillFrom: conditions.prefillFrom || []
-          }
-        } catch (e) {
-          console.error('Error loading INPUT conditions:', e)
-          resetInputConfig()
-        }
-      } else {
-        resetInputConfig()
-      }
-    } else {
-      // Novo step
-      localStepData.value = {
-        name: '',
-        description: '',
-        type: 'INPUT',
-        instructions: '',
-        slaHours: null,
-        allowAttachment: false,
-        requiresSignature: false,
-        requireAttachment: false,
-        minAttachments: null,
-        maxAttachments: null,
-        allowedFileTypes: [],
-        actions: [],
-        assignedToUserId: null,
-        assignedToSectorId: null,
-        conditions: {}
-      }
-      responsibleType.value = 'sector'
-      resetInputConfig()
+function formatSlaDescription(days) {
+  if (!days) return ''
+  if (days === 1) return '1 dia'
+  if (days <= 7) return `${days} dias`
+  if (days <= 30) {
+    const weeks = Math.floor(days / 7)
+    const remainingDays = days % 7
+    let result = `${weeks} semana${weeks > 1 ? 's' : ''}`
+    if (remainingDays > 0) {
+      result += ` e ${remainingDays} dia${remainingDays > 1 ? 's' : ''}`
     }
-    tab.value = 'basic'
+    return result
   }
-})
-
-// Watch para inicializar overrides quando campos visíveis mudam
-watch(() => inputConfig.value.visibleFields, (newFields) => {
-  newFields.forEach(fieldName => {
-    if (!inputConfig.value.overrides[fieldName]) {
-      inputConfig.value.overrides[fieldName] = {
-        label: '',
-        hint: '',
-        min: null,
-        max: null,
-        regex: '',
-        errorMessage: ''
-      }
-    }
-  })
-
-  // Remover overrides de campos não visíveis
-  Object.keys(inputConfig.value.overrides).forEach(fieldName => {
-    if (!newFields.includes(fieldName)) {
-      delete inputConfig.value.overrides[fieldName]
-    }
-  })
-
-  // Limpar campos obrigatórios que não são mais visíveis
-  inputConfig.value.requiredFields = inputConfig.value.requiredFields.filter(
-    field => newFields.includes(field)
-  )
-})
-
-// Métodos
-function resetInputConfig() {
-  inputConfig.value = {
-    visibleFields: [],
-    requiredFields: [],
-    overrides: {},
-    stepLocalFields: [],
-    prefillFrom: []
+  const months = Math.floor(days / 30)
+  const remainingDays = days % 30
+  let result = `${months} mês${months > 1 ? 'es' : ''}`
+  if (remainingDays > 0) {
+    result += ` e ${remainingDays} dia${remainingDays > 1 ? 's' : ''}`
   }
+  return result
+}
+
+function getFieldTypeColor(type) {
+  const colors = {
+    TEXT: 'blue',
+    NUMBER: 'green', 
+    DATE: 'orange',
+    EMAIL: 'purple',
+    DROPDOWN: 'teal',
+    CURRENCY: 'amber'
+  }
+  return colors[type] || 'grey'
+}
+
+function getFieldTypeIcon(type) {
+  const icons = {
+    TEXT: 'mdi-format-text',
+    NUMBER: 'mdi-numeric',
+    DATE: 'mdi-calendar',
+    EMAIL: 'mdi-email',
+    CPF: 'mdi-card-account-details',
+    CNPJ: 'mdi-domain',
+    PHONE: 'mdi-phone',
+    DROPDOWN: 'mdi-menu-down',
+    TEXTAREA: 'mdi-text-long',
+    CURRENCY: 'mdi-currency-brl'
+  }
+  return icons[type] || 'mdi-help-circle'
+}
+
+function getFieldTypeText(type) {
+  const field = fieldTypes.find(f => f.value === type)
+  return field?.title || type
 }
 
 function onResponsibleTypeChange() {
   localStepData.value.assignedToUserId = null
   localStepData.value.assignedToSectorId = null
-}
-
-function hasOverride(fieldName) {
-  const override = inputConfig.value.overrides[fieldName]
-  if (!override) return false
-
-  return override.label || override.hint ||
-    override.min !== null || override.max !== null ||
-    override.regex || override.errorMessage
 }
 
 function getFlowOptions() {
@@ -550,7 +490,6 @@ function getFlowOptions() {
     { title: 'Voltar para etapa anterior', value: 'PREVIOUS', icon: 'mdi-arrow-left' }
   ]
 
-  // Adicionar opções para ir para etapas específicas
   props.steps.forEach((step, index) => {
     if (props.editingIndex === null || index !== props.editingIndex) {
       options.push({
@@ -564,6 +503,58 @@ function getFlowOptions() {
   return options
 }
 
+function addInputField() {
+  resetFieldData()
+  fieldDialog.value = true
+}
+
+function editInputField(index) {
+  editingFieldIndex.value = index
+  fieldData.value = { ...inputConfig.value.fields[index] }
+  fieldDialog.value = true
+}
+
+function removeInputField(index) {
+  inputConfig.value.fields.splice(index, 1)
+}
+
+function resetFieldData() {
+  editingFieldIndex.value = null
+  fieldData.value = {
+    name: '',
+    label: '',
+    type: 'TEXT',
+    required: false,
+    placeholder: '',
+    defaultValue: '',
+    helpText: ''
+  }
+}
+
+function closeFieldDialog() {
+  fieldDialog.value = false
+  resetFieldData()
+}
+
+function saveInputField() {
+  if (!fieldValid.value) return
+
+  const field = {
+    ...fieldData.value,
+    tempId: editingFieldIndex.value !== null 
+      ? inputConfig.value.fields[editingFieldIndex.value].tempId 
+      : Date.now() + Math.random()
+  }
+
+  if (editingFieldIndex.value !== null) {
+    inputConfig.value.fields[editingFieldIndex.value] = field
+  } else {
+    inputConfig.value.fields.push(field)
+  }
+
+  closeFieldDialog()
+}
+
 function close() {
   emit('close')
   emit('update:modelValue', false)
@@ -572,7 +563,6 @@ function close() {
 function save() {
   if (!stepValid.value) return
 
-  // Limpar campos não utilizados
   if (!localStepData.value.allowAttachment) {
     localStepData.value.requireAttachment = false
     localStepData.value.minAttachments = null
@@ -580,43 +570,90 @@ function save() {
     localStepData.value.allowedFileTypes = []
   }
 
-  // Se é etapa INPUT, adicionar configurações ao conditions
-  if (localStepData.value.type === 'INPUT') {
-    // Limpar overrides vazios
-    const cleanOverrides = {}
-    Object.keys(inputConfig.value.overrides).forEach(fieldName => {
-      const override = inputConfig.value.overrides[fieldName]
-      const cleanOverride = {}
+  const stepToSave = { ...localStepData.value }
 
-      if (override.label) cleanOverride.label = override.label
-      if (override.hint) cleanOverride.hint = override.hint
-      if (override.min !== null && override.min !== '') cleanOverride.min = override.min
-      if (override.max !== null && override.max !== '') cleanOverride.max = override.max
-      if (override.regex) cleanOverride.regex = override.regex
-      if (override.errorMessage) cleanOverride.errorMessage = override.errorMessage
+  if (stepToSave.slaDays) {
+    stepToSave.slaHours = stepToSave.slaDays * 24
+    delete stepToSave.slaDays
+  }
 
-      if (Object.keys(cleanOverride).length > 0) {
-        cleanOverrides[fieldName] = cleanOverride
-      }
-    })
-
-    localStepData.value.conditions = {
-      visibleFields: inputConfig.value.visibleFields,
-      requiredFields: inputConfig.value.requiredFields,
-      overrides: cleanOverrides,
-      stepLocalFields: inputConfig.value.stepLocalFields,
-      prefillFrom: inputConfig.value.prefillFrom
+  if (stepToSave.type === 'INPUT' && inputConfig.value.fields.length > 0) {
+    stepToSave.conditions = {
+      fields: inputConfig.value.fields
+    }
+  } else if (stepToSave.type === 'APPROVAL') {
+    stepToSave.actions = ['aprovar', 'reprovar']
+    stepToSave.conditions = {
+      requireJustification: true
     }
   }
- if (localStepData.value.type === 'INPUT') {
-  localStepData.value.conditions = {
-    visibleFields: inputConfig.value.visibleFields,
-    requiredFields: inputConfig.value.requiredFields
-  }
+
+  emit('save', stepToSave)
 }
 
-  emit('save', { ...localStepData.value })
-}
+watch(() => props.modelValue, (newVal) => {
+  if (newVal) {
+    if (props.stepData) {
+      localStepData.value = { ...props.stepData }
+      
+      if (props.stepData.slaHours) {
+        localStepData.value.slaDays = Math.ceil(props.stepData.slaHours / 24)
+      }
+      
+      responsibleType.value = props.stepData.assignedToUserId ? 'user' : 'sector'
+
+      if (props.stepData.type === 'INPUT' && props.stepData.conditions) {
+        try {
+          const conditions = typeof props.stepData.conditions === 'string'
+            ? JSON.parse(props.stepData.conditions)
+            : props.stepData.conditions
+
+          inputConfig.value = {
+            fields: conditions.fields || []
+          }
+        } catch (e) {
+          console.error('Error loading INPUT conditions:', e)
+          inputConfig.value = { fields: [] }
+        }
+      } else {
+        inputConfig.value = { fields: [] }
+      }
+    } else {
+      localStepData.value = {
+        name: '',
+        description: '',
+        type: 'INPUT',
+        instructions: '',
+        slaDays: null,
+        allowAttachment: false,
+        requiresSignature: false,
+        requireAttachment: false,
+        minAttachments: null,
+        maxAttachments: null,
+        allowedFileTypes: [],
+        actions: [],
+        assignedToUserId: null,
+        assignedToSectorId: null,
+        conditions: {}
+      }
+      responsibleType.value = 'sector'
+      inputConfig.value = { fields: [] }
+    }
+    tab.value = 'basic'
+  }
+})
+
+watch(() => localStepData.value.allowAttachment, (newValue) => {
+  if (!newValue) {
+    localStepData.value.requireAttachment = false
+  }
+})
+
+watch(() => localStepData.value.type, (newType) => {
+  if (newType !== 'INPUT') {
+    inputConfig.value.fields = []
+  }
+})
 </script>
 
 <style scoped>

@@ -17,11 +17,10 @@ export class ProcessTypesService {
   constructor(private prisma: PrismaService) {}
 
   async create(createProcessTypeDto: CreateProcessTypeDto): Promise<ProcessType> {
-    
+    console.log('Creating process type with data:', createProcessTypeDto);
 
-    const { steps = [], formFields = [], ...processTypeData } = createProcessTypeDto;
+    const { steps, formFields, ...processTypeData } = createProcessTypeDto;
 
-    // Verificar se a empresa existe e está ativa
     const company = await this.prisma.company.findUnique({
       where: { id: processTypeData.companyId },
     });
@@ -30,7 +29,6 @@ export class ProcessTypesService {
       throw new BadRequestException('Empresa não encontrada ou inativa');
     }
 
-    // Verificar se já existe tipo de processo com mesmo nome na empresa
     const existing = await this.prisma.processType.findFirst({
       where: {
         name: processTypeData.name,
@@ -42,27 +40,32 @@ export class ProcessTypesService {
       throw new ConflictException('Tipo de processo com este nome já existe nesta empresa');
     }
 
-    // Validar etapas se fornecidas
     if (steps && steps.length > 0) {
       await this.validateSteps(steps, processTypeData.companyId);
     }
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // ✅ CORRIGIDO: Criar o tipo de processo com valores corretos para campos JSON
         const processType = await tx.processType.create({
           data: {
             ...processTypeData,
-            description: processTypeData.description || undefined, // ✅ null -> undefined
+            description: processTypeData.description || undefined,
           },
         });
 
         console.log('ProcessType created:', processType);
 
-        // ✅ CORRIGIDO: Criar etapas com tratamento correto de campos JSON
         if (steps && steps.length > 0) {
           for (let i = 0; i < steps.length; i++) {
             const step = steps[i];
+            
+            let processedConditions = step.conditions;
+            if (step.type === 'INPUT' && step.conditions && typeof step.conditions === 'object') {
+              processedConditions = JSON.stringify(step.conditions);
+            } else if (step.conditions && typeof step.conditions === 'object') {
+              processedConditions = JSON.stringify(step.conditions);
+            }
+
             await tx.step.create({
               data: {
                 ...step,
@@ -70,15 +73,14 @@ export class ProcessTypesService {
                 instructions: step.instructions?.trim() || undefined,
                 slaHours: step.slaHours || undefined,
                 order: step.order || (i + 1),
-                actions: step.actions ? JSON.stringify(step.actions) : '[]', // ✅ JSON como string
-                conditions: step.conditions ? JSON.stringify(step.conditions) : undefined, // ✅ Correto
-                allowedFileTypes: step.allowedFileTypes ? JSON.stringify(step.allowedFileTypes) : undefined, // ✅ Correto
+                actions: step.actions ? JSON.stringify(step.actions) : '[]',
+                conditions: processedConditions || undefined,
+                allowedFileTypes: step.allowedFileTypes ? JSON.stringify(step.allowedFileTypes) : undefined,
               },
             });
           }
         }
 
-        // ✅ CORRIGIDO: Criar campos do formulário com tratamento correto de campos JSON
         if (formFields && formFields.length > 0) {
           for (let i = 0; i < formFields.length; i++) {
             const field = formFields[i];
@@ -87,17 +89,16 @@ export class ProcessTypesService {
                 ...field,
                 processTypeId: processType.id,
                 order: field.order || (i + 1),
-                options: field.options ? JSON.stringify(field.options) : undefined, // ✅ JSON como string
-                validations: field.validations ? JSON.stringify(field.validations) : undefined, // ✅ JSON como string
-                placeholder: field.placeholder || undefined, // ✅ null -> undefined
-                defaultValue: field.defaultValue || undefined, // ✅ null -> undefined
-                helpText: field.helpText || undefined, // ✅ null -> undefined
+                options: field.options ? JSON.stringify(field.options) : undefined,
+                validations: field.validations ? JSON.stringify(field.validations) : undefined,
+                placeholder: field.placeholder || undefined,
+                defaultValue: field.defaultValue || undefined,
+                helpText: field.helpText || undefined,
               },
             });
           }
         }
 
-        // ✅ CORRIGIDO: Buscar o tipo de processo completo COM as relações incluídas
         const fullProcessType = await tx.processType.findUnique({
           where: { id: processType.id },
           include: {
@@ -122,7 +123,7 @@ export class ProcessTypesService {
           throw new NotFoundException('Erro ao recuperar tipo de processo recém-criado');
         }
 
-        return fullProcessType;
+        return this.parseProcessTypeFields(fullProcessType);
       });
     } catch (error) {
       console.error('Error creating process type:', error);
@@ -130,7 +131,6 @@ export class ProcessTypesService {
     }
   }
 
-  // ✅ CORRIGIDO: Garantir que todas as consultas incluam as relações necessárias
   async findAll(companyId: string): Promise<ProcessType[]> {
     if (!companyId) {
       throw new BadRequestException('ID da empresa é obrigatório');
@@ -138,7 +138,7 @@ export class ProcessTypesService {
 
     console.log('Finding process types for company:', companyId);
 
-    return this.prisma.processType.findMany({
+    const processTypes = await this.prisma.processType.findMany({
       where: { 
         companyId, 
         isActive: true 
@@ -156,9 +156,10 @@ export class ProcessTypesService {
       },
       orderBy: { name: 'asc' },
     });
+
+    return processTypes.map(pt => this.parseProcessTypeFields(pt));
   }
 
-  // ✅ CORRIGIDO: Incluir relações na busca individual
   async findOne(id: string): Promise<ProcessType> {
     const processType = await this.prisma.processType.findUnique({
       where: { id },
@@ -179,22 +180,20 @@ export class ProcessTypesService {
       throw new NotFoundException('Tipo de processo não encontrado');
     }
 
-    return processType;
+    return this.parseProcessTypeFields(processType);
   }
 
-  // ✅ CORRIGIDO: Update com tratamento correto de campos JSON
   async update(id: string, dto: UpdateProcessTypeDto): Promise<ProcessType> {
     const processType = await this.findOne(id);
 
-    // Remover campos que não devem ser atualizados diretamente
     const { companyId, formFields, ...safeDto } = dto;
 
     try {
-      return await this.prisma.processType.update({
+      const updated = await this.prisma.processType.update({
         where: { id },
         data: {
           ...safeDto,
-          description: safeDto.description || undefined, // ✅ null -> undefined
+          description: safeDto.description || undefined,
         },
         include: {
           steps: { 
@@ -213,41 +212,42 @@ export class ProcessTypesService {
           },
         },
       });
+
+      return this.parseProcessTypeFields(updated);
     } catch (error) {
       console.error('Error updating process type:', error);
       throw new BadRequestException('Erro ao atualizar tipo de processo: ' + error.message);
     }
   }
 
-  // ✅ CORRIGIDO: Adicionar campo de formulário com JSON correto
   async addFormField(processTypeId: string, dto: CreateFormFieldDto): Promise<FormField> {
     const processType = await this.findOne(processTypeId);
 
-    // Reordenar campos existentes se necessário
     await this.prisma.formField.updateMany({
       where: { processTypeId, order: { gte: dto.order } },
       data: { order: { increment: 1 } },
     });
 
     try {
-      return await this.prisma.formField.create({
+      const created = await this.prisma.formField.create({
         data: {
           ...dto,
           processTypeId,
-          options: dto.options ? JSON.stringify(dto.options) : undefined, // ✅ JSON como string
-          validations: dto.validations ? JSON.stringify(dto.validations) : undefined, // ✅ JSON como string
-          placeholder: dto.placeholder || undefined, // ✅ null -> undefined
-          defaultValue: dto.defaultValue || undefined, // ✅ null -> undefined
-          helpText: dto.helpText || undefined, // ✅ null -> undefined
+          options: dto.options ? JSON.stringify(dto.options) : undefined,
+          validations: dto.validations ? JSON.stringify(dto.validations) : undefined,
+          placeholder: dto.placeholder || undefined,
+          defaultValue: dto.defaultValue || undefined,
+          helpText: dto.helpText || undefined,
         },
       });
+
+      return this.parseFormFieldData(created);
     } catch (error) {
       console.error('Error adding form field:', error);
       throw new BadRequestException('Erro ao adicionar campo: ' + error.message);
     }
   }
 
-  // ✅ CORRIGIDO: Atualizar campo de formulário com JSON correto
   async updateFormField(fieldId: string, dto: UpdateFormFieldDto): Promise<FormField> {
     const field = await this.prisma.formField.findUnique({ where: { id: fieldId } });
     if (!field) {
@@ -255,58 +255,66 @@ export class ProcessTypesService {
     }
 
     try {
-      return await this.prisma.formField.update({
+      const updated = await this.prisma.formField.update({
         where: { id: fieldId },
         data: {
           ...dto,
-          options: dto.options ? JSON.stringify(dto.options) : undefined, // ✅ JSON como string
-          validations: dto.validations ? JSON.stringify(dto.validations) : undefined, // ✅ JSON como string
-          placeholder: dto.placeholder || undefined, // ✅ null -> undefined
-          defaultValue: dto.defaultValue || undefined, // ✅ null -> undefined
-          helpText: dto.helpText || undefined, // ✅ null -> undefined
+          options: dto.options ? JSON.stringify(dto.options) : undefined,
+          validations: dto.validations ? JSON.stringify(dto.validations) : undefined,
+          placeholder: dto.placeholder || undefined,
+          defaultValue: dto.defaultValue || undefined,
+          helpText: dto.helpText || undefined,
         },
       });
+
+      return this.parseFormFieldData(updated);
     } catch (error) {
       console.error('Error updating form field:', error);
       throw new BadRequestException('Erro ao atualizar campo: ' + error.message);
     }
   }
 
-  // ✅ CORRIGIDO: Adicionar etapa com JSON correto
   async addStep(processTypeId: string, dto: CreateStepDto): Promise<Step> {
     const processType = await this.findOne(processTypeId);
     await this.validateSteps([dto], processType.companyId);
 
-    // Reordenar etapas existentes se necessário
     await this.prisma.step.updateMany({
       where: { processTypeId, order: { gte: dto.order } },
       data: { order: { increment: 1 } },
     });
 
     try {
-      return await this.prisma.step.create({
+      let processedConditions = dto.conditions;
+      if (dto.type === 'INPUT' && dto.conditions && typeof dto.conditions === 'object') {
+        processedConditions = JSON.stringify(dto.conditions);
+      } else if (dto.conditions && typeof dto.conditions === 'object') {
+        processedConditions = JSON.stringify(dto.conditions);
+      }
+
+      const created = await this.prisma.step.create({
         data: {
           ...dto,
           processTypeId,
           instructions: dto.instructions?.trim() || undefined,
           slaHours: dto.slaHours || undefined,
-          actions: dto.actions ? JSON.stringify(dto.actions) : '[]', // ✅ JSON como string
-          conditions: dto.conditions ? JSON.stringify(dto.conditions) : undefined, // ✅ JSON como string
-          allowedFileTypes: dto.allowedFileTypes ? JSON.stringify(dto.allowedFileTypes) : undefined, // ✅ JSON como string
-          description: dto.description || undefined, // ✅ null -> undefined
+          actions: dto.actions ? JSON.stringify(dto.actions) : '[]',
+          conditions: processedConditions || undefined,
+          allowedFileTypes: dto.allowedFileTypes ? JSON.stringify(dto.allowedFileTypes) : undefined,
+          description: dto.description || undefined,
         },
         include: {
           assignedToUser: { select: { id: true, name: true, email: true } },
           assignedToSector: { select: { id: true, name: true } },
         },
       });
+
+      return this.parseStepData(created);
     } catch (error) {
       console.error('Error adding step:', error);
       throw new BadRequestException('Erro ao adicionar etapa: ' + error.message);
     }
   }
 
-  // ✅ CORRIGIDO: Atualizar etapa com JSON correto
   async updateStep(stepId: string, dto: Partial<CreateStepDto>): Promise<Step> {
     const step = await this.prisma.step.findUnique({
       where: { id: stepId },
@@ -317,28 +325,36 @@ export class ProcessTypesService {
       throw new NotFoundException('Etapa não encontrada');
     }
 
-    // Validar responsáveis se estiverem sendo atualizados
     if (dto.assignedToUserId || dto.assignedToSectorId) {
       await this.validateSteps([dto as CreateStepDto], step.processType.companyId);
     }
 
     try {
-      return await this.prisma.step.update({
+      let processedConditions = dto.conditions;
+      if (dto.type === 'INPUT' && dto.conditions && typeof dto.conditions === 'object') {
+        processedConditions = JSON.stringify(dto.conditions);
+      } else if (dto.conditions && typeof dto.conditions === 'object') {
+        processedConditions = JSON.stringify(dto.conditions);
+      }
+
+      const updated = await this.prisma.step.update({
         where: { id: stepId },
         data: {
           ...dto,
-          actions: dto.actions ? JSON.stringify(dto.actions) : undefined, // ✅ JSON como string
+          actions: dto.actions ? JSON.stringify(dto.actions) : undefined,
           instructions: dto.instructions?.trim() || undefined,
           slaHours: dto.slaHours || undefined,
-          conditions: dto.conditions ? JSON.stringify(dto.conditions) : undefined, // ✅ JSON como string
-          allowedFileTypes: dto.allowedFileTypes ? JSON.stringify(dto.allowedFileTypes) : undefined, // ✅ JSON como string
-          description: dto.description || undefined, // ✅ null -> undefined
+          conditions: processedConditions !== undefined ? processedConditions : undefined,
+          allowedFileTypes: dto.allowedFileTypes ? JSON.stringify(dto.allowedFileTypes) : undefined,
+          description: dto.description || undefined,
         },
         include: {
           assignedToUser: { select: { id: true, name: true, email: true } },
           assignedToSector: { select: { id: true, name: true } },
         },
       });
+
+      return this.parseStepData(updated);
     } catch (error) {
       console.error('Error updating step:', error);
       throw new BadRequestException('Erro ao atualizar etapa: ' + error.message);
@@ -374,7 +390,6 @@ export class ProcessTypesService {
       throw new NotFoundException('Etapa não encontrada');
     }
 
-    // Verificar se a etapa tem execuções
     const executions = await this.prisma.stepExecution.count({ where: { stepId } });
     if (executions > 0) {
       throw new BadRequestException('Não é possível remover etapa com execuções');
@@ -397,21 +412,83 @@ export class ProcessTypesService {
     }
   }
 
+  private parseProcessTypeFields(processType: any): any {
+    return {
+      ...processType,
+      steps: processType.steps?.map(step => this.parseStepData(step)) || [],
+      formFields: processType.formFields?.map(field => this.parseFormFieldData(field)) || [],
+    };
+  }
+
+  private parseStepData(step: any): any {
+    const parsed = { ...step };
+
+    try {
+      if (step.actions && typeof step.actions === 'string') {
+        parsed.actions = JSON.parse(step.actions);
+      }
+    } catch (e) {
+      console.warn('Error parsing step actions:', e);
+      parsed.actions = [];
+    }
+
+    try {
+      if (step.conditions && typeof step.conditions === 'string') {
+        parsed.conditions = JSON.parse(step.conditions);
+      }
+    } catch (e) {
+      console.warn('Error parsing step conditions:', e);
+      parsed.conditions = {};
+    }
+
+    try {
+      if (step.allowedFileTypes && typeof step.allowedFileTypes === 'string') {
+        parsed.allowedFileTypes = JSON.parse(step.allowedFileTypes);
+      }
+    } catch (e) {
+      console.warn('Error parsing step allowedFileTypes:', e);
+      parsed.allowedFileTypes = [];
+    }
+
+    return parsed;
+  }
+
+  private parseFormFieldData(field: any): any {
+    const parsed = { ...field };
+
+    try {
+      if (field.options && typeof field.options === 'string') {
+        parsed.options = JSON.parse(field.options);
+      }
+    } catch (e) {
+      console.warn('Error parsing field options:', e);
+      parsed.options = [];
+    }
+
+    try {
+      if (field.validations && typeof field.validations === 'string') {
+        parsed.validations = JSON.parse(field.validations);
+      }
+    } catch (e) {
+      console.warn('Error parsing field validations:', e);
+      parsed.validations = {};
+    }
+
+    return parsed;
+  }
+
   private async validateSteps(steps: CreateStepDto[], companyId: string): Promise<void> {
     console.log('Validating steps for company:', companyId);
 
     for (const step of steps) {
-      // Verificar se tem pelo menos um responsável
       if (!step.assignedToUserId && !step.assignedToSectorId) {
         throw new BadRequestException(`Etapa "${step.name}" deve ter um responsável (usuário ou setor)`);
       }
 
-      // Não pode ter usuário E setor ao mesmo tempo
       if (step.assignedToUserId && step.assignedToSectorId) {
         throw new BadRequestException(`Etapa "${step.name}" não pode ter usuário E setor responsável simultaneamente`);
       }
 
-      // Validar usuário responsável
       if (step.assignedToUserId) {
         const userCompany = await this.prisma.userCompany.findFirst({
           where: { 
@@ -425,7 +502,6 @@ export class ProcessTypesService {
         }
       }
 
-      // Validar setor responsável
       if (step.assignedToSectorId) {
         const sector = await this.prisma.sector.findFirst({
           where: { 
@@ -439,12 +515,10 @@ export class ProcessTypesService {
         }
       }
 
-      // Validar configurações de anexo
       if (step.minAttachments && step.maxAttachments && step.minAttachments > step.maxAttachments) {
         throw new BadRequestException(`Configuração de anexos inválida na etapa "${step.name}": mínimo não pode ser maior que máximo`);
       }
 
-      // Se requer anexo, deve permitir anexo
       if (step.requireAttachment && !step.allowAttachment) {
         throw new BadRequestException(`Configuração inválida na etapa "${step.name}": não é possível exigir anexo sem permitir anexos`);
       }
