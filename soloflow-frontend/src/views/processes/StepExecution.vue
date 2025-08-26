@@ -77,6 +77,104 @@
               </v-expansion-panel>
             </v-expansion-panels>
             
+            <v-card v-if="reuseDataFields.length > 0" class="reuse-data-card mb-6" variant="outlined">
+              <v-card-title class="d-flex align-center">
+                <v-icon color="secondary" class="mr-2">mdi-refresh</v-icon>
+                Informações de Etapas Anteriores
+              </v-card-title>
+              <v-divider />
+              <v-card-text>
+                <v-expansion-panels variant="accordion">
+                  <v-expansion-panel
+                    v-for="(group, groupIndex) in groupReuseDataByStep(reuseDataFields)"
+                    :key="groupIndex"
+                  >
+                    <v-expansion-panel-title>
+                      <div class="d-flex align-center">
+                        <v-chip size="small" color="primary" class="mr-2">
+                          Etapa {{ group.stepOrder }}
+                        </v-chip>
+                        <span>{{ group.stepName }}</span>
+                      </div>
+                    </v-expansion-panel-title>
+                    <v-expansion-panel-text>
+                      <v-list density="compact">
+                        <v-list-item
+                          v-for="(field, index) in group.fields"
+                          :key="index"
+                        >
+                          <template v-if="field.type === 'field'">
+                            <v-list-item-title>{{ field.fieldLabel }}</v-list-item-title>
+                            <v-list-item-subtitle>{{ field.value }}</v-list-item-subtitle>
+                          </template>
+                          <template v-else-if="field.type === 'attachments'">
+                            <v-list-item-title>Anexos ({{ field.attachments.length }})</v-list-item-title>
+                            <v-list-item-subtitle>
+                              <div v-for="attachment in field.attachments" :key="attachment.id" class="mt-1">
+                                <v-chip size="x-small" @click="viewAttachment(attachment)">
+                                  <v-icon start size="12">{{ getFileIcon(attachment.mimeType) }}</v-icon>
+                                  {{ attachment.originalName }}
+                                </v-chip>
+                              </div>
+                            </v-list-item-subtitle>
+                          </template>
+                        </v-list-item>
+                      </v-list>
+                    </v-expansion-panel-text>
+                  </v-expansion-panel>
+                </v-expansion-panels>
+              </v-card-text>
+            </v-card>
+
+            <v-card v-if="approvalContextData" class="approval-context-card mb-6" variant="outlined">
+              <v-card-title class="d-flex align-center">
+                <v-icon color="info" class="mr-2">mdi-information</v-icon>
+                Contexto da Etapa Anterior
+              </v-card-title>
+              <v-divider />
+              <v-card-text>
+                <div class="context-header mb-4">
+                  <p class="text-body-2">
+                    <strong>Etapa:</strong> {{ approvalContextData.stepName }}<br>
+                    <strong>Executado por:</strong> {{ approvalContextData.executor }}<br>
+                    <strong>Data:</strong> {{ formatDate(approvalContextData.completedAt) }}
+                    <span v-if="approvalContextData.action">
+                      <br><strong>Ação:</strong> {{ approvalContextData.action }}
+                    </span>
+                  </p>
+                  <p v-if="approvalContextData.comment" class="text-body-2 mt-2">
+                    <strong>Comentário:</strong> {{ approvalContextData.comment }}
+                  </p>
+                </div>
+                
+                <v-divider v-if="Object.keys(approvalContextData.data).length > 0" class="my-3" />
+                
+                <div v-if="Object.keys(approvalContextData.data).length > 0">
+                  <h4 class="text-subtitle-2 mb-2">Dados Informados:</h4>
+                  <v-list density="compact">
+                    <v-list-item v-for="(value, key) in approvalContextData.data" :key="key">
+                      <v-list-item-title>{{ key }}</v-list-item-title>
+                      <v-list-item-subtitle>{{ value || 'Não informado' }}</v-list-item-subtitle>
+                    </v-list-item>
+                  </v-list>
+                </div>
+                
+                <div v-if="approvalContextData.attachments?.length > 0" class="mt-4">
+                  <h4 class="text-subtitle-2 mb-2">Anexos:</h4>
+                  <div class="d-flex flex-wrap gap-2">
+                    <v-chip
+                      v-for="attachment in approvalContextData.attachments"
+                      :key="attachment.id"
+                      size="small"
+                      @click="viewAttachment(attachment)"
+                    >
+                      <v-icon start size="16">{{ getFileIcon(attachment.mimeType) }}</v-icon>
+                      {{ attachment.originalName }}
+                    </v-chip>
+                  </div>
+                </div>
+              </v-card-text>
+            </v-card>
             <v-form ref="form" v-model="valid" class="execution-form">
               <div v-if="stepExecution.step.type === 'INPUT'" class="form-section mb-2">
                 <div class="section-header mb-4">
@@ -357,6 +455,138 @@ const previousStepsData = computed(() => {
       }
     })
 })
+
+// INÍCIO DA SEÇÃO ADICIONADA
+const reuseDataFields = computed(() => {
+  if (!stepExecution.value?.step.reuseData) return []
+  
+  try {
+    const reuseConfig = typeof stepExecution.value.step.reuseData === 'string' 
+      ? JSON.parse(stepExecution.value.step.reuseData)
+      : stepExecution.value.step.reuseData
+    
+    const fields = []
+    
+    reuseConfig.forEach(config => {
+      const sourceStep = process.value?.stepExecutions.find(
+        exec => exec.step.order === config.sourceStep
+      )
+      
+      if (sourceStep) {
+        if (config.type === 'attachment') {
+          // Anexos da etapa
+          if (sourceStep.attachments?.length > 0) {
+            fields.push({
+              type: 'attachments',
+              stepName: sourceStep.step.name,
+              stepOrder: sourceStep.step.order,
+              attachments: sourceStep.attachments
+            })
+          }
+        } else {
+          // Campos de dados
+          let fieldValue = null
+          let fieldLabel = config.fieldName
+          
+          // Buscar no metadata da execução
+          if (sourceStep.metadata) {
+            const metadata = typeof sourceStep.metadata === 'string'
+              ? JSON.parse(sourceStep.metadata)
+              : sourceStep.metadata
+            fieldValue = metadata[config.fieldName]
+          }
+          
+          // Buscar no formData do processo se for campo do formulário inicial
+          if (!fieldValue && sourceStep.step.order === 1) {
+            fieldValue = process.value?.formData?.[config.fieldName]
+            
+            // Obter label do campo
+            const formField = process.value?.processType?.formFields?.find(
+              f => f.name === config.fieldName
+            )
+            if (formField) {
+              fieldLabel = formField.label
+            }
+          }
+          
+          if (fieldValue !== undefined && fieldValue !== null) {
+            fields.push({
+              type: 'field',
+              stepName: sourceStep.step.name,
+              stepOrder: sourceStep.step.order,
+              fieldName: config.fieldName,
+              fieldLabel: fieldLabel,
+              value: fieldValue
+            })
+          }
+        }
+      }
+    })
+    
+    return fields
+  } catch (error) {
+    console.error('Error parsing reuse data:', error)
+    return []
+  }
+})
+
+// Para etapas de APROVAÇÃO, mostrar dados da etapa anterior
+const approvalContextData = computed(() => {
+  if (stepExecution.value?.step.type !== 'APPROVAL') return null
+  
+  const currentOrder = stepExecution.value.step.order
+  const previousStep = process.value?.stepExecutions.find(
+    exec => exec.step.order === currentOrder - 1 && exec.status === 'COMPLETED'
+  )
+  
+  if (!previousStep) return null
+  
+  const contextData = {
+    stepName: previousStep.step.name,
+    executor: previousStep.executor?.name || 'Sistema',
+    completedAt: previousStep.completedAt,
+    comment: previousStep.comment,
+    action: previousStep.action,
+    data: {}
+  }
+  
+  // Dados do metadata
+  if (previousStep.metadata) {
+    const metadata = typeof previousStep.metadata === 'string'
+      ? JSON.parse(previousStep.metadata)
+      : previousStep.metadata
+    
+    // Se a etapa anterior foi INPUT, pegar os campos configurados
+    if (previousStep.step.type === 'INPUT' && previousStep.step.conditions) {
+      try {
+        const conditions = typeof previousStep.step.conditions === 'string'
+          ? JSON.parse(previousStep.step.conditions)
+          : previousStep.step.conditions
+        
+        if (conditions.fields) {
+          conditions.fields.forEach(field => {
+            if (metadata[field.name] !== undefined) {
+              contextData.data[field.label || field.name] = metadata[field.name]
+            }
+          })
+        }
+      } catch (e) {
+        console.error('Error parsing step conditions:', e)
+      }
+    } else {
+      // Para outros tipos de etapa, mostrar todo o metadata
+      contextData.data = metadata
+    }
+  }
+  
+  // Anexos da etapa anterior
+  if (previousStep.attachments?.length > 0) {
+    contextData.attachments = previousStep.attachments
+  }
+  
+  return contextData
+})
+// FIM DA SEÇÃO ADICIONADA
 
 const isCommentRequired = computed(() => {
   return stepExecution.value?.step.type === 'APPROVAL' && formData.value.action === 'reprovar'
@@ -680,6 +910,39 @@ async function executeStep() {
   }
   }
 function goBack() { router.push(`/processes/${route.params.id}`) }
+
+// INÍCIO DA SEÇÃO ADICIONADA
+// Função auxiliar para agrupar dados reutilizados por etapa
+function groupReuseDataByStep(fields) {
+  const groups = {}
+  
+  fields.forEach(field => {
+    const key = `${field.stepOrder}-${field.stepName}`
+    if (!groups[key]) {
+      groups[key] = {
+        stepOrder: field.stepOrder,
+        stepName: field.stepName,
+        fields: []
+      }
+    }
+    groups[key].fields.push(field)
+  })
+  
+  return Object.values(groups).sort((a, b) => a.stepOrder - b.stepOrder)
+}
+
+// Função para visualizar anexo
+async function viewAttachment(attachment) {
+  try {
+    const url = `/api/processes/attachment/${attachment.id}/view`
+    window.open(url, '_blank')
+  } catch (error) {
+    console.error('Error viewing attachment:', error)
+    window.showSnackbar?.('Erro ao visualizar anexo', 'error')
+  }
+}
+// FIM DA SEÇÃO ADICIONADA
+
 onMounted(async () => {
   try {
     processStore.loading = true

@@ -187,6 +187,9 @@ model ProcessTypeVersion {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   publishedAt    DateTime?
+  
+  // NOVO: Changelog para rastrear mudanças
+  changelog      String?   // Descrição das mudanças nesta versão
 
   processTypeId String
   processType   ProcessType @relation(fields: [processTypeId], references: [id], onDelete: Cascade)
@@ -223,13 +226,13 @@ model FormFieldVersion {
   @@map("form_field_versions")
 }
 
-// Versão imutável de uma Step
 model StepVersion {
   id                  String           @id @default(uuid())
   name                String
   description         String?
   instructions        String?
-  slaHours            Int?
+  slaHours            Int?             // Mantido para compatibilidade
+  slaDays             Int?             // NOVO: Prazo em dias
   type                StepType         @default(INPUT)
   order               Int
   allowAttachment     Boolean          @default(false)
@@ -239,7 +242,16 @@ model StepVersion {
   maxAttachments      Int?
   allowedFileTypes    Json?
   conditions          Json?
+  
+  // NOVOS CAMPOS
+  assignedToCreator   Boolean          @default(false)  // Se deve ser atribuído ao criador do processo
+  assignmentConditions Json?           // Condições para atribuição dinâmica
+  flowConditions      Json?            // Condições de fluxo avançadas
+  reuseData           Json?            // Configuração de reutilização de dados
+  actions             Json?            // Ações disponíveis na etapa
+  
   createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   processTypeVersionId String
   processTypeVersion   ProcessTypeVersion @relation(fields: [processTypeVersionId], references: [id], onDelete: Cascade)
@@ -252,6 +264,7 @@ model StepVersion {
   @@unique([processTypeVersionId, order])
   @@map("step_versions")
 }
+
 
 // Modelo para atribuições flexíveis de etapas
 model StepAssignment {

@@ -1,13 +1,13 @@
+<!-- Adicionando botão "Ver Anexos" junto aos controles existentes -->
 <template>
   <div v-if="process">
     <div class="d-flex align-center mb-6">
       <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" />
       <div class="ml-4 flex-grow-1">
         <div class="d-flex align-center">
-          <h1 class="text-h4 font-weight-bold ">
+          <h1 class="text-h4 font-weight-bold">
             {{ process.title || process.code }}
           </h1>
-        
         </div>
         <p class="text-subtitle-1 text-medium-emphasis">
           {{ process.processType.name }}
@@ -15,9 +15,20 @@
       </div>
 
       <div class="d-flex gap-2">
-          <v-chip :color="getStatusColor(process.status)" class="ml-3" label>
-            {{ getStatusText(process.status) }}
-          </v-chip>
+        <v-chip :color="getStatusColor(process.status)" class="ml-3" label>
+          {{ getStatusText(process.status) }}
+        </v-chip>
+
+        <!-- Novo botão para ver todos os anexos -->
+        <v-btn 
+          variant="outlined" 
+          @click="openAllAttachmentsModal"
+          v-if="hasAnyAttachments"
+        >
+          <v-icon start>mdi-paperclip</v-icon>
+          Ver Anexos ({{ totalAttachmentsCount }})
+        </v-btn>
+
         <v-btn variant="text" @click="refreshProcess" :loading="loading">
           <v-icon start>mdi-refresh</v-icon>
           Atualizar
@@ -31,6 +42,7 @@
       </div>
     </div>
 
+    <!-- Resto do template permanece igual até o final -->
     <v-card class="mb-6">
       <v-card-text>
         <div class="d-flex align-center justify-space-between mb-2">
@@ -181,6 +193,7 @@
         </v-card>
       </v-col>
 
+      <!-- A seção do workflow permanece a mesma do original -->
       <v-col cols="12" md="8">
         <v-card class="workflow-timeline-card">
           <v-card-title class="d-flex align-center pa-6">
@@ -370,13 +383,21 @@
       </v-col>
     </v-row>
 
+    <!-- Modal de Campo de Arquivo -->
     <FieldFileModal
       v-model="fieldFileModal"
       :file-data="selectedFieldFile"
       :field-info="selectedField"
     />
+
+    <!-- Novo Modal de Todos os Anexos -->
+    <ProcessAttachmentsModal
+      v-model="allAttachmentsModal"
+      :process="process"
+    />
   </div>
 
+  <!-- Estados de loading e erro permanecem iguais -->
   <div v-else-if="loading" class="text-center py-12">
     <v-progress-circular indeterminate color="primary" size="64" />
     <p class="text-body-2 text-grey mt-4">Carregando processo...</p>
@@ -391,112 +412,144 @@
     </v-btn>
   </div>
 </template>
-
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 import { useProcessStore } from '@/stores/processes'
-import api from '@/services/api'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/pt-br'
 
-// Importar componente de modal de arquivo de campo
 import FieldFileModal from '@/components/FieldFileModal.vue'
+import ProcessAttachmentsModal from '@/components/ProcessAttachmentsModal.vue'
 
 dayjs.extend(relativeTime)
 dayjs.locale('pt-br')
 
 const router = useRouter()
 const route = useRoute()
-const authStore = useAuthStore()
 const processStore = useProcessStore()
 
-// Estado
+const process = ref(null)
+const loading = ref(true)
 const fieldFileModal = ref(false)
 const selectedFieldFile = ref(null)
 const selectedField = ref(null)
-
-// Computed
-const loading = computed(() => processStore.loading)
-const process = computed(() => processStore.currentProcess)
+const allAttachmentsModal = ref(false)
 
 const currentStepExecution = computed(() => {
-  if (!process.value) return null
-  return process.value.stepExecutions?.find(se => se.status === 'IN_PROGRESS')
+  if (!process.value?.stepExecutions) return null
+  return process.value.stepExecutions.find(se => se.status === 'IN_PROGRESS')
 })
 
-const canExecuteCurrentStep = computed(() => {
-  if (!currentStepExecution.value) return false
-  return canExecuteStep(currentStepExecution.value)
+const progressPercentage = computed(() => {
+  if (!process.value?.stepExecutions) return 0
+  const total = process.value.stepExecutions.length
+  const completed = process.value.stepExecutions.filter(
+    se => se.status === 'COMPLETED'
+  ).length
+  return Math.round((completed / total) * 100)
+})
+
+const completedSteps = computed(() => {
+  if (!process.value?.stepExecutions) return 0
+  return process.value.stepExecutions.filter(
+    se => se.status === 'COMPLETED'
+  ).length
 })
 
 const totalSteps = computed(() => {
   return process.value?.stepExecutions?.length || 0
 })
 
-const completedSteps = computed(() => {
-  return process.value?.stepExecutions?.filter(se =>
-    se.status === 'COMPLETED' || se.status === 'SKIPPED'
-  ).length || 0
-})
-
-const progressPercentage = computed(() => {
-  if (totalSteps.value === 0) return 0
-  return Math.round((completedSteps.value / totalSteps.value) * 100)
-})
-
 const estimatedCompletion = computed(() => {
-  if (!process.value || process.value.status === 'COMPLETED') return null
-
-  const avgTimePerStep = 2 // dias por etapa (estimativa)
-  const remainingSteps = totalSteps.value - completedSteps.value
-  const estimatedDays = remainingSteps * avgTimePerStep
-
-  return dayjs().add(estimatedDays, 'day').format('DD/MM/YYYY')
-})
-
-// Computed para campos de arquivo
-const fileFields = computed(() => {
-  if (!process.value?.processType?.formFields) return []
-  return process.value.processType.formFields.filter(field => field.type === 'FILE')
-})
-
-const hasFormFieldFiles = computed(() => {
-  return fileFields.value.some(field => getFieldFileData(field) !== null)
+  if (!currentStepExecution.value?.dueAt) return null
+  return dayjs(currentStepExecution.value.dueAt).format('DD/MM/YYYY')
 })
 
 const formattedFormData = computed(() => {
   if (!process.value?.formData) return {}
-
   const formatted = {}
-  const formData = process.value.formData
   const formFields = process.value.processType?.formFields || []
-
-  Object.keys(formData).forEach(key => {
+  
+  Object.keys(process.value.formData).forEach(key => {
     const field = formFields.find(f => f.name === key)
-    const label = field?.label || key
-    const value = formData[key]
-
-    // Pular campos de arquivo (serão mostrados separadamente)
-    if (field?.type === 'FILE') return
-
-    if (value !== null && value !== undefined && value !== '') {
-      formatted[label] = Array.isArray(value) ? value.join(', ') : value
+    if (field && field.type !== 'FILE') {
+      const label = field.label || key
+      formatted[label] = process.value.formData[key]
     }
   })
-
+  
   return formatted
 })
 
-// Métodos auxiliares de status
+const fileFields = computed(() => {
+  if (!process.value?.processType?.formFields) return []
+  return process.value.processType.formFields.filter(f => f.type === 'FILE')
+})
+
+const hasFormFieldFiles = computed(() => {
+  if (!process.value?.formData) return false
+  return fileFields.value.some(field => {
+    const data = process.value.formData[field.name]
+    return data && (data.attachmentId || (Array.isArray(data) && data.length > 0))
+  })
+})
+
+const hasAnyAttachments = computed(() => {
+  // Verifica anexos do formulário
+  if (hasFormFieldFiles.value) return true
+  
+  // Verifica anexos das etapas
+  if (process.value?.stepExecutions) {
+    return process.value.stepExecutions.some(se => 
+      se.attachments && se.attachments.length > 0
+    )
+  }
+  
+  return false
+})
+
+const totalAttachmentsCount = computed(() => {
+  let count = 0
+  
+  // Conta anexos do formulário
+  fileFields.value.forEach(field => {
+    const data = process.value?.formData?.[field.name]
+    if (data) {
+      if (Array.isArray(data)) {
+        count += data.length
+      } else if (data.attachmentId) {
+        count += 1
+      }
+    }
+  })
+  
+  // Conta anexos das etapas
+  process.value?.stepExecutions?.forEach(se => {
+    if (se.attachments) {
+      count += se.attachments.length
+    }
+  })
+  
+  return count
+})
+
+const canExecuteCurrentStep = computed(() => {
+  if (!currentStepExecution.value) return false
+  return currentStepExecution.value.status === 'IN_PROGRESS'
+})
+
+function getFieldFileData(field) {
+  return process.value?.formData?.[field.name]
+}
+
 function getStatusColor(status) {
   const colors = {
     DRAFT: 'grey',
-    IN_PROGRESS: 'info',
+    IN_PROGRESS: 'primary',
     COMPLETED: 'success',
-    CANCELLED: 'error',
+    CANCELLED: 'warning',
     REJECTED: 'error'
   }
   return colors[status] || 'grey'
@@ -513,93 +566,73 @@ function getStatusText(status) {
   return texts[status] || status
 }
 
-// ✅ MÉTODOS DE ESTILO PARA WORKFLOW PROFISSIONAL
+function getProgressColor() {
+  if (progressPercentage.value === 100) return 'success'
+  if (progressPercentage.value >= 75) return 'info'
+  if (progressPercentage.value >= 50) return 'primary'
+  if (progressPercentage.value >= 25) return 'warning'
+  return 'error'
+}
+
+function formatDate(date) {
+  return dayjs(date).format('DD/MM/YYYY HH:mm')
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+function getFileIcon(mimeType) {
+  if (!mimeType) return 'mdi-file'
+  if (mimeType.includes('pdf')) return 'mdi-file-pdf-box'
+  if (mimeType.includes('image')) return 'mdi-file-image'
+  if (mimeType.includes('word')) return 'mdi-file-word'
+  if (mimeType.includes('excel')) return 'mdi-file-excel'
+  return 'mdi-file'
+}
+
+function getFileTypeColor(mimeType) {
+  if (!mimeType) return 'grey'
+  if (mimeType.includes('pdf')) return 'red'
+  if (mimeType.includes('image')) return 'blue'
+  if (mimeType.includes('word')) return 'indigo'
+  if (mimeType.includes('excel')) return 'green'
+  return 'grey'
+}
+
 function getStepClass(execution, index) {
   const classes = ['workflow-step']
-  if (execution.status === 'IN_PROGRESS') classes.push('step-active')
   if (execution.status === 'COMPLETED') classes.push('step-completed')
+  if (execution.status === 'IN_PROGRESS') classes.push('step-active')
   if (execution.status === 'REJECTED') classes.push('step-rejected')
-  if (index === process.value.stepExecutions.length - 1) classes.push('step-last')
   return classes.join(' ')
 }
 
 function getStepIndicatorClass(execution) {
-  const classes = ['step-indicator-circle']
-  switch (execution.status) {
-    case 'COMPLETED':
-      classes.push('indicator-completed')
-      break
-    case 'IN_PROGRESS':
-      classes.push('indicator-active')
-      break
-    case 'REJECTED':
-      classes.push('indicator-rejected')
-      break
-    default:
-      classes.push('indicator-pending')
-  }
-  return classes.join(' ')
+  if (execution.status === 'COMPLETED') return 'step-completed'
+  if (execution.status === 'IN_PROGRESS') return 'step-active'
+  if (execution.status === 'REJECTED') return 'step-rejected'
+  return ''
 }
 
 function getConnectorClass(execution) {
-  return execution.status === 'COMPLETED' ? 'connector-completed' : 'connector-pending'
+  if (execution.status === 'COMPLETED') return 'connector-completed'
+  return ''
 }
 
 function getStepCardClass(execution) {
-  const classes = ['elevation-transition']
-  if (execution.status === 'IN_PROGRESS') classes.push('card-active')
-  if (execution.status === 'COMPLETED') classes.push('card-completed')
-  return classes.join(' ')
+  if (execution.status === 'IN_PROGRESS') return 'step-card-active'
+  if (execution.status === 'REJECTED') return 'step-card-rejected'
+  return ''
 }
 
 function getStepHeaderClass(execution) {
-  const classes = ['step-header']
-  if (execution.status === 'IN_PROGRESS') classes.push('header-active')
-  return classes.join(' ')
-}
-
-function getExecutionColor(execution) {
-  const colors = {
-    PENDING: 'grey',
-    IN_PROGRESS: 'warning',
-    COMPLETED: 'success',
-    REJECTED: 'error',
-    SKIPPED: 'grey'
-  }
-  return colors[execution.status] || 'grey'
-}
-
-function getExecutionIcon(execution) {
-  const icons = {
-    PENDING: 'mdi-clock-outline',
-    IN_PROGRESS: 'mdi-progress-clock',
-    COMPLETED: 'mdi-check',
-    REJECTED: 'mdi-close',
-    SKIPPED: 'mdi-skip-next'
-  }
-  return icons[execution.status] || 'mdi-help'
-}
-
-function getExecutionStatusText(status) {
-  const texts = {
-    PENDING: 'Pendente',
-    IN_PROGRESS: 'Em Progresso',
-    COMPLETED: 'Concluída',
-    REJECTED: 'Rejeitada',
-    SKIPPED: 'Pulada'
-  }
-  return texts[status] || status
-}
-
-function getStepTypeColor(type) {
-  const colors = {
-    INPUT: 'blue',
-    APPROVAL: 'orange',
-    UPLOAD: 'purple',
-    REVIEW: 'teal',
-    SIGNATURE: 'red'
-  }
-  return colors[type] || 'grey'
+  if (execution.status === 'IN_PROGRESS') return 'step-header-active'
+  return ''
 }
 
 function getStepTypeIcon(type) {
@@ -613,6 +646,42 @@ function getStepTypeIcon(type) {
   return icons[type] || 'mdi-help-circle'
 }
 
+function getStepTypeColor(type) {
+  const colors = {
+    INPUT: 'blue',
+    APPROVAL: 'orange',
+    UPLOAD: 'purple',
+    REVIEW: 'teal',
+    SIGNATURE: 'red'
+  }
+  return colors[type] || 'grey'
+}
+
+function getExecutionIcon(execution) {
+  if (execution.status === 'COMPLETED') return 'mdi-check'
+  if (execution.status === 'IN_PROGRESS') return 'mdi-play'
+  if (execution.status === 'REJECTED') return 'mdi-close'
+  return 'mdi-clock-outline'
+}
+
+function getExecutionColor(execution) {
+  if (execution.status === 'COMPLETED') return 'success'
+  if (execution.status === 'IN_PROGRESS') return 'primary'
+  if (execution.status === 'REJECTED') return 'error'
+  return 'grey'
+}
+
+function getExecutionStatusText(status) {
+  const texts = {
+    PENDING: 'Pendente',
+    IN_PROGRESS: 'Em Execução',
+    COMPLETED: 'Concluído',
+    REJECTED: 'Rejeitado',
+    SKIPPED: 'Pulado'
+  }
+  return texts[status] || status
+}
+
 function getResponsibleName(execution) {
   if (execution.step.assignedToUser) {
     return execution.step.assignedToUser.name
@@ -620,217 +689,46 @@ function getResponsibleName(execution) {
   if (execution.step.assignedToSector) {
     return `Setor ${execution.step.assignedToSector.name}`
   }
+  if (execution.step.assignedToCreator) {
+    return process.value?.createdBy?.name || 'Criador do Processo'
+  }
   return 'Não definido'
 }
 
-function getProgressColor() {
-  const progress = progressPercentage.value
-  if (progress === 100) return 'success'
-  if (progress >= 75) return 'info'
-  if (progress >= 50) return 'warning'
-  return 'error'
+function getExecutionSlaStatus(execution) {
+  if (!execution.dueAt) {
+    return { hasDeadline: false }
+  }
+  
+  const now = dayjs()
+  const dueAt = dayjs(execution.dueAt)
+  const isOverdue = now.isAfter(dueAt)
+  const diff = dueAt.diff(now)
+  const duration = dayjs.duration(Math.abs(diff))
+  
+  return {
+    hasDeadline: true,
+    isOverdue,
+    isNearDeadline: !isOverdue && duration.asHours() <= 24,
+    remainingText: duration.humanize(),
+    overdueText: duration.humanize()
+  }
 }
 
-function canExecuteStep(execution) {
-  if (execution.status !== 'IN_PROGRESS') return false
-
-  const user = authStore.user
-  const step = execution.step
-
-  // Verificar se é responsável direto
-  if (step.assignedToUserId === user.id) return true
-
-  // Verificar se pertence ao setor responsável
-  if (step.assignedToSectorId && authStore.activeSectorId === step.assignedToSectorId) return true
-
-  // Admin pode executar qualquer etapa
-  if (authStore.isAdmin) return true
-
-  return false
-}
-
-// ✅ MÉTODOS PARA ANEXOS DAS ETAPAS
 function hasStepAttachments(execution) {
   return execution.attachments && execution.attachments.length > 0
 }
 
 function getStepAttachmentsCount(execution) {
-  return execution.attachments ? execution.attachments.length : 0
+  return execution.attachments?.length || 0
 }
 
-function formatDate(date) {
-  return dayjs(date).format('DD/MM/YYYY HH:mm')
+function canExecuteStep(execution) {
+  return execution.status === 'IN_PROGRESS'
 }
 
-function formatTimeAgo(date) {
-  return dayjs(date).fromNow()
-}
-
-// 🆕 Função para calcular status do SLA por execução
-function getExecutionSlaStatus(execution) {
-  if (!execution.dueAt) {
-    return {
-      hasDeadline: false,
-      isOverdue: false,
-      isNearDeadline: false,
-      remainingText: '',
-      overdueText: ''
-    }
-  }
-  
-  const now = dayjs()
-  const dueAt = dayjs(execution.dueAt)
-  
-  const isOverdue = now.isAfter(dueAt)
-  const diffHours = Math.abs(dueAt.diff(now, 'hours'))
-  const isNearDeadline = !isOverdue && diffHours <= 4
-  
-  let remainingText = ''
-  let overdueText = ''
-  
-  if (isOverdue) {
-    overdueText = dueAt.fromNow()
-  } else {
-    remainingText = dueAt.fromNow()
-  }
-  
-  return {
-    hasDeadline: true,
-    isOverdue,
-    isNearDeadline,
-    remainingText,
-    overdueText
-  }
-}
-
-function getCurrentStep(process) {
-  return process.stepExecutions?.find(se => se.status === 'IN_PROGRESS')
-}
-
-// Métodos para campos de arquivo
-function getFieldFileData(field) {
-  const formData = process.value?.formData
-  if (!formData || !formData[field.name]) return null
-  
-  const fieldData = formData[field.name]
-  
-  // Campo único (objeto AttachmentMeta)
-  if (typeof fieldData === 'object' && !Array.isArray(fieldData) && fieldData.attachmentId) {
-    return fieldData
-  }
-  
-  // Campo múltiplo (array de AttachmentMeta)
-  if (Array.isArray(fieldData)) {
-    return fieldData.filter(item => item && item.attachmentId)
-  }
-  
-  // Compatibilidade: Se é string (ID direto - formato legado)
-  if (typeof fieldData === 'string') {
-    return {
-      attachmentId: fieldData,
-      originalName: `Arquivo de ${field.label}`,
-      size: 0,
-      mimeType: 'application/octet-stream'
-    }
-  }
-  
-  return null
-}
-
-// Abrir modal específico para arquivo de campo
-function openFieldFileModal(field, index = 0) {
-  const fieldData = getFieldFileData(field)
-  let fileData = fieldData
-  
-  // Se é array, pegar o item específico
-  if (Array.isArray(fieldData)) {
-    fileData = fieldData[index]
-  }
-  
-  if (fileData?.attachmentId) {
-    selectedFieldFile.value = fileData
-    selectedField.value = field
-    fieldFileModal.value = true
-  }
-}
-
-async function downloadFieldFile(field, index = 0) {
-  const fieldData = getFieldFileData(field)
-  let fileData = fieldData
-  
-  // Se é array, pegar o item específico
-  if (Array.isArray(fieldData)) {
-    fileData = fieldData[index]
-  }
-  
-  if (!fileData?.attachmentId) {
-    window.showSnackbar?.('Arquivo não encontrado', 'error')
-    return
-  }
-  
-  try {
-    console.log(`📥 Downloading field file: ${field.label} (index: ${index})`, fileData)
-    
-    const response = await api.get(`/processes/attachment/${fileData.attachmentId}/download`, {
-      responseType: 'blob',
-    })
-  
-    const blob = new Blob([response.data], { 
-      type: fileData.mimeType || 'application/octet-stream' 
-    })
-    const url = window.URL.createObjectURL(blob)
-    
-    const a = document.createElement('a')
-    a.href = url
-    a.download = fileData.originalName || `arquivo-${field.label.toLowerCase()}`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    window.URL.revokeObjectURL(url)
-  
-    window.showSnackbar?.(`Download de "${fileData.originalName}" iniciado`, 'success')
-  } catch (error) {
-    console.error('Error downloading field file:', error)
-    window.showSnackbar?.('Erro ao baixar arquivo', 'error')
-  }
-}
-
-function getFileIcon(mimeType) {
-  if (!mimeType) return 'mdi-file'
-  
-  if (mimeType.includes('pdf')) return 'mdi-file-pdf-box'
-  if (mimeType.includes('image')) return 'mdi-file-image'
-  if (mimeType.includes('word') || mimeType.includes('document')) return 'mdi-file-word'
-  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'mdi-file-excel'
-  if (mimeType.includes('text')) return 'mdi-file-document'
-  if (mimeType.includes('zip') || mimeType.includes('rar')) return 'mdi-folder-zip'
-  
-  return 'mdi-file'
-}
-
-function getFileTypeColor(mimeType) {
-  if (!mimeType) return 'grey'
-  
-  if (mimeType.includes('pdf')) return 'red'
-  if (mimeType.includes('image')) return 'blue'
-  if (mimeType.includes('word')) return 'indigo'
-  if (mimeType.includes('excel')) return 'green'
-  if (mimeType.includes('text')) return 'orange'
-  
-  return 'grey'
-}
-
-function formatFileSize(bytes) {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-}
-
-// Métodos principais
-function goBack() {
-  router.push('/manage-processes')
+function executeStep(execution) {
+  router.push(`/processes/${process.value.id}/execute/${execution.id}`)
 }
 
 function executeCurrentStep() {
@@ -839,26 +737,73 @@ function executeCurrentStep() {
   }
 }
 
-function executeStep(execution) {
-  router.push(`/processes/${process.value.id}/execute/${execution.id}`)
-}
-
-async function refreshProcess() {
-  try {
-    await processStore.fetchProcess(route.params.id)
-    window.showSnackbar?.('Processo atualizado!', 'success')
-  } catch (error) {
-    window.showSnackbar?.('Erro ao atualizar processo', 'error')
+function openFieldFileModal(field, index) {
+  const data = getFieldFileData(field)
+  if (data) {
+    if (Array.isArray(data)) {
+      selectedFieldFile.value = data[index]
+    } else {
+      selectedFieldFile.value = data
+    }
+    selectedField.value = field
+    fieldFileModal.value = true
   }
 }
 
-onMounted(async () => {
-  console.log('Loading process:', route.params.id)
+async function downloadFieldFile(field, index) {
+  const data = getFieldFileData(field)
+  if (data) {
+    let attachmentId
+    if (Array.isArray(data)) {
+      attachmentId = data[index]?.attachmentId
+    } else {
+      attachmentId = data.attachmentId
+    }
+    
+    if (attachmentId) {
+      try {
+        await processStore.downloadAttachment(attachmentId)
+        window.showSnackbar?.('Download iniciado', 'success')
+      } catch (error) {
+        console.error('Error downloading file:', error)
+        window.showSnackbar?.('Erro ao baixar arquivo', 'error')
+      }
+    }
+  }
+}
+
+function openAllAttachmentsModal() {
+  allAttachmentsModal.value = true
+}
+
+async function refreshProcess() {
+  loading.value = true
   try {
     await processStore.fetchProcess(route.params.id)
+    process.value = processStore.currentProcess
+    window.showSnackbar?.('Processo atualizado', 'success')
+  } catch (error) {
+    console.error('Error refreshing process:', error)
+    window.showSnackbar?.('Erro ao atualizar processo', 'error')
+  } finally {
+    loading.value = false
+  }
+}
+
+function goBack() {
+  router.push('/processes')
+}
+
+onMounted(async () => {
+  try {
+    loading.value = true
+    await processStore.fetchProcess(route.params.id)
+    process.value = processStore.currentProcess
   } catch (error) {
     console.error('Error loading process:', error)
     window.showSnackbar?.('Erro ao carregar processo', 'error')
+  } finally {
+    loading.value = false
   }
 })
 </script>

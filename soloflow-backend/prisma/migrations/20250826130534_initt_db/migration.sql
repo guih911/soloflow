@@ -1,29 +1,66 @@
-/*
-  Warnings:
+-- CreateTable
+CREATE TABLE "companies" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "cnpj" TEXT NOT NULL,
+    "email" TEXT,
+    "phone" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
 
-  - You are about to drop the `form_fields` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `steps` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the column `processTypeId` on the `process_instances` table. All the data in the column will be lost.
-  - You are about to drop the column `stepId` on the `step_executions` table. All the data in the column will be lost.
-  - Added the required column `processTypeVersionId` to the `process_instances` table without a default value. This is not possible if the table is not empty.
-  - Added the required column `stepVersionId` to the `step_executions` table without a default value. This is not possible if the table is not empty.
+-- CreateTable
+CREATE TABLE "users" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "password" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'USER',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
 
-*/
--- DropIndex
-DROP INDEX "form_fields_processTypeId_order_key";
+-- CreateTable
+CREATE TABLE "user_companies" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "role" TEXT NOT NULL DEFAULT 'USER',
+    "isDefault" BOOLEAN NOT NULL DEFAULT false,
+    "lastAccessedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "userId" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "sectorId" TEXT,
+    CONSTRAINT "user_companies_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "user_companies_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "companies" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "user_companies_sectorId_fkey" FOREIGN KEY ("sectorId") REFERENCES "sectors" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
 
--- DropIndex
-DROP INDEX "steps_processTypeId_order_key";
+-- CreateTable
+CREATE TABLE "sectors" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "companyId" TEXT NOT NULL,
+    CONSTRAINT "sectors_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "companies" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
 
--- DropTable
-PRAGMA foreign_keys=off;
-DROP TABLE "form_fields";
-PRAGMA foreign_keys=on;
-
--- DropTable
-PRAGMA foreign_keys=off;
-DROP TABLE "steps";
-PRAGMA foreign_keys=on;
+-- CreateTable
+CREATE TABLE "process_types" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "companyId" TEXT NOT NULL,
+    CONSTRAINT "process_types_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "companies" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
 
 -- CreateTable
 CREATE TABLE "process_type_versions" (
@@ -36,6 +73,7 @@ CREATE TABLE "process_type_versions" (
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     "publishedAt" DATETIME,
+    "changelog" TEXT,
     "processTypeId" TEXT NOT NULL,
     "metadata" JSONB,
     CONSTRAINT "process_type_versions_processTypeId_fkey" FOREIGN KEY ("processTypeId") REFERENCES "process_types" ("id") ON DELETE CASCADE ON UPDATE CASCADE
@@ -66,6 +104,7 @@ CREATE TABLE "step_versions" (
     "description" TEXT,
     "instructions" TEXT,
     "slaHours" INTEGER,
+    "slaDays" INTEGER,
     "type" TEXT NOT NULL DEFAULT 'INPUT',
     "order" INTEGER NOT NULL,
     "allowAttachment" BOOLEAN NOT NULL DEFAULT false,
@@ -75,7 +114,13 @@ CREATE TABLE "step_versions" (
     "maxAttachments" INTEGER,
     "allowedFileTypes" JSONB,
     "conditions" JSONB,
+    "assignedToCreator" BOOLEAN NOT NULL DEFAULT false,
+    "assignmentConditions" JSONB,
+    "flowConditions" JSONB,
+    "reuseData" JSONB,
+    "actions" JSONB,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
     "processTypeVersionId" TEXT NOT NULL,
     CONSTRAINT "step_versions_processTypeVersionId_fkey" FOREIGN KEY ("processTypeVersionId") REFERENCES "process_type_versions" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -119,10 +164,8 @@ CREATE TABLE "step_transitions" (
     CONSTRAINT "step_transitions_targetStepId_fkey" FOREIGN KEY ("targetStepId") REFERENCES "step_versions" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
--- RedefineTables
-PRAGMA defer_foreign_keys=ON;
-PRAGMA foreign_keys=OFF;
-CREATE TABLE "new_process_instances" (
+-- CreateTable
+CREATE TABLE "process_instances" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "code" TEXT NOT NULL,
     "title" TEXT,
@@ -141,11 +184,9 @@ CREATE TABLE "new_process_instances" (
     CONSTRAINT "process_instances_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "process_instances_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "companies" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
-INSERT INTO "new_process_instances" ("code", "companyId", "completedAt", "createdAt", "createdById", "currentStepOrder", "description", "formData", "id", "metadata", "status", "title", "updatedAt") SELECT "code", "companyId", "completedAt", "createdAt", "createdById", "currentStepOrder", "description", "formData", "id", "metadata", "status", "title", "updatedAt" FROM "process_instances";
-DROP TABLE "process_instances";
-ALTER TABLE "new_process_instances" RENAME TO "process_instances";
-CREATE UNIQUE INDEX "process_instances_code_key" ON "process_instances"("code");
-CREATE TABLE "new_step_executions" (
+
+-- CreateTable
+CREATE TABLE "step_executions" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "action" TEXT,
@@ -165,11 +206,40 @@ CREATE TABLE "new_step_executions" (
     CONSTRAINT "step_executions_executorId_fkey" FOREIGN KEY ("executorId") REFERENCES "users" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT "step_executions_sectorId_fkey" FOREIGN KEY ("sectorId") REFERENCES "sectors" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
-INSERT INTO "new_step_executions" ("action", "comment", "completedAt", "createdAt", "dueAt", "executorId", "id", "metadata", "processInstanceId", "sectorId", "signedAt", "status", "updatedAt") SELECT "action", "comment", "completedAt", "createdAt", "dueAt", "executorId", "id", "metadata", "processInstanceId", "sectorId", "signedAt", "status", "updatedAt" FROM "step_executions";
-DROP TABLE "step_executions";
-ALTER TABLE "new_step_executions" RENAME TO "step_executions";
-PRAGMA foreign_keys=ON;
-PRAGMA defer_foreign_keys=OFF;
+
+-- CreateTable
+CREATE TABLE "attachments" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "filename" TEXT NOT NULL,
+    "originalName" TEXT NOT NULL,
+    "mimeType" TEXT NOT NULL,
+    "size" INTEGER NOT NULL,
+    "path" TEXT NOT NULL,
+    "isSigned" BOOLEAN NOT NULL DEFAULT false,
+    "signedPath" TEXT,
+    "signatureData" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "stepExecutionId" TEXT NOT NULL,
+    CONSTRAINT "attachments_stepExecutionId_fkey" FOREIGN KEY ("stepExecutionId") REFERENCES "step_executions" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "companies_name_key" ON "companies"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "companies_cnpj_key" ON "companies"("cnpj");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "user_companies_userId_companyId_key" ON "user_companies"("userId", "companyId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "sectors_companyId_name_key" ON "sectors"("companyId", "name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "process_types_companyId_name_key" ON "process_types"("companyId", "name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "process_type_versions_processTypeId_version_key" ON "process_type_versions"("processTypeId", "version");
@@ -179,3 +249,6 @@ CREATE UNIQUE INDEX "form_field_versions_processTypeVersionId_order_key" ON "for
 
 -- CreateIndex
 CREATE UNIQUE INDEX "step_versions_processTypeVersionId_order_key" ON "step_versions"("processTypeVersionId", "order");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "process_instances_code_key" ON "process_instances"("code");

@@ -19,6 +19,7 @@ interface Step {
   description?: string | null;
   instructions?: string | null;
   slaHours?: number | null;
+  slaDays?: number | null; // Novo campo
   type: any;
   order: number;
   allowAttachment: boolean;
@@ -33,6 +34,10 @@ interface Step {
   assignedToSectorId?: string | null;
   assignedToUser?: any;
   assignedToSector?: any;
+  assignedToCreator: boolean; // Novo campo
+  assignmentConditions?: any; // Novo campo
+  flowConditions?: any; // Novo campo
+  reuseData?: any; // Novo campo
 }
 
 interface FormField {
@@ -106,60 +111,89 @@ export class ProcessTypesService {
         });
 
         if (steps && steps.length > 0) {
-          for (let i = 0; i < steps.length; i++) {
-            const step = steps[i];
-            
-            let processedConditions: any = step.conditions;
-            if (step.type === 'INPUT' && step.conditions && typeof step.conditions === 'object') {
-              processedConditions = step.conditions;
-            } else if (step.conditions && typeof step.conditions === 'object') {
-              processedConditions = step.conditions;
+            // INÍCIO DA SEÇÃO ATUALIZADA
+            for (let i = 0; i < steps.length; i++) {
+                const step = steps[i];
+              
+                // Converter dias para horas para compatibilidade
+                const slaHours = step.slaDays ? step.slaDays * 24 : step.slaHours;
+              
+                let processedConditions: any = step.conditions;
+                if (step.type === 'INPUT' && step.conditions && typeof step.conditions === 'object') {
+                  processedConditions = step.conditions;
+                } else if (step.conditions && typeof step.conditions === 'object') {
+                  processedConditions = step.conditions;
+                }
+              
+                const stepVersion = await tx.stepVersion.create({
+                  data: {
+                    name: step.name,
+                    description: step.description,
+                    instructions: step.instructions?.trim() || undefined,
+                    slaHours: slaHours || undefined,
+                    slaDays: step.slaDays || undefined, // Salvar também em dias
+                    type: step.type,
+                    order: step.order || (i + 1),
+                    allowAttachment: step.allowAttachment || false,
+                    requiresSignature: step.requiresSignature || false,
+                    requireAttachment: step.requireAttachment || false,
+                    minAttachments: step.minAttachments || undefined,
+                    maxAttachments: step.maxAttachments || undefined,
+                    allowedFileTypes: step.allowedFileTypes ? JSON.stringify(step.allowedFileTypes) : undefined,
+                    conditions: processedConditions || undefined,
+                    actions: step.actions ? JSON.stringify(step.actions) : undefined,
+                    
+                    // Novos campos
+                    assignedToCreator: step.assignedToCreator || false,
+                    assignmentConditions: step.assignmentConditions || undefined,
+                    flowConditions: step.flowConditions || undefined,
+                    reuseData: step.reuseData || undefined,
+                    
+                    processTypeVersionId: version.id,
+                  },
+                });
+              
+                // Criar assignments apenas se não for assignedToCreator
+                if (!step.assignedToCreator) {
+                  if (step.assignedToUserId) {
+                    await tx.stepAssignment.create({
+                      data: {
+                        stepVersionId: stepVersion.id,
+                        type: 'USER',
+                        userId: step.assignedToUserId,
+                        priority: 1,
+                        isActive: true,
+                      },
+                    });
+                  }
+              
+                  if (step.assignedToSectorId) {
+                    await tx.stepAssignment.create({
+                      data: {
+                        stepVersionId: stepVersion.id,
+                        type: 'SECTOR',
+                        sectorId: step.assignedToSectorId,
+                        priority: 1,
+                        isActive: true,
+                      },
+                    });
+                  }
+                  
+                  // Se houver condições de atribuição
+                  if (step.assignmentConditions) {
+                    await tx.stepAssignment.create({
+                      data: {
+                        stepVersionId: stepVersion.id,
+                        type: 'CONDITIONAL',
+                        priority: 0, // Maior prioridade para condicionais
+                        isActive: true,
+                        conditionalConfig: step.assignmentConditions,
+                      },
+                    });
+                  }
+                }
             }
-
-            const stepVersion = await tx.stepVersion.create({
-              data: {
-                name: step.name,
-                description: step.description,
-                instructions: step.instructions?.trim() || undefined,
-                slaHours: step.slaHours || undefined,
-                type: step.type,
-                order: step.order || (i + 1),
-                allowAttachment: step.allowAttachment || false,
-                requiresSignature: step.requiresSignature || false,
-                requireAttachment: step.requireAttachment || false,
-                minAttachments: step.minAttachments || undefined,
-                maxAttachments: step.maxAttachments || undefined,
-                allowedFileTypes: step.allowedFileTypes ? JSON.stringify(step.allowedFileTypes) : undefined,
-                conditions: processedConditions || undefined,
-                processTypeVersionId: version.id,
-              },
-            });
-
-            // Criar assignments
-            if (step.assignedToUserId) {
-              await tx.stepAssignment.create({
-                data: {
-                  stepVersionId: stepVersion.id,
-                  type: 'USER',
-                  userId: step.assignedToUserId,
-                  priority: 1,
-                  isActive: true,
-                },
-              });
-            }
-
-            if (step.assignedToSectorId) {
-              await tx.stepAssignment.create({
-                data: {
-                  stepVersionId: stepVersion.id,
-                  type: 'SECTOR',
-                  sectorId: step.assignedToSectorId,
-                  priority: 1,
-                  isActive: true,
-                },
-              });
-            }
-          }
+            // FIM DA SEÇÃO ATUALIZADA
         }
 
         if (formFields && formFields.length > 0) {
@@ -584,11 +618,13 @@ export class ProcessTypesService {
       _count: { instances: activeVersion.instances?.length || 0 },
     };
   }
-
+    
+  // INÍCIO DA SEÇÃO ATUALIZADA
   private adaptStepResponse(stepVersion: any): Step {
     const userAssignment = stepVersion.assignments?.find(a => a.type === 'USER');
     const sectorAssignment = stepVersion.assignments?.find(a => a.type === 'SECTOR');
-
+    const conditionalAssignment = stepVersion.assignments?.find(a => a.type === 'CONDITIONAL');
+  
     let parsedConditions = stepVersion.conditions;
     try {
       if (stepVersion.conditions && typeof stepVersion.conditions === 'string') {
@@ -597,7 +633,7 @@ export class ProcessTypesService {
     } catch (e) {
       parsedConditions = stepVersion.conditions;
     }
-
+  
     let parsedAllowedFileTypes = stepVersion.allowedFileTypes;
     try {
       if (stepVersion.allowedFileTypes && typeof stepVersion.allowedFileTypes === 'string') {
@@ -606,13 +642,23 @@ export class ProcessTypesService {
     } catch (e) {
       parsedAllowedFileTypes = stepVersion.allowedFileTypes;
     }
-
+  
+    let parsedActions = stepVersion.actions || [];
+    try {
+      if (stepVersion.actions && typeof stepVersion.actions === 'string') {
+        parsedActions = JSON.parse(stepVersion.actions);
+      }
+    } catch (e) {
+      parsedActions = stepVersion.actions || [];
+    }
+  
     return {
       id: stepVersion.id,
       name: stepVersion.name,
       description: stepVersion.description,
       instructions: stepVersion.instructions,
       slaHours: stepVersion.slaHours,
+      slaDays: stepVersion.slaDays, // Incluir dias
       type: stepVersion.type,
       order: stepVersion.order,
       allowAttachment: stepVersion.allowAttachment,
@@ -622,13 +668,22 @@ export class ProcessTypesService {
       maxAttachments: stepVersion.maxAttachments,
       allowedFileTypes: parsedAllowedFileTypes,
       conditions: parsedConditions,
-      actions: [], // Será implementado conforme necessário
+      actions: parsedActions,
+      
+      // Novos campos
+      assignedToCreator: stepVersion.assignedToCreator || false,
+      assignmentConditions: conditionalAssignment?.conditionalConfig || null,
+      flowConditions: stepVersion.flowConditions || null,
+      reuseData: stepVersion.reuseData || null,
+      
+      // Compatibilidade com o frontend existente
       assignedToUserId: userAssignment?.userId || null,
       assignedToSectorId: sectorAssignment?.sectorId || null,
       assignedToUser: userAssignment?.user || null,
       assignedToSector: sectorAssignment?.sector || null,
     };
   }
+  // FIM DA SEÇÃO ATUALIZADA
 
   private adaptFormFieldResponse(fieldVersion: any): FormField {
     let parsedOptions = fieldVersion.options;

@@ -103,10 +103,13 @@ export class ProcessesService {
       },
     });
 
+    // INÍCIO DA SEÇÃO ATUALIZADA
     const stepExecutionsData = activeVersion.steps.map((step) => {
       const now = new Date();
-      const dueAt = step.slaHours
-        ? new Date(now.getTime() + step.slaHours * 60 * 60 * 1000)
+      // Converter slaDays para horas se disponível
+      const slaHours = step.slaDays ? step.slaDays * 24 : step.slaHours;
+      const dueAt = slaHours
+        ? new Date(now.getTime() + slaHours * 60 * 60 * 1000)
         : null;
 
       return {
@@ -123,6 +126,23 @@ export class ProcessesService {
     await this.prisma.stepExecution.createMany({
       data: stepExecutionsData,
     });
+
+    // Criar assignments para o criador onde necessário
+    for (const step of activeVersion.steps) {
+      if (step.assignedToCreator) {
+        await this.prisma.stepAssignment.create({
+          data: {
+            stepVersionId: step.id,
+            type: 'USER',
+            userId: userId, // Atribuir ao criador
+            priority: 1,
+            isActive: true,
+            dynamicRole: 'PROCESS_CREATOR',
+          },
+        });
+      }
+    }
+    // FIM DA SEÇÃO ATUALIZADA
 
     return this.findOne(createdInstance.id, userId);
   }
@@ -656,19 +676,21 @@ export class ProcessesService {
       }),
     };
   }
-
+  
+  // INÍCIO DA SEÇÃO ATUALIZADA
   async getMyTasks(userId: string, companyId: string) {
     const userCompany = await this.prisma.userCompany.findFirst({
       where: { userId, companyId },
       include: { sector: true },
     });
-
-    // Buscar tarefas através dos assignments
+  
+    // Buscar tarefas através dos assignments E tarefas onde o usuário é o criador
     const tasks = await this.prisma.stepExecution.findMany({
       where: {
         status: 'IN_PROGRESS',
         processInstance: { companyId },
         OR: [
+          // Atribuição direta ao usuário
           {
             stepVersion: {
               assignments: {
@@ -680,6 +702,7 @@ export class ProcessesService {
               },
             },
           },
+          // Atribuição ao setor do usuário
           {
             stepVersion: {
               assignments: {
@@ -690,6 +713,21 @@ export class ProcessesService {
                 },
               },
             },
+          },
+          // NOVO: Tarefas atribuídas ao criador
+          {
+            AND: [
+              {
+                stepVersion: {
+                  assignedToCreator: true,
+                },
+              },
+              {
+                processInstance: {
+                  createdById: userId,
+                },
+              },
+            ],
           },
         ],
       },
@@ -748,9 +786,12 @@ export class ProcessesService {
       },
       orderBy: { createdAt: 'asc' },
     });
-
-    // Adaptar resposta para manter compatibilidade
+  
+    // Adaptar resposta para incluir informação se é atribuída ao criador
     return tasks.map(task => {
+      const isAssignedToCreator = task.stepVersion.assignedToCreator && 
+                                  task.processInstance.createdById === userId;
+      
       const userAssignment = task.stepVersion.assignments?.find(a => a.type === 'USER');
       const sectorAssignment = task.stepVersion.assignments?.find(a => a.type === 'SECTOR');
       
@@ -758,8 +799,11 @@ export class ProcessesService {
         ...task,
         step: {
           ...task.stepVersion,
-          assignedToUser: userAssignment?.user || null,
+          assignedToUser: isAssignedToCreator 
+            ? task.processInstance.createdBy 
+            : (userAssignment?.user || null),
           assignedToSector: sectorAssignment?.sector || null,
+          assignedToCreator: task.stepVersion.assignedToCreator || false,
         },
         processInstance: {
           ...task.processInstance,
@@ -768,6 +812,7 @@ export class ProcessesService {
       };
     });
   }
+  // FIM DA SEÇÃO ATUALIZADA
 
   async getCreatedByUser(userId: string, companyId: string) {
     const processes = await this.prisma.processInstance.findMany({
@@ -1302,6 +1347,7 @@ export class ProcessesService {
       );
   }
 
+  // INÍCIO DA SEÇÃO ATUALIZADA
   private async checkExecutePermission(
     stepExecution: any,
     userId: string,
@@ -1309,9 +1355,17 @@ export class ProcessesService {
     const userCompany = await this.prisma.userCompany.findFirst({
       where: { userId, companyId: stepExecution.processInstance.companyId },
     });
+    
     if (!userCompany) throw new ForbiddenException('Sem permissão');
-
-    // Verificar assignments
+  
+    // Verificar se é atribuída ao criador
+    if (stepExecution.stepVersion.assignedToCreator) {
+      if (stepExecution.processInstance.createdById === userId) {
+        return; // Permitir se o usuário é o criador
+      }
+    }
+  
+    // Verificar assignments normais
     const userAssignment = stepExecution.stepVersion.assignments?.find(
       (a: any) => a.type === 'USER' && a.userId === userId && a.isActive
     );
@@ -1319,12 +1373,13 @@ export class ProcessesService {
     const sectorAssignment = stepExecution.stepVersion.assignments?.find(
       (a: any) => a.type === 'SECTOR' && a.sectorId === userCompany.sectorId && a.isActive
     );
-
+  
     if (userAssignment || sectorAssignment) return;
     if (userCompany.role === 'ADMIN') return;
-
+  
     throw new ForbiddenException('Sem permissão para executar esta etapa');
   }
+  // FIM DA SEÇÃO ATUALIZADA
 
   private async validateFormData(
     formData: Record<string, any>,
