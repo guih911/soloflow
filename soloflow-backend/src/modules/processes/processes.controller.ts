@@ -16,6 +16,7 @@ import {
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { ProcessesService } from './processes.service';
+import { UploadResponse } from './processes.service';
 import { CreateProcessInstanceDto } from './dto/create-process-instance.dto';
 import { ExecuteStepDto } from './dto/execute-step.dto';
 import { UploadAttachmentDto, ProcessFileUploadDto } from './dto/upload-attachment.dto';
@@ -27,17 +28,16 @@ import { multerConfig } from '../../config/multer.config';
 export class ProcessesController {
   constructor(private readonly processesService: ProcessesService) {}
 
+  // ✅ ENDPOINT PRINCIPAL: Criar processo (apenas dados JSON)
   @Post()
-  @UseInterceptors(FilesInterceptor('files', 10, multerConfig))
   async create(
     @Body() createDto: CreateProcessInstanceDto, 
-    @UploadedFiles() files: Express.Multer.File[],
     @Request() req
-  ) {
-    return this.processesService.createInstance(createDto, req.user.id, files);
+  ) : Promise<any> {
+    return this.processesService.createInstance(createDto, req.user.id);
   }
 
-  // Upload de arquivo para processo existente (campos dinâmicos)
+  // ✅ ENDPOINT CORRIGIDO: Upload de arquivo único para campo específico
   @Post(':id/upload')
   @UseInterceptors(FileInterceptor('file', multerConfig))
   async uploadProcessFile(
@@ -45,7 +45,7 @@ export class ProcessesController {
     @Body() uploadDto: ProcessFileUploadDto,
     @UploadedFile() file: Express.Multer.File,
     @Request() req
-  ) {
+  ): Promise<UploadResponse> {
     if (!file) {
       throw new BadRequestException('Arquivo é obrigatório');
     }
@@ -62,6 +62,31 @@ export class ProcessesController {
     );
   }
 
+  // ✅ NOVO: Upload de múltiplos arquivos para campo específico
+  @Post(':id/upload-multiple')
+  @UseInterceptors(FilesInterceptor('files', 10, multerConfig))
+  async uploadProcessFiles(
+    @Param('id') processId: string,
+    @Body() uploadDto: ProcessFileUploadDto,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Request() req
+  ): Promise<UploadResponse> {
+    if (!files || files.length === 0) {
+      throw new BadRequestException('Pelo menos um arquivo é obrigatório');
+    }
+
+    if (!uploadDto.fieldName) {
+      throw new BadRequestException('Nome do campo é obrigatório');
+    }
+
+    return this.processesService.uploadProcessFiles(
+      processId, 
+      uploadDto.fieldName, 
+      files, 
+      req.user.id
+    );
+  }
+
   // Upload de anexo para step execution
   @Post('step-execution/:stepExecutionId/upload')
   @UseInterceptors(FileInterceptor('file', multerConfig))
@@ -70,7 +95,7 @@ export class ProcessesController {
     @Body() uploadDto: UploadAttachmentDto,
     @UploadedFile() file: Express.Multer.File,
     @Request() req
-  ) {
+  ): Promise<UploadResponse> {
     if (!file) {
       throw new BadRequestException('Arquivo é obrigatório');
     }
@@ -89,8 +114,18 @@ export class ProcessesController {
     @Param('attachmentId') attachmentId: string,
     @Res() res: Response,
     @Request() req
-  ) {
+  ): Promise<void> {
     return this.processesService.downloadAttachment(attachmentId, req.user.id, res);
+  }
+
+  // ✅ NOVO: Visualizar anexo (inline)
+  @Get('attachment/:attachmentId/view')
+  async viewAttachment(
+    @Param('attachmentId') attachmentId: string,
+    @Res() res: Response,
+    @Request() req
+  ): Promise<void> {
+    return this.processesService.viewAttachment(attachmentId, req.user.id, res);
   }
 
   // Listar todos os processos da empresa
@@ -122,9 +157,48 @@ export class ProcessesController {
   getDashboardStats(@Request() req) {
     return this.processesService.getDashboardStats(req.user.id, req.user.companyId);
   }
-
+  // Executar etapa
   @Post('execute-step')
-  executeStep(@Body() executeDto: ExecuteStepDto, @Request() req) {
-    return this.processesService.executeStep(executeDto, req.user.id);
+async executeStep(@Body() executeDto: ExecuteStepDto, @Request() req) {
+  console.log('🚀 ExecuteStep called with:', {
+    executeDto,
+    user: req.user.id,
+    userEmail: req.user.email,
+    timestamp: new Date().toISOString()
+  });
+
+  // ✅ VALIDAÇÃO ADICIONAL NO CONTROLLER
+  if (!executeDto.stepExecutionId) {
+    console.log('❌ Missing stepExecutionId');
+    throw new BadRequestException('stepExecutionId é obrigatório');
   }
+
+  // Verificar se stepExecutionId é um UUID válido
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(executeDto.stepExecutionId)) {
+    console.log('❌ Invalid stepExecutionId format:', executeDto.stepExecutionId);
+    throw new BadRequestException('stepExecutionId deve ser um UUID válido');
+  }
+
+  try {
+    console.log('✅ Calling service with validated data');
+    const result = await this.processesService.executeStep(executeDto, req.user.id);
+    
+    console.log('✅ Step executed successfully:', {
+      stepExecutionId: executeDto.stepExecutionId,
+      action: executeDto.action,
+      resultId: result.id
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('❌ Error in executeStep controller:', {
+      error: error.message,
+      stack: error.stack,
+      executeDto,
+      userId: req.user.id
+    });
+    throw error;
+  }
+}
 }

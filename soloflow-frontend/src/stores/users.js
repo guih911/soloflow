@@ -1,3 +1,4 @@
+// src/stores/users.js - Versão melhorada
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/services/api'
@@ -25,7 +26,6 @@ export const useUserStore = defineStore('users', () => {
       console.error('Error fetching users:', err)
       error.value = err.response?.data?.message || 'Erro ao buscar usuários'
       
-      // Se erro 400, pode ser problema de companyId
       if (err.response?.status === 400) {
         window.showSnackbar?.('Erro: ID da empresa é obrigatório', 'error')
       }
@@ -59,42 +59,76 @@ export const useUserStore = defineStore('users', () => {
     try {
       console.log('Creating user with data:', data)
       
-      // Garantir estrutura correta dos dados
+      // Validar dados antes de enviar
+      if (!data.name || !data.email) {
+        throw new Error('Nome e email são obrigatórios')
+      }
+
+      if (!data.password && !data.id) {
+        throw new Error('Senha é obrigatória para novos usuários')
+      }
+
+      if (!data.companies || data.companies.length === 0) {
+        throw new Error('Pelo menos uma empresa deve ser especificada')
+      }
+
+      // Verificar se há empresa padrão
+      const hasDefault = data.companies.some(c => c.isDefault)
+      if (!hasDefault) {
+        data.companies[0].isDefault = true
+      }
+
+      // Estrutura correta para envio
       const userData = {
-        name: data.name,
-        email: data.email,
+        name: data.name.trim(),
+        email: data.email.trim().toLowerCase(),
         password: data.password,
-        role: data.role || 'USER',
-        companyId: data.companyId, // Necessário para multi-empresa
-        sectorId: data.sectorId || null,
-        isDefault: true
+        companies: data.companies.map(company => ({
+          companyId: company.companyId,
+          role: company.role || 'USER',
+          sectorId: company.sectorId || null,
+          isDefault: Boolean(company.isDefault)
+        }))
       }
       
       console.log('Sending user data:', userData)
       
       const response = await api.post('/users', userData)
       
-      console.log('User created:', response.data)
+      console.log('User created successfully:', response.data)
       
-      // Adicionar na lista local se não existe
-      const existingIndex = users.value.findIndex(u => u.id === response.data.id)
-      if (existingIndex === -1) {
-        users.value.push(response.data)
-      } else {
-        users.value[existingIndex] = response.data
-      }
+      // Atualizar lista local
+      await fetchUsers()
       
       return response.data
     } catch (err) {
       console.error('Error creating user:', err)
-      error.value = err.response?.data?.message || 'Erro ao criar usuário'
+      
+      let errorMessage = 'Erro ao criar usuário'
+      
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
+      // Tratar erros específicos
+      if (err.response?.status === 409) {
+        errorMessage = 'Email já está em uso por outro usuário'
+      } else if (err.response?.status === 400) {
+        errorMessage = err.response.data?.message || 'Dados inválidos fornecidos'
+      } else if (err.response?.status === 403) {
+        errorMessage = 'Você não tem permissão para realizar esta ação'
+      }
+      
+      error.value = errorMessage
       
       // Log detalhado do erro para debug
       if (err.response?.data) {
         console.error('Server error details:', err.response.data)
       }
       
-      throw err
+      throw new Error(errorMessage)
     } finally {
       loading.value = false
     }
@@ -107,19 +141,81 @@ export const useUserStore = defineStore('users', () => {
     try {
       console.log('Updating user with data:', data)
       
-      const response = await api.patch(`/users/${id}`, data)
+      // Filtrar apenas campos que podem ser atualizados
+      const updateData = {}
+      if (data.name !== undefined) updateData.name = data.name.trim()
+      if (data.isActive !== undefined) updateData.isActive = data.isActive
+      
+      const response = await api.patch(`/users/${id}`, updateData)
+      
+      console.log('User updated successfully:', response.data)
       
       // Atualizar na lista local
       const index = users.value.findIndex(u => u.id === id)
       if (index !== -1) {
-        users.value[index] = response.data
+        users.value[index] = { ...users.value[index], ...response.data }
       }
       
       return response.data
     } catch (err) {
       console.error('Error updating user:', err)
-      error.value = err.response?.data?.message || 'Erro ao atualizar usuário'
-      throw err
+      
+      let errorMessage = 'Erro ao atualizar usuário'
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      }
+      
+      error.value = errorMessage
+      throw new Error(errorMessage)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function updateUserCompanies(id, companiesData) {
+    loading.value = true
+    error.value = null
+    
+    try {
+      console.log('Updating user companies:', { id, companiesData })
+      
+      // Validar dados
+      if (!companiesData || companiesData.length === 0) {
+        throw new Error('Pelo menos uma empresa deve ser especificada')
+      }
+
+      // Verificar se há empresa padrão
+      const hasDefault = companiesData.some(c => c.isDefault)
+      if (!hasDefault) {
+        companiesData[0].isDefault = true
+      }
+
+      // Preparar dados
+      const companies = companiesData.map(company => ({
+        companyId: company.companyId,
+        role: company.role || 'USER',
+        sectorId: company.sectorId || null,
+        isDefault: Boolean(company.isDefault)
+      }))
+      
+      const response = await api.patch(`/users/${id}/companies`, { companies })
+      
+      console.log('User companies updated successfully:', response.data)
+      
+      // Atualizar lista completa
+      await fetchUsers()
+      
+      return response.data
+    } catch (err) {
+      console.error('Error updating user companies:', err)
+      
+      let errorMessage = 'Erro ao atualizar empresas do usuário'
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      }
+      
+      error.value = errorMessage
+      throw new Error(errorMessage)
     } finally {
       loading.value = false
     }
@@ -135,13 +231,14 @@ export const useUserStore = defineStore('users', () => {
       // Atualizar na lista local
       const index = users.value.findIndex(u => u.id === userId)
       if (index !== -1) {
-        users.value[index] = response.data
+        users.value[index] = { ...users.value[index], ...response.data }
       }
       
       return response.data
     } catch (err) {
-      error.value = err.response?.data?.message || 'Erro ao atribuir setor'
-      throw err
+      const errorMessage = err.response?.data?.message || 'Erro ao atribuir setor'
+      error.value = errorMessage
+      throw new Error(errorMessage)
     } finally {
       loading.value = false
     }
@@ -156,9 +253,12 @@ export const useUserStore = defineStore('users', () => {
       
       // Remover da lista local
       users.value = users.value.filter(u => u.id !== id)
+      
+      console.log('User deleted successfully')
     } catch (err) {
-      error.value = err.response?.data?.message || 'Erro ao remover usuário'
-      throw err
+      const errorMessage = err.response?.data?.message || 'Erro ao remover usuário'
+      error.value = errorMessage
+      throw new Error(errorMessage)
     } finally {
       loading.value = false
     }
@@ -166,6 +266,45 @@ export const useUserStore = defineStore('users', () => {
 
   function clearError() {
     error.value = null
+  }
+
+  // Funções utilitárias
+  function validateUserData(data) {
+    const errors = []
+    
+    if (!data.name || data.name.trim().length < 3) {
+      errors.push('Nome deve ter pelo menos 3 caracteres')
+    }
+    
+    if (!data.email || !data.email.includes('@')) {
+      errors.push('Email inválido')
+    }
+    
+    if (!data.password && !data.id) {
+      errors.push('Senha é obrigatória')
+    }
+    
+    if (!data.companies || data.companies.length === 0) {
+      errors.push('Pelo menos uma empresa deve ser especificada')
+    }
+    
+    if (data.companies) {
+      data.companies.forEach((company, index) => {
+        if (!company.companyId) {
+          errors.push(`Empresa ${index + 1}: ID da empresa é obrigatório`)
+        }
+        if (!company.role) {
+          errors.push(`Empresa ${index + 1}: Perfil é obrigatório`)
+        }
+      })
+      
+      const hasDefault = data.companies.some(c => c.isDefault)
+      if (!hasDefault) {
+        errors.push('Pelo menos uma empresa deve ser marcada como padrão')
+      }
+    }
+    
+    return errors
   }
 
   return {
@@ -177,8 +316,10 @@ export const useUserStore = defineStore('users', () => {
     fetchUser,
     createUser,
     updateUser,
+    updateUserCompanies,
     assignSector,
     deleteUser,
     clearError,
+    validateUserData,
   }
 })

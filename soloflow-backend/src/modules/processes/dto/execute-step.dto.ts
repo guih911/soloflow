@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsUUID, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsUUID, IsObject } from 'class-validator';
 
 export class ExecuteStepDto {
   @IsUUID()
@@ -6,12 +6,13 @@ export class ExecuteStepDto {
 
   @IsOptional()
   @IsString()
-  action?: string; // aprovar, rejeitar, etc
+  action?: string;
 
   @IsOptional()
   @IsString()
   comment?: string;
 
   @IsOptional()
+  @IsObject()
   metadata?: any; // JSON com dados do formulário da etapa
 }

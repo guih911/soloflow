@@ -2,7 +2,7 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="900"
+    :max-width="selectedAttachment ? '1400' : '900'"
     scrollable
     class="attachment-modal"
   >
@@ -12,9 +12,14 @@
         <div class="d-flex align-center">
           <v-icon color="primary" size="28" class="mr-3">mdi-paperclip</v-icon>
           <div>
-            <h3 class="text-h5 font-weight-bold">Anexos do Processo</h3>
+            <h3 class="text-h5 font-weight-bold">
+              {{ selectedAttachment ? getDisplayName(selectedAttachment) : (title || 'Anexos das Etapas') }}
+            </h3>
             <p class="text-body-2 text-medium-emphasis mt-1">
-              {{ attachments.length }} arquivo(s) anexado(s)
+              {{ selectedAttachment ? 
+                `${getFileTypeName(selectedAttachment.mimeType)} • ${formatFileSize(selectedAttachment.size)}` : 
+                `${attachments.length} arquivo(s) anexado(s) durante as etapas do processo` 
+              }}
             </p>
           </div>
         </div>
@@ -27,105 +32,60 @@
 
       <v-divider />
 
+      <!-- ✅ Navegação de abas quando há anexo selecionado -->
+      <v-tabs v-if="selectedAttachment" v-model="activeTab" class="px-6">
+        <v-tab value="list">
+          <v-icon start>mdi-format-list-bulleted</v-icon>
+          Lista
+        </v-tab>
+        <v-tab value="preview" :disabled="!canPreviewSelected">
+          <v-icon start>mdi-eye</v-icon>
+          Visualizar
+        </v-tab>
+      </v-tabs>
+
       <!-- Content -->
-      <v-card-text class="pa-0" style="height: 500px;">
-        <!-- Lista de Anexos -->
-        <div v-if="attachments.length > 0" class="attachment-list">
-          <div
-            v-for="(attachment, index) in attachments"
-            :key="attachment.id"
-            class="attachment-item"
-            :class="{ 'selected': selectedAttachment?.id === attachment.id }"
-            @click="selectAttachment(attachment)"
-          >
-            <div class="attachment-card pa-4">
-              <div class="d-flex align-center">
-                <!-- Ícone do tipo de arquivo -->
-                <v-avatar
-                  :color="getFileTypeColor(attachment.mimeType)"
-                  size="48"
-                  class="mr-4"
-                >
-                  <v-icon
-                    :icon="getFileIcon(attachment.mimeType)"
-                    color="white"
-                    size="24"
-                  />
-                </v-avatar>
-
-                <!-- Informações do arquivo -->
-                <div class="flex-grow-1">
-                  <h4 class="text-subtitle-1 font-weight-medium">
-                    {{ attachment.originalName }}
-                  </h4>
-                  
-                  <div class="d-flex align-center text-caption text-medium-emphasis mt-1">
-                    <span>{{ formatFileSize(attachment.size) }}</span>
-                    <v-divider vertical class="mx-2" />
-                    <span>{{ getFileTypeName(attachment.mimeType) }}</span>
-                    <v-divider vertical class="mx-2" />
-                    <span>{{ formatDate(attachment.createdAt) }}</span>
-                  </div>
-
-                  <!-- Badges -->
-                  <div class="mt-2">
-                    <v-chip
-                      v-if="attachment.isSigned"
-                      size="x-small"
-                      color="success"
-                      variant="tonal"
-                      class="mr-2"
-                    >
-                      <v-icon start size="12">mdi-check-decagram</v-icon>
-                      Assinado
-                    </v-chip>
-                    
-                    <v-chip
-                      v-if="canPreview(attachment)"
-                      size="x-small"
-                      color="info"
-                      variant="tonal"
-                    >
-                      <v-icon start size="12">mdi-eye</v-icon>
-                      Visualizável
-                    </v-chip>
-                  </div>
-                </div>
-
-                <!-- Actions -->
-                <div class="attachment-actions">
-                  <v-btn
-                    v-if="canPreview(attachment)"
-                    icon="mdi-eye"
-                    variant="text"
-                    color="info"
-                    @click.stop="previewAttachment(attachment)"
-                    :loading="loadingPreview === attachment.id"
-                  >
-                    <v-tooltip activator="parent">Visualizar</v-tooltip>
-                  </v-btn>
-                  
-                  <v-btn
-                    icon="mdi-download"
-                    variant="text"
-                    color="primary"
-                    @click.stop="downloadAttachment(attachment)"
-                    :loading="loadingDownload === attachment.id"
-                  >
-                    <v-tooltip activator="parent">Download</v-tooltip>
-                  </v-btn>
-                </div>
-              </div>
+      <v-card-text class="pa-0" :style="selectedAttachment ? 'height: 700px;' : 'height: 500px;'">
+        <v-window v-if="selectedAttachment" v-model="activeTab">
+          <!-- ✅ Aba da Lista -->
+          <v-window-item value="list">
+            <div class="attachment-list-container">
+              <AttachmentList 
+                :attachments="formattedAttachments"
+                :selected-attachment="selectedAttachment"
+                @select="selectAttachment"
+                @download="downloadAttachment"
+                @preview="previewAttachment"
+              />
             </div>
-          </div>
+          </v-window-item>
+          
+          <!-- ✅ Aba do Visualizador com fundo branco para etapas -->
+          <v-window-item value="preview">
+            <AttachmentPreview 
+              :attachment="selectedAttachment"
+              @download="downloadAttachment"
+            />
+          </v-window-item>
+        </v-window>
+        
+        <!-- ✅ Lista simples quando não há seleção -->
+        <div v-else-if="attachments.length > 0">
+          <AttachmentList 
+            :attachments="formattedAttachments"
+            :selected-attachment="selectedAttachment"
+            @select="selectAttachment"
+            @download="downloadAttachment"
+            @preview="previewAttachment"
+          />
         </div>
 
-        <!-- Estado vazio -->
+        <!-- ✅ Estado vazio melhorado -->
         <div v-else class="empty-state">
-          <v-icon size="80" color="grey-lighten-2">mdi-paperclip-off</v-icon>
-          <h3 class="text-h6 mt-4 text-grey">Nenhum anexo encontrado</h3>
+          <v-icon size="80" color="grey-lighten-2">mdi-debug-step-over</v-icon>
+          <h3 class="text-h6 mt-4 text-grey">Nenhum anexo de etapa encontrado</h3>
           <p class="text-body-2 text-grey">
-            Este processo não possui arquivos anexados.
+            Ainda não foram anexados arquivos durante as etapas deste processo.
           </p>
         </div>
       </v-card-text>
@@ -136,127 +96,32 @@
       <v-card-actions class="pa-4">
         <div class="d-flex align-center text-caption text-medium-emphasis">
           <v-icon size="16" class="mr-1">mdi-information</v-icon>
-          Total: {{ attachments.length }} arquivo(s) • 
-          {{ getTotalSize() }} • 
-          {{ getSignedCount() }} assinado(s)
+          {{ selectedAttachment ? 
+            `Arquivo ${getCurrentIndex() + 1} de ${attachments.length}` :
+            `Total: ${attachments.length} arquivo(s) de etapas • ${getTotalSize()} • ${getSignedCount()} assinado(s)`
+          }}
         </div>
         
         <v-spacer />
         
-        <v-btn variant="text" @click="close">
-          Fechar
-        </v-btn>
-        
-        <v-btn
-          v-if="attachments.length > 0"
-          color="primary"
-          variant="elevated"
-          @click="downloadAll"
-          :loading="loadingDownloadAll"
-        >
-          <v-icon start>mdi-download-multiple</v-icon>
-          Baixar Todos
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-
-    <!-- Preview Dialog -->
-    <v-dialog
-      v-model="previewDialog"
-      max-width="1000"
-      max-height="800"
-    >
-      <v-card v-if="previewFile">
-        <v-card-title class="d-flex align-center justify-space-between">
-          <div class="d-flex align-center">
-            <v-icon class="mr-2">{{ getFileIcon(previewFile.mimeType) }}</v-icon>
-            {{ previewFile.originalName }}
-          </div>
-          <v-btn
-            icon="mdi-close"
-            variant="text"
-            @click="closePreview"
-          />
-        </v-card-title>
-        
-        <v-divider />
-        
-        <v-card-text class="pa-0">
-          <!-- Preview de Imagem -->
-          <div
-            v-if="isImage(previewFile)"
-            class="image-preview"
-          >
-            <img
-              :src="previewUrl"
-              :alt="previewFile.originalName"
-              class="preview-image"
-            />
-          </div>
-          
-          <!-- Preview de PDF -->
-          <div
-            v-else-if="isPdf(previewFile)"
-            class="pdf-preview"
-          >
-            <iframe
-              :src="previewUrl"
-              class="pdf-frame"
-              frameborder="0"
-            />
-          </div>
-          
-          <!-- Outros tipos -->
-          <div v-else class="other-preview">
-            <div class="text-center py-12">
-              <v-icon size="80" color="grey-lighten-2">
-                {{ getFileIcon(previewFile.mimeType) }}
-              </v-icon>
-              <h3 class="text-h6 mt-4">
-                {{ previewFile.originalName }}
-              </h3>
-              <p class="text-body-2 text-grey mb-4">
-                Preview não disponível para este tipo de arquivo
-              </p>
-              <v-btn
-                color="primary"
-                @click="downloadAttachment(previewFile)"
-              >
-                <v-icon start>mdi-download</v-icon>
-                Download
-              </v-btn>
-            </div>
-          </div>
-        </v-card-text>
-        
-        <v-divider />
-        
-        <v-card-actions>
-          <div class="text-caption text-medium-emphasis">
-            {{ formatFileSize(previewFile.size) }} • 
-            {{ getFileTypeName(previewFile.mimeType) }}
-            <span v-if="previewFile.isSigned" class="text-success ml-2">
-              <v-icon size="16">mdi-check-decagram</v-icon>
-              Assinado
-            </span>
-          </div>
-          
-          <v-spacer />
-          
-          <v-btn variant="text" @click="closePreview">
+        <div class="actions-footer">
+          <v-btn variant="text" @click="close" class="mr-3">
             Fechar
           </v-btn>
           
           <v-btn
+            v-if="attachments.length > 0 && !selectedAttachment"
             color="primary"
-            @click="downloadAttachment(previewFile)"
+            variant="elevated"
+            @click="downloadAll"
+            :loading="loadingDownloadAll"
           >
-            <v-icon start>mdi-download</v-icon>
-            Download
+            <v-icon start>mdi-download-multiple</v-icon>
+            Baixar Todos
           </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+        </div>
+      </v-card-actions>
+    </v-card>
   </v-dialog>
 </template>
 
@@ -264,12 +129,18 @@
 import { ref, computed } from 'vue'
 import api from '@/services/api'
 import dayjs from 'dayjs'
+import AttachmentList from './AttachmentList.vue'
+import AttachmentPreview from './AttachmentPreview.vue'
 
 const props = defineProps({
   modelValue: Boolean,
   attachments: {
     type: Array,
     default: () => []
+  },
+  title: {
+    type: String,
+    default: ''
   }
 })
 
@@ -277,65 +148,35 @@ const emit = defineEmits(['update:modelValue'])
 
 // Estado
 const selectedAttachment = ref(null)
-const previewDialog = ref(false)
-const previewFile = ref(null)
-const previewUrl = ref('')
-const loadingPreview = ref(null)
-const loadingDownload = ref(null)
+const activeTab = ref('list')
 const loadingDownloadAll = ref(false)
 
+// Computed
+const canPreviewSelected = computed(() => {
+  if (!selectedAttachment.value) return false
+  return canPreview(selectedAttachment.value)
+})
+
+const formattedAttachments = computed(() => {
+  return props.attachments.map(attachment => ({
+    ...attachment,
+    // Garantir que tem um ID único
+    id: attachment.id || `temp-${Date.now()}-${Math.random()}`,
+    // ✅ CORRIGIDO: Garantir que anexos de etapas sempre usam nome original
+    displayName: attachment.originalName || attachment.filename || 'Arquivo',
+    // Garantir campos obrigatórios
+    originalName: attachment.originalName || attachment.filename || 'Arquivo sem nome',
+    size: attachment.size || 0,
+    mimeType: attachment.mimeType || 'application/octet-stream',
+    createdAt: attachment.createdAt || new Date().toISOString(),
+    isSigned: Boolean(attachment.isSigned),
+    // ✅ Garantir que são marcados como anexos de etapa
+    attachmentType: 'step',
+    attachmentSource: 'Anexo de Etapa'
+  }))
+})
+
 // Métodos auxiliares
-function getFileIcon(mimeType) {
-  if (!mimeType) return 'mdi-file'
-  
-  if (mimeType.includes('pdf')) return 'mdi-file-pdf-box'
-  if (mimeType.includes('image')) return 'mdi-file-image'
-  if (mimeType.includes('word') || mimeType.includes('document')) return 'mdi-file-word'
-  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'mdi-file-excel'
-  if (mimeType.includes('text')) return 'mdi-file-document'
-  if (mimeType.includes('zip') || mimeType.includes('rar')) return 'mdi-folder-zip'
-  
-  return 'mdi-file'
-}
-
-function getFileTypeColor(mimeType) {
-  if (!mimeType) return 'grey'
-  
-  if (mimeType.includes('pdf')) return 'red'
-  if (mimeType.includes('image')) return 'blue'
-  if (mimeType.includes('word')) return 'indigo'
-  if (mimeType.includes('excel')) return 'green'
-  if (mimeType.includes('text')) return 'orange'
-  
-  return 'grey'
-}
-
-function getFileTypeName(mimeType) {
-  if (!mimeType) return 'Arquivo'
-  
-  if (mimeType.includes('pdf')) return 'PDF'
-  if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'JPEG'
-  if (mimeType.includes('png')) return 'PNG'
-  if (mimeType.includes('gif')) return 'GIF'
-  if (mimeType.includes('word')) return 'Word'
-  if (mimeType.includes('excel')) return 'Excel'
-  if (mimeType.includes('text')) return 'Texto'
-  
-  return mimeType.split('/')[1]?.toUpperCase() || 'Arquivo'
-}
-
-function formatFileSize(bytes) {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-}
-
-function formatDate(date) {
-  return dayjs(date).format('DD/MM/YYYY HH:mm')
-}
-
 function canPreview(attachment) {
   return isImage(attachment) || isPdf(attachment)
 }
@@ -348,6 +189,32 @@ function isPdf(attachment) {
   return attachment.mimeType?.includes('pdf')
 }
 
+function getDisplayName(attachment) {
+  // Para anexos de etapas, sempre usar nome original
+  return attachment.originalName || attachment.filename || 'Arquivo'
+}
+
+function getFileTypeName(mimeType) {
+  if (!mimeType) return 'Arquivo'
+  
+  if (mimeType.includes('pdf')) return 'PDF'
+  if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'JPEG'
+  if (mimeType.includes('png')) return 'PNG'
+  if (mimeType.includes('gif')) return 'GIF'
+  if (mimeType.includes('word')) return 'Word'
+  if (mimeType.includes('excel')) return 'Excel'
+  
+  return mimeType.split('/')[1]?.toUpperCase() || 'Arquivo'
+}
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
 function getTotalSize() {
   const total = props.attachments.reduce((sum, att) => sum + (att.size || 0), 0)
   return formatFileSize(total)
@@ -357,31 +224,29 @@ function getSignedCount() {
   return props.attachments.filter(att => att.isSigned).length
 }
 
+function getCurrentIndex() {
+  if (!selectedAttachment.value) return -1
+  return formattedAttachments.value.findIndex(att => att.id === selectedAttachment.value.id)
+}
+
 // Métodos principais
 function selectAttachment(attachment) {
   selectedAttachment.value = attachment
-}
-
-async function previewAttachment(attachment) {
-  if (!canPreview(attachment)) return
   
-  loadingPreview.value = attachment.id
-  try {
-    // Usar endpoint de view (inline) em vez de download
-    const viewUrl = `/processes/attachment/${attachment.id}/view`
-    previewUrl.value = `${api.defaults.baseURL}${viewUrl}`
-    previewFile.value = attachment
-    previewDialog.value = true
-  } catch (error) {
-    console.error('Error preparing preview:', error)
-    window.showSnackbar?.('Erro ao preparar visualização', 'error')
-  } finally {
-    loadingPreview.value = null
+  // Se pode visualizar, mudar para aba de preview automaticamente
+  if (canPreview(attachment)) {
+    activeTab.value = 'preview'
+  } else {
+    activeTab.value = 'list'
   }
 }
 
+async function previewAttachment(attachment) {
+  selectAttachment(attachment)
+  activeTab.value = 'preview'
+}
+
 async function downloadAttachment(attachment) {
-  loadingDownload.value = attachment.id
   try {
     const response = await api.get(`/processes/attachment/${attachment.id}/download`, {
       responseType: 'blob',
@@ -396,19 +261,23 @@ async function downloadAttachment(attachment) {
     // Criar link temporário e fazer download
     const a = document.createElement('a')
     a.href = url
-    a.download = attachment.originalName || 'arquivo'
+    a.download = getDisplayName(attachment) + getFileExtension(attachment.originalName)
     document.body.appendChild(a)
     a.click()
     a.remove()
     window.URL.revokeObjectURL(url)
 
-    window.showSnackbar?.(`Download de "${attachment.originalName}" iniciado`, 'success')
+    window.showSnackbar?.(`Download de "${getDisplayName(attachment)}" iniciado`, 'success')
   } catch (error) {
     console.error('Error downloading attachment:', error)
     window.showSnackbar?.('Erro ao baixar arquivo', 'error')
-  } finally {
-    loadingDownload.value = null
   }
+}
+
+function getFileExtension(filename) {
+  if (!filename) return ''
+  const parts = filename.split('.')
+  return parts.length > 1 ? '.' + parts.pop() : ''
 }
 
 async function downloadAll() {
@@ -432,15 +301,10 @@ async function downloadAll() {
   }
 }
 
-function closePreview() {
-  previewDialog.value = false
-  previewFile.value = null
-  previewUrl.value = ''
-}
-
 function close() {
-  emit('update:modelValue', false)
   selectedAttachment.value = null
+  activeTab.value = 'list'
+  emit('update:modelValue', false)
 }
 </script>
 
@@ -450,39 +314,10 @@ function close() {
   overflow: hidden;
 }
 
-.attachment-list {
-  max-height: 500px;
+.attachment-list-container {
+  height: 700px;
   overflow-y: auto;
-}
-
-.attachment-item {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.attachment-item:hover {
-  background-color: rgba(var(--v-theme-primary), 0.04);
-}
-
-.attachment-item.selected {
-  background-color: rgba(var(--v-theme-primary), 0.08);
-  border-left: 4px solid rgb(var(--v-theme-primary));
-}
-
-.attachment-card {
-  position: relative;
-}
-
-.attachment-actions {
-  display: flex;
-  gap: 8px;
-  opacity: 0.7;
-  transition: opacity 0.2s ease;
-}
-
-.attachment-item:hover .attachment-actions {
-  opacity: 1;
+  background: #ffffff;
 }
 
 .empty-state {
@@ -492,57 +327,36 @@ function close() {
   justify-content: center;
   height: 400px;
   text-align: center;
+  background: #ffffff;
 }
 
-.image-preview {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
-  background: #f5f5f5;
-  min-height: 400px;
-}
-
-.preview-image {
-  max-width: 100%;
-  max-height: 600px;
-  object-fit: contain;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-}
-
-.pdf-preview {
-  height: 600px;
-}
-
-.pdf-frame {
-  width: 100%;
-  height: 100%;
-}
-
-.other-preview {
-  min-height: 400px;
+/* ✅ Espaçamento adequado nos botões do footer */
+.actions-footer {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 12px;
+}
+
+.actions-footer .v-btn {
+  margin: 0;
 }
 
 /* Scrollbar personalizada */
-.attachment-list::-webkit-scrollbar {
+.attachment-list-container::-webkit-scrollbar {
   width: 6px;
 }
 
-.attachment-list::-webkit-scrollbar-track {
+.attachment-list-container::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 3px;
 }
 
-.attachment-list::-webkit-scrollbar-thumb {
+.attachment-list-container::-webkit-scrollbar-thumb {
   background: #c1c1c1;
   border-radius: 3px;
 }
 
-.attachment-list::-webkit-scrollbar-thumb:hover {
+.attachment-list-container::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
 </style>

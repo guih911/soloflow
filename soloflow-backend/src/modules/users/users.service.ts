@@ -1,7 +1,9 @@
+// src/modules/users/users.service.ts
 import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateUserCompanyDto } from './dto/create-user-company.dto';
+import { CreateUserCompanyDto, UserCompanyAssignmentDto } from './dto/create-user-company.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserCompaniesDto } from './dto/update-user-companies.dto';
 import { AssignUserCompanyDto } from './dto/assign-user-company.dto';
 import { User, UserCompany, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -22,70 +24,103 @@ export class UsersService {
       throw new ConflictException('Email já está em uso');
     }
 
-    // Verificar se a empresa existe
-    const company = await this.prisma.company.findUnique({
-      where: { id: createUserDto.companyId },
-    });
+    // Determinar quais empresas vincular
+    let companiesToAssign: UserCompanyAssignmentDto[] = [];
 
-    if (!company || !company.isActive) {
-      throw new BadRequestException('Empresa não encontrada ou inativa');
+    if (createUserDto.companies && createUserDto.companies.length > 0) {
+      // Modo novo: múltiplas empresas
+      companiesToAssign = createUserDto.companies;
+    } else if (createUserDto.companyId) {
+      // Modo compatibilidade: uma empresa
+      companiesToAssign = [{
+        companyId: createUserDto.companyId,
+        role: createUserDto.role || UserRole.USER,
+        sectorId: createUserDto.sectorId,
+        isDefault: createUserDto.isDefault ?? true
+      }];
+    } else {
+      throw new BadRequestException('Pelo menos uma empresa deve ser especificada');
     }
 
-    // Se especificou setor, verificar se existe e pertence à empresa
-    if (createUserDto.sectorId) {
-      const sector = await this.prisma.sector.findFirst({
-        where: {
-          id: createUserDto.sectorId,
-          companyId: createUserDto.companyId,
-          isActive: true,
-        },
+    // Validar empresas
+    for (const companyAssignment of companiesToAssign) {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyAssignment.companyId },
       });
 
-      if (!sector) {
-        throw new BadRequestException('Setor não encontrado ou não pertence à empresa');
+      if (!company || !company.isActive) {
+        throw new BadRequestException(`Empresa ${companyAssignment.companyId} não encontrada ou inativa`);
       }
+
+      // Se especificou setor, verificar se existe e pertence à empresa
+      if (companyAssignment.sectorId) {
+        const sector = await this.prisma.sector.findFirst({
+          where: {
+            id: companyAssignment.sectorId,
+            companyId: companyAssignment.companyId,
+            isActive: true,
+          },
+        });
+
+        if (!sector) {
+          throw new BadRequestException(`Setor ${companyAssignment.sectorId} não encontrado ou não pertence à empresa ${companyAssignment.companyId}`);
+        }
+      }
+    }
+
+    // Verificar se há pelo menos uma empresa padrão
+    const hasDefault = companiesToAssign.some(c => c.isDefault);
+    if (!hasDefault && companiesToAssign.length > 0) {
+      companiesToAssign[0].isDefault = true;
     }
 
     // Hash da senha
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
     try {
-      // Criar usuário e vínculo com empresa em transação
+      // Criar usuário e vínculos com empresas em transação
       const result = await this.prisma.$transaction(async (tx) => {
-        // Criar usuário (sem role global)
+        // Criar usuário
         const user = await tx.user.create({
           data: {
             name: createUserDto.name,
             email: createUserDto.email,
             password: hashedPassword,
-            // Removido: role global
           },
         });
 
         console.log('User created:', user);
 
-        // Criar vínculo com empresa
-        const userCompany = await tx.userCompany.create({
-          data: {
-            userId: user.id,
-            companyId: createUserDto.companyId,
-            role: createUserDto.role || UserRole.USER,
-            sectorId: createUserDto.sectorId || undefined, // ✅ null -> undefined
-            isDefault: createUserDto.isDefault ?? true,
-          },
-          include: {
-            company: true,
-            sector: true,
-          },
-        });
+        // Criar vínculos com empresas
+        const userCompanies = await Promise.all(
+          companiesToAssign.map(companyAssignment =>
+            tx.userCompany.create({
+              data: {
+                userId: user.id,
+                companyId: companyAssignment.companyId,
+                role: companyAssignment.role || UserRole.USER,
+                sectorId: companyAssignment.sectorId || undefined,
+                isDefault: companyAssignment.isDefault ?? false,
+              },
+              include: {
+                company: true,
+                sector: true,
+              },
+            })
+          )
+        );
 
-        console.log('UserCompany created:', userCompany);
+        console.log('UserCompanies created:', userCompanies);
 
         return {
           ...user,
-          company: userCompany.company,
-          role: userCompany.role,
-          sector: userCompany.sector,
+          companies: userCompanies.map(uc => ({
+            companyId: uc.company.id,
+            companyName: uc.company.name,
+            role: uc.role,
+            sector: uc.sector,
+            isDefault: uc.isDefault,
+          })),
         };
       });
 
@@ -109,7 +144,26 @@ export class UsersService {
         user: { isActive: true },
       },
       include: {
-        user: true,
+        user: {
+          include: {
+            userCompanies: {
+              include: {
+                company: {
+                  select: {
+                    id: true,
+                    name: true,
+                  }
+                },
+                sector: {
+                  select: {
+                    id: true,
+                    name: true,
+                  }
+                }
+              }
+            }
+          }
+        },
         sector: true,
       },
       orderBy: { user: { name: 'asc' } },
@@ -119,10 +173,18 @@ export class UsersService {
       id: uc.user.id,
       name: uc.user.name,
       email: uc.user.email,
-      role: uc.role, // Role vem do UserCompany
+      role: uc.role, // Role na empresa atual
       sector: uc.sector,
       isActive: uc.user.isActive,
       createdAt: uc.user.createdAt,
+      // Todas as empresas do usuário
+      companies: uc.user.userCompanies.map(userComp => ({
+        companyId: userComp.company.id,
+        companyName: userComp.company.name,
+        role: userComp.role,
+        sector: userComp.sector,
+        isDefault: userComp.isDefault,
+      })),
     }));
   }
 
@@ -145,7 +207,16 @@ export class UsersService {
     }
 
     const { password, ...result } = user;
-    return result;
+    return {
+      ...result,
+      companies: user.userCompanies.map(uc => ({
+        companyId: uc.company.id,
+        companyName: uc.company.name,
+        role: uc.role,
+        sector: uc.sector,
+        isDefault: uc.isDefault,
+      })),
+    };
   }
 
   async findByEmail(email: string): Promise<User | null> {
@@ -164,6 +235,91 @@ export class UsersService {
 
     const { password, ...result } = user;
     return result;
+  }
+
+  async updateUserCompanies(id: string, updateDto: UpdateUserCompaniesDto): Promise<any> {
+    const user = await this.findOne(id);
+    
+    if (!updateDto.companies || updateDto.companies.length === 0) {
+      throw new BadRequestException('Pelo menos uma empresa deve ser especificada');
+    }
+
+    // Validar empresas
+    for (const companyAssignment of updateDto.companies) {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyAssignment.companyId },
+      });
+
+      if (!company || !company.isActive) {
+        throw new BadRequestException(`Empresa ${companyAssignment.companyId} não encontrada ou inativa`);
+      }
+
+      if (companyAssignment.sectorId) {
+        const sector = await this.prisma.sector.findFirst({
+          where: {
+            id: companyAssignment.sectorId,
+            companyId: companyAssignment.companyId,
+            isActive: true,
+          },
+        });
+
+        if (!sector) {
+          throw new BadRequestException(`Setor ${companyAssignment.sectorId} não encontrado ou não pertence à empresa ${companyAssignment.companyId}`);
+        }
+      }
+    }
+
+    // Verificar se há pelo menos uma empresa padrão
+    const hasDefault = updateDto.companies.some(c => c.isDefault);
+    if (!hasDefault) {
+      updateDto.companies[0].isDefault = true;
+    }
+
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Remover vínculos existentes
+        await tx.userCompany.deleteMany({
+          where: { userId: id },
+        });
+
+        // Criar novos vínculos
+        const userCompanies = await Promise.all(
+          updateDto.companies!.map(companyAssignment =>
+            tx.userCompany.create({
+              data: {
+                userId: id,
+                companyId: companyAssignment.companyId,
+                role: companyAssignment.role || UserRole.USER,
+                sectorId: companyAssignment.sectorId || undefined,
+                isDefault: companyAssignment.isDefault ?? false,
+              },
+              include: {
+                company: true,
+                sector: true,
+              },
+            })
+          )
+        );
+
+        return userCompanies;
+      });
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        companies: result.map(uc => ({
+          companyId: uc.company.id,
+          companyName: uc.company.name,
+          role: uc.role,
+          sector: uc.sector,
+          isDefault: uc.isDefault,
+        })),
+      };
+    } catch (error) {
+      console.error('Error updating user companies:', error);
+      throw new BadRequestException('Erro ao atualizar empresas do usuário: ' + error.message);
+    }
   }
 
   async updatePassword(id: string, newPassword: string): Promise<void> {
@@ -242,7 +398,7 @@ export class UsersService {
         userId: assignDto.userId,
         companyId: assignDto.companyId,
         role: assignDto.role,
-        sectorId: assignDto.sectorId || undefined, // ✅ null -> undefined
+        sectorId: assignDto.sectorId || undefined,
         isDefault: assignDto.isDefault ?? userCompanyCount === 0,
       },
       include: {
@@ -287,7 +443,7 @@ export class UsersService {
       },
       data: {
         ...data,
-        sectorId: data.sectorId || undefined, // ✅ null -> undefined
+        sectorId: data.sectorId || undefined,
       },
       include: {
         company: true,

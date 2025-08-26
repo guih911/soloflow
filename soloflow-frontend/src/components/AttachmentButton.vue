@@ -2,7 +2,7 @@
   <div class="attachment-button-container">
     <!-- Botão principal -->
     <v-btn
-      v-if="hasAttachments"
+      v-if="hasStepAttachments"
       :variant="variant"
       :color="color"
       :size="size"
@@ -10,19 +10,19 @@
       class="attachment-btn"
     >
       <v-icon start>mdi-paperclip</v-icon>
-      Ver Anexos
+      Ver Anexos das Etapas
       <v-chip
-        v-if="attachmentCount > 0"
+        v-if="stepAttachmentCount > 0"
         :size="size === 'large' ? 'small' : 'x-small'"
         :color="color"
         variant="flat"
         class="ml-2"
       >
-        {{ attachmentCount }}
+        {{ stepAttachmentCount }}
       </v-chip>
     </v-btn>
 
-    <!-- Indicador quando não há anexos -->
+    <!-- Indicador quando não há anexos de etapas -->
     <div
       v-else-if="showEmptyState"
       class="no-attachments-indicator"
@@ -33,14 +33,15 @@
         color="grey"
       >
         <v-icon start size="16">mdi-paperclip-off</v-icon>
-        Sem anexos
+        Sem anexos de etapas
       </v-chip>
     </div>
 
-    <!-- Modal de anexos -->
+    <!-- ✅ CORRIGIDO: Modal apenas com anexos de etapas -->
     <AttachmentModal
       v-model="modalOpen"
-      :attachments="formattedAttachments"
+      :attachments="stepAttachmentsOnly"
+      title="Anexos das Etapas"
     />
   </div>
 </template>
@@ -82,22 +83,34 @@ const props = defineProps({
 // Estado
 const modalOpen = ref(false)
 
-// Computed para extrair anexos de diferentes fontes
-const allAttachments = computed(() => {
-  // Se attachments foi passado diretamente
+// ✅ CORRIGIDO: Computed para extrair APENAS anexos de stepExecutions
+const stepAttachmentsOnly = computed(() => {
+  console.log('🔍 AttachmentButton - Filtering step attachments only')
+  
+  // Se attachments foi passado diretamente, assumir que são de etapas
   if (props.attachments && props.attachments.length > 0) {
-    return props.attachments
+    console.log('📎 Using direct attachments (assuming step attachments):', props.attachments.length)
+    return props.attachments.map(attachment => ({
+      ...attachment,
+      attachmentType: 'step',
+      attachmentSource: 'Anexo de Etapa',
+      displayName: attachment.originalName || attachment.filename || 'Arquivo'
+    }))
   }
   
-  // Se foi passado um objeto process, extrair anexos de stepExecutions
+  // ✅ CRÍTICO: Extrair APENAS anexos de stepExecutions (IGNORAR formData)
   if (props.process?.stepExecutions) {
-    const attachments = []
+    const stepAttachments = []
     
     props.process.stepExecutions.forEach(stepExecution => {
       if (stepExecution.attachments && stepExecution.attachments.length > 0) {
         stepExecution.attachments.forEach(attachment => {
-          attachments.push({
+          stepAttachments.push({
             ...attachment,
+            // ✅ Marcar como anexo de etapa
+            attachmentType: 'step',
+            attachmentSource: 'Anexo de Etapa',
+            displayName: attachment.originalName || attachment.filename || 'Arquivo',
             // Adicionar contexto da etapa
             stepName: stepExecution.step?.name,
             stepOrder: stepExecution.step?.order,
@@ -107,61 +120,20 @@ const allAttachments = computed(() => {
       }
     })
     
-    return attachments
-  }
-
-  // Verificar se há dados de arquivos no formData (campos FILE)
-  if (props.process?.formData) {
-    const fileAttachments = []
-    const formData = props.process.formData
-    const formFields = props.process.processType?.formFields || []
-    
-    // Buscar campos do tipo FILE no formData
-    formFields.forEach(field => {
-      if (field.type === 'FILE' && formData[field.name]) {
-        const fieldData = formData[field.name]
-        
-        if (fieldData.attachmentId) {
-          // Se há referência a um attachment
-          fileAttachments.push({
-            id: fieldData.attachmentId,
-            originalName: fieldData.originalName,
-            size: fieldData.size,
-            mimeType: fieldData.mimeType,
-            fieldName: field.name,
-            fieldLabel: field.label,
-            isFormField: true
-          })
-        }
-      }
-    })
-    
-    return fileAttachments
+    console.log('📎 Found step attachments:', stepAttachments.length)
+    return stepAttachments
   }
   
+  console.log('📎 No step attachments found')
   return []
 })
 
-// Formatar anexos para o modal
-const formattedAttachments = computed(() => {
-  return allAttachments.value.map(attachment => ({
-    ...attachment,
-    // Garantir que tem um ID único
-    id: attachment.id || `temp-${Date.now()}-${Math.random()}`,
-    // Garantir campos obrigatórios
-    originalName: attachment.originalName || attachment.filename || 'Arquivo sem nome',
-    size: attachment.size || 0,
-    mimeType: attachment.mimeType || 'application/octet-stream',
-    createdAt: attachment.createdAt || new Date().toISOString(),
-    isSigned: Boolean(attachment.isSigned)
-  }))
-})
-
-const hasAttachments = computed(() => allAttachments.value.length > 0)
-const attachmentCount = computed(() => allAttachments.value.length)
+const hasStepAttachments = computed(() => stepAttachmentsOnly.value.length > 0)
+const stepAttachmentCount = computed(() => stepAttachmentsOnly.value.length)
 
 // Métodos
 function openModal() {
+  console.log('🔓 Opening step attachments modal with', stepAttachmentsOnly.value.length, 'attachments')
   modalOpen.value = true
 }
 </script>

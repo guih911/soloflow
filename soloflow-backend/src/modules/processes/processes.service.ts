@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
 import { join } from 'path';
@@ -6,45 +12,87 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProcessInstanceDto } from './dto/create-process-instance.dto';
 import { ExecuteStepDto } from './dto/execute-step.dto';
 import { ValidateSignatureDto } from './dto/validate-signature.dto';
-import { ProcessInstance, StepExecution, ProcessStatus, StepExecutionStatus } from '@prisma/client';
+import {
+  ProcessInstance,
+  StepExecution,
+  ProcessStatus,
+  StepExecutionStatus,
+  Attachment,
+} from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
+
+export interface AttachmentMeta {
+  attachmentId: string;
+  originalName: string;
+  size: number;
+  mimeType: string;
+}
+
+export interface UploadResponse {
+  success: boolean;
+  attachment?: {
+    id: string;
+    originalName: string;
+    size: number;
+    mimeType: string;
+    fieldName?: string;
+  };
+  attachments?: Array<{
+    id: string;
+    originalName: string;
+    size: number;
+    mimeType: string;
+    fieldName?: string;
+  }>;
+  fieldName?: string;
+  count?: number;
+}
 
 @Injectable()
 export class ProcessesService {
   constructor(private prisma: PrismaService) {}
 
   async createInstance(
-    createDto: CreateProcessInstanceDto, 
-    userId: string, 
-    files?: Express.Multer.File[]
+    createDto: CreateProcessInstanceDto,
+    userId: string,
   ): Promise<ProcessInstance> {
+    // Buscar ProcessType e sua versão ativa
     const processType = await this.prisma.processType.findUnique({
       where: { id: createDto.processTypeId },
       include: {
-        steps: { orderBy: { order: 'asc' } },
-        formFields: { orderBy: { order: 'asc' } },
+        versions: {
+          where: { isActive: true },
+          include: {
+            steps: { orderBy: { order: 'asc' } },
+            formFields: { orderBy: { order: 'asc' } },
+          },
+        },
       },
     });
 
-    if (!processType) throw new NotFoundException('Tipo de processo não encontrado');
+    if (!processType || !processType.versions.length)
+      throw new NotFoundException('Tipo de processo não encontrado ou sem versão ativa');
 
-    // Buscar companyId do usuário
+    const activeVersion = processType.versions[0];
+
     const userCompany = await this.prisma.userCompany.findFirst({
       where: { userId },
       include: { company: true },
     });
 
-    if (!userCompany) throw new BadRequestException('Usuário não está vinculado a nenhuma empresa');
+    if (!userCompany)
+      throw new BadRequestException(
+        'Usuário não está vinculado a nenhuma empresa',
+      );
 
-    // Validar formData se houver campos obrigatórios
-    if (createDto.formData && processType.formFields.length > 0) {
-      await this.validateFormData(createDto.formData, processType.formFields);
+    if (createDto.formData && activeVersion.formFields.length > 0) {
+      await this.validateFormData(createDto.formData, activeVersion.formFields);
     }
 
     const createdInstance = await this.prisma.processInstance.create({
       data: {
-        processTypeId: createDto.processTypeId,
+        processTypeVersionId: activeVersion.id,
         createdById: userId,
         companyId: userCompany.companyId,
         title: createDto.title,
@@ -55,104 +103,90 @@ export class ProcessesService {
       },
     });
 
-    // Criar step executions
-    await this.prisma.stepExecution.createMany({
-      data: processType.steps.map((step) => ({
+    // INÍCIO DA SEÇÃO ATUALIZADA
+    const stepExecutionsData = activeVersion.steps.map((step) => {
+      const now = new Date();
+      // Converter slaDays para horas se disponível
+      const slaHours = step.slaDays ? step.slaDays * 24 : step.slaHours;
+      const dueAt = slaHours
+        ? new Date(now.getTime() + slaHours * 60 * 60 * 1000)
+        : null;
+
+      return {
         processInstanceId: createdInstance.id,
-        stepId: step.id,
-        status: step.order === 1 ? 'IN_PROGRESS' : 'PENDING',
-      })),
+        stepVersionId: step.id,
+        status:
+          step.order === 1
+            ? StepExecutionStatus.IN_PROGRESS
+            : StepExecutionStatus.PENDING,
+        dueAt: step.order === 1 ? dueAt : null,
+      };
     });
 
-    // Processar arquivos enviados no formData
-    if (files && files.length > 0) {
-      await this.processFormFiles(createdInstance.id, files, processType.formFields);
+    await this.prisma.stepExecution.createMany({
+      data: stepExecutionsData,
+    });
+
+    // Criar assignments para o criador onde necessário
+    for (const step of activeVersion.steps) {
+      if (step.assignedToCreator) {
+        await this.prisma.stepAssignment.create({
+          data: {
+            stepVersionId: step.id,
+            type: 'USER',
+            userId: userId, // Atribuir ao criador
+            priority: 1,
+            isActive: true,
+            dynamicRole: 'PROCESS_CREATOR',
+          },
+        });
+      }
     }
+    // FIM DA SEÇÃO ATUALIZADA
 
     return this.findOne(createdInstance.id, userId);
-  }
-
-  async processFormFiles(
-    processInstanceId: string, 
-    files: Express.Multer.File[], 
-    formFields: any[]
-  ): Promise<void> {
-    // Buscar campos do tipo FILE
-    const fileFields = formFields.filter(field => field.type === 'FILE');
-    
-    if (fileFields.length === 0) return;
-
-    // Buscar a primeira step execution para anexar os arquivos
-    const firstStepExecution = await this.prisma.stepExecution.findFirst({
-      where: { 
-        processInstanceId,
-        step: { order: 1 }
-      }
-    });
-
-    if (!firstStepExecution) return;
-
-    // Criar anexos para cada arquivo
-    for (const file of files) {
-      await this.prisma.attachment.create({
-        data: {
-          filename: file.filename,
-          originalName: file.originalname,
-          mimeType: file.mimetype,
-          size: file.size,
-          path: file.path,
-          stepExecutionId: firstStepExecution.id,
-        },
-      });
-    }
   }
 
   async uploadProcessFile(
     processInstanceId: string,
     fieldName: string,
     file: Express.Multer.File,
-    userId: string
-  ): Promise<any> {
-    // Verificar se o processo existe e se o usuário tem permissão
+    userId: string,
+  ): Promise<UploadResponse> {
     const process = await this.prisma.processInstance.findUnique({
       where: { id: processInstanceId },
-      include: { 
-        processType: { 
-          include: { formFields: true } 
-        } 
-      }
+      include: {
+        processTypeVersion: {
+          include: { formFields: true },
+        },
+      },
     });
 
     if (!process) throw new NotFoundException('Processo não encontrado');
     await this.checkViewPermission(process, userId);
 
-    // Verificar se existe um campo FILE com esse nome
-    const fileField = process.processType.formFields.find(
-      field => field.name === fieldName && field.type === 'FILE'
+    const fileField = process.processTypeVersion.formFields.find(
+      (field) => field.name === fieldName && field.type === 'FILE',
     );
 
     if (!fileField) {
       throw new BadRequestException('Campo de arquivo não encontrado');
     }
 
-    // Buscar a step execution ativa ou primeira
     const stepExecution = await this.prisma.stepExecution.findFirst({
-      where: { 
+      where: {
         processInstanceId,
-        OR: [
-          { status: 'IN_PROGRESS' },
-          { step: { order: 1 } }
-        ]
+        OR: [{ status: 'IN_PROGRESS' }, { stepVersion: { order: 1 } }],
       },
-      orderBy: { step: { order: 'asc' } }
+      include: { stepVersion: true },
+      orderBy: { stepVersion: { order: 'asc' } },
     });
 
     if (!stepExecution) {
       throw new BadRequestException('Nenhuma etapa disponível para anexo');
     }
 
-    // Criar o anexo
-    const attachment = await this.prisma.attachment.create({
+    const attachment: Attachment = await this.prisma.attachment.create({
       data: {
         filename: file.filename,
         originalName: file.originalname,
@@ -163,18 +197,19 @@ export class ProcessesService {
       },
     });
 
-    // Atualizar formData do processo com referência ao arquivo
-    const currentFormData = process.formData as Record<string, any> || {};
-    currentFormData[fieldName] = {
+    const currentFormData: Record<string, any> =
+      (process.formData as Record<string, any>) || {};
+    const attachmentMeta: AttachmentMeta = {
       attachmentId: attachment.id,
       originalName: file.originalname,
       size: file.size,
-      mimeType: file.mimetype
+      mimeType: file.mimetype,
     };
+    currentFormData[fieldName] = attachmentMeta;
 
     await this.prisma.processInstance.update({
       where: { id: processInstanceId },
-      data: { formData: currentFormData }
+      data: { formData: currentFormData },
     });
 
     return {
@@ -183,8 +218,119 @@ export class ProcessesService {
         id: attachment.id,
         originalName: attachment.originalName,
         size: attachment.size,
-        mimeType: attachment.mimeType
+        mimeType: attachment.mimeType,
+        fieldName: fieldName,
+      },
+    };
+  }
+
+  async uploadProcessFiles(
+    processInstanceId: string,
+    fieldName: string,
+    files: Express.Multer.File[],
+    userId: string,
+  ): Promise<UploadResponse> {
+    const process = await this.prisma.processInstance.findUnique({
+      where: { id: processInstanceId },
+      include: {
+        processTypeVersion: {
+          include: { formFields: true },
+        },
+      },
+    });
+
+    if (!process) throw new NotFoundException('Processo não encontrado');
+    await this.checkViewPermission(process, userId);
+
+    const fileField = process.processTypeVersion.formFields.find(
+      (field) => field.name === fieldName && field.type === 'FILE',
+    );
+
+    if (!fileField) {
+      throw new BadRequestException('Campo de arquivo não encontrado');
+    }
+
+    const fieldConfig = this.getFieldFileConfig(fileField);
+    if (files.length > fieldConfig.maxFiles) {
+      throw new BadRequestException(
+        `Máximo ${fieldConfig.maxFiles} arquivo(s) permitido(s) para este campo`,
+      );
+    }
+
+    const stepExecution = await this.prisma.stepExecution.findFirst({
+      where: {
+        processInstanceId,
+        OR: [{ status: 'IN_PROGRESS' }, { stepVersion: { order: 1 } }],
+      },
+      include: { stepVersion: true },
+      orderBy: { stepVersion: { order: 'asc' } },
+    });
+
+    if (!stepExecution) {
+      throw new BadRequestException('Nenhuma etapa disponível para anexo');
+    }
+
+    const createdAttachments: Attachment[] = [];
+
+    const attachmentPromises: Promise<Attachment>[] = files.map(
+      (file: Express.Multer.File) =>
+        this.prisma.attachment.create({
+          data: {
+            filename: file.filename,
+            originalName: file.originalname,
+            mimeType: file.mimetype,
+            size: file.size,
+            path: file.path,
+            stepExecutionId: stepExecution.id,
+          },
+        }),
+    );
+
+    const attachments: Attachment[] = await Promise.all(attachmentPromises);
+    createdAttachments.push(...attachments);
+
+    const currentFormData: Record<string, any> =
+      (process.formData as Record<string, any>) || {};
+
+    if (fieldConfig.multiple && files.length > 1) {
+      const attachmentMetas: AttachmentMeta[] = createdAttachments.map(
+        (att: Attachment): AttachmentMeta => ({
+          attachmentId: att.id,
+          originalName: att.originalName,
+          size: att.size,
+          mimeType: att.mimeType,
+        }),
+      );
+      currentFormData[fieldName] = attachmentMetas;
+    } else {
+      const firstAttachment: Attachment | undefined = createdAttachments[0];
+      if (firstAttachment) {
+        const attachmentMeta: AttachmentMeta = {
+          attachmentId: firstAttachment.id,
+          originalName: firstAttachment.originalName,
+          size: firstAttachment.size,
+          mimeType: firstAttachment.mimeType,
+        };
+        currentFormData[fieldName] = attachmentMeta;
       }
+    }
+
+    await this.prisma.processInstance.update({
+      where: { id: processInstanceId },
+      data: { formData: currentFormData },
+    });
+
+    return {
+      success: true,
+      attachments: createdAttachments.map((att: Attachment) => ({
+        id: att.id,
+        originalName: att.originalName,
+        size: att.size,
+        mimeType: att.mimeType,
+        fieldName: fieldName,
+      })),
+      fieldName: fieldName,
+      count: createdAttachments.length,
     };
   }
 
@@ -192,14 +338,14 @@ export class ProcessesService {
     stepExecutionId: string,
     file: Express.Multer.File,
     description?: string,
-    userId?: string
-  ): Promise<any> {
+    userId?: string,
+  ): Promise<UploadResponse> {
     const stepExecution = await this.prisma.stepExecution.findUnique({
       where: { id: stepExecutionId },
-      include: { 
-        step: true,
-        processInstance: true 
-      }
+      include: {
+        stepVersion: true,
+        processInstance: true,
+      },
     });
 
     if (!stepExecution) {
@@ -210,7 +356,7 @@ export class ProcessesService {
       await this.checkViewPermission(stepExecution.processInstance, userId);
     }
 
-    const attachment = await this.prisma.attachment.create({
+    const attachment: Attachment = await this.prisma.attachment.create({
       data: {
         filename: file.filename,
         originalName: file.originalname,
@@ -227,51 +373,132 @@ export class ProcessesService {
         id: attachment.id,
         originalName: attachment.originalName,
         size: attachment.size,
-        mimeType: attachment.mimeType
-      }
+        mimeType: attachment.mimeType,
+      },
     };
   }
 
   async downloadAttachment(
     attachmentId: string,
     userId: string,
-    res: Response
+    res: Response,
   ): Promise<void> {
     const attachment = await this.prisma.attachment.findUnique({
       where: { id: attachmentId },
-      include: { 
-        stepExecution: { 
-          include: { processInstance: true } 
-        } 
-      }
+      include: {
+        stepExecution: {
+          include: { processInstance: true },
+        },
+      },
     });
 
     if (!attachment) {
       throw new NotFoundException('Anexo não encontrado');
     }
 
-    // Verificar permissão
-    await this.checkViewPermission(attachment.stepExecution.processInstance, userId);
+    await this.checkViewPermission(
+      attachment.stepExecution.processInstance,
+      userId,
+    );
 
-    // Verificar se arquivo existe
     const filePath = attachment.path;
     if (!existsSync(filePath)) {
       throw new NotFoundException('Arquivo não encontrado no sistema');
     }
 
-    // Configurar headers para download
     res.setHeader('Content-Type', attachment.mimeType);
     res.setHeader(
-      'Content-Disposition', 
-      `attachment; filename="${encodeURIComponent(attachment.originalName)}"`
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(attachment.originalName)}"`,
     );
 
-    // Enviar arquivo
     const fileStream = createReadStream(filePath);
     fileStream.pipe(res);
   }
 
-  //    Listar todos os processos da empresa
+  async viewAttachment(
+    attachmentId: string,
+    userId: string,
+    res: Response,
+  ): Promise<void> {
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: {
+        stepExecution: {
+          include: { processInstance: true },
+        },
+      },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Anexo não encontrado');
+    }
+
+    await this.checkViewPermission(
+      attachment.stepExecution.processInstance,
+      userId,
+    );
+
+    const filePath = attachment.path;
+    if (!existsSync(filePath)) {
+      throw new NotFoundException('Arquivo não encontrado no sistema');
+    }
+
+    res.setHeader('Content-Type', attachment.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${encodeURIComponent(attachment.originalName)}"`,
+    );
+
+    const fileStream = createReadStream(filePath);
+    fileStream.pipe(res);
+  }
+
+  private getFieldFileConfig(field: any): {
+    multiple: boolean;
+    maxFiles: number;
+    maxSize: number;
+    allowedTypes: string[];
+  } {
+    const defaultConfig = {
+      multiple: false,
+      maxFiles: 1,
+      maxSize: 10 * 1024 * 1024,
+      allowedTypes: [
+        '.pdf',
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.doc',
+        '.docx',
+        '.xls',
+        '.xlsx',
+      ],
+    };
+
+    if (field.validations) {
+      try {
+        const validations =
+          typeof field.validations === 'object'
+            ? field.validations
+            : JSON.parse(field.validations);
+
+        return {
+          multiple: validations.maxFiles
+            ? validations.maxFiles > 1
+            : defaultConfig.multiple,
+          maxFiles: validations.maxFiles || defaultConfig.maxFiles,
+          maxSize: validations.maxSize || defaultConfig.maxSize,
+          allowedTypes: validations.allowedTypes || defaultConfig.allowedTypes,
+        };
+      } catch {
+        return defaultConfig;
+      }
+    }
+
+    return defaultConfig;
+  }
+
   async findAll(companyId: string, userId: string, filters: any = {}) {
     const andConditions: Prisma.ProcessInstanceWhereInput[] = [];
 
@@ -280,15 +507,15 @@ export class ProcessesService {
     }
 
     if (filters.processTypeId) {
-      andConditions.push({ processTypeId: filters.processTypeId });
+      andConditions.push({ processTypeVersion: { processTypeId: filters.processTypeId } });
     }
 
     if (filters.search) {
       andConditions.push({
         OR: [
-          { code: { contains: filters.search}},
-          { title: { contains: filters.search} },
-          { description: { contains: filters.search} },
+          { code: { contains: filters.search } },
+          { title: { contains: filters.search } },
+          { description: { contains: filters.search } },
         ],
       });
     }
@@ -301,11 +528,16 @@ export class ProcessesService {
     const processes = await this.prisma.processInstance.findMany({
       where,
       include: {
-        processType: {
+        processTypeVersion: {
           select: {
             id: true,
-            name: true,
-            description: true,
+            processType: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              },
+            },
           },
         },
         createdBy: {
@@ -317,7 +549,7 @@ export class ProcessesService {
         },
         stepExecutions: {
           include: {
-            step: {
+            stepVersion: {
               select: {
                 id: true,
                 name: true,
@@ -335,22 +567,30 @@ export class ProcessesService {
               },
             },
           },
-          orderBy: { step: { order: 'asc' } },
+          orderBy: { stepVersion: { order: 'asc' } },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return processes;
+    // Adaptar resposta para manter compatibilidade
+    return processes.map(process => ({
+      ...process,
+      processType: process.processTypeVersion.processType,
+      stepExecutions: process.stepExecutions.map(se => ({
+        ...se,
+        step: se.stepVersion,
+      })),
+    }));
   }
 
-  //    Buscar processo específico
   async findOne(processId: string, userId: string) {
     const process = await this.prisma.processInstance.findUnique({
       where: { id: processId },
       include: {
-        processType: {
+        processTypeVersion: {
           include: {
+            processType: true,
             steps: { orderBy: { order: 'asc' } },
             formFields: { orderBy: { order: 'asc' } },
           },
@@ -364,19 +604,23 @@ export class ProcessesService {
         },
         stepExecutions: {
           include: {
-            step: {
+            stepVersion: {
               include: {
-                assignedToUser: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                  },
-                },
-                assignedToSector: {
-                  select: {
-                    id: true,
-                    name: true,
+                assignments: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                      },
+                    },
+                    sector: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
                   },
                 },
               },
@@ -400,60 +644,125 @@ export class ProcessesService {
               },
             },
           },
-          orderBy: { step: { order: 'asc' } },
+          orderBy: { stepVersion: { order: 'asc' } },
         },
       },
     });
 
     if (!process) throw new NotFoundException('Processo não encontrado');
 
-    // Verificar permissão
     await this.checkViewPermission(process, userId);
 
-    return process;
+    // Adaptar resposta para manter compatibilidade
+    return {
+      ...process,
+      processType: {
+        ...process.processTypeVersion.processType,
+        steps: process.processTypeVersion.steps,
+        formFields: process.processTypeVersion.formFields,
+      },
+      stepExecutions: process.stepExecutions.map(se => {
+        const userAssignment = se.stepVersion.assignments?.find(a => a.type === 'USER');
+        const sectorAssignment = se.stepVersion.assignments?.find(a => a.type === 'SECTOR');
+        
+        return {
+          ...se,
+          step: {
+            ...se.stepVersion,
+            assignedToUser: userAssignment?.user || null,
+            assignedToSector: sectorAssignment?.sector || null,
+          },
+        };
+      }),
+    };
   }
-
-  //    Buscar tarefas do usuário logado
+  
+  // INÍCIO DA SEÇÃO ATUALIZADA
   async getMyTasks(userId: string, companyId: string) {
-    // Buscar setor do usuário
     const userCompany = await this.prisma.userCompany.findFirst({
       where: { userId, companyId },
       include: { sector: true },
     });
-
+  
+    // Buscar tarefas através dos assignments E tarefas onde o usuário é o criador
     const tasks = await this.prisma.stepExecution.findMany({
       where: {
         status: 'IN_PROGRESS',
         processInstance: { companyId },
         OR: [
-          { step: { assignedToUserId: userId } },
-          { step: { assignedToSectorId: userCompany?.sectorId } },
+          // Atribuição direta ao usuário
+          {
+            stepVersion: {
+              assignments: {
+                some: {
+                  type: 'USER',
+                  userId: userId,
+                  isActive: true,
+                },
+              },
+            },
+          },
+          // Atribuição ao setor do usuário
+          {
+            stepVersion: {
+              assignments: {
+                some: {
+                  type: 'SECTOR',
+                  sectorId: userCompany?.sectorId,
+                  isActive: true,
+                },
+              },
+            },
+          },
+          // NOVO: Tarefas atribuídas ao criador
+          {
+            AND: [
+              {
+                stepVersion: {
+                  assignedToCreator: true,
+                },
+              },
+              {
+                processInstance: {
+                  createdById: userId,
+                },
+              },
+            ],
+          },
         ],
       },
       include: {
-        step: {
+        stepVersion: {
           include: {
-            assignedToUser: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            assignedToSector: {
-              select: {
-                id: true,
-                name: true,
+            assignments: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+                sector: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
               },
             },
           },
         },
         processInstance: {
           include: {
-            processType: {
-              select: {
-                id: true,
-                name: true,
+            processTypeVersion: {
+              include: {
+                processType: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
               },
             },
             createdBy: {
@@ -477,43 +786,79 @@ export class ProcessesService {
       },
       orderBy: { createdAt: 'asc' },
     });
-
-    return tasks;
+  
+    // Adaptar resposta para incluir informação se é atribuída ao criador
+    return tasks.map(task => {
+      const isAssignedToCreator = task.stepVersion.assignedToCreator && 
+                                  task.processInstance.createdById === userId;
+      
+      const userAssignment = task.stepVersion.assignments?.find(a => a.type === 'USER');
+      const sectorAssignment = task.stepVersion.assignments?.find(a => a.type === 'SECTOR');
+      
+      return {
+        ...task,
+        step: {
+          ...task.stepVersion,
+          assignedToUser: isAssignedToCreator 
+            ? task.processInstance.createdBy 
+            : (userAssignment?.user || null),
+          assignedToSector: sectorAssignment?.sector || null,
+          assignedToCreator: task.stepVersion.assignedToCreator || false,
+        },
+        processInstance: {
+          ...task.processInstance,
+          processType: task.processInstance.processTypeVersion.processType,
+        },
+      };
+    });
   }
+  // FIM DA SEÇÃO ATUALIZADA
 
-  //    Buscar processos criados pelo usuário
   async getCreatedByUser(userId: string, companyId: string) {
-    return this.prisma.processInstance.findMany({
+    const processes = await this.prisma.processInstance.findMany({
       where: {
         createdById: userId,
         companyId,
       },
       include: {
-        processType: {
-          select: {
-            id: true,
-            name: true,
+        processTypeVersion: {
+          include: {
+            processType: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
         stepExecutions: {
           select: {
             id: true,
             status: true,
-            step: {
+            stepVersion: {
               select: {
                 name: true,
                 order: true,
               },
             },
           },
-          orderBy: { step: { order: 'asc' } },
+          orderBy: { stepVersion: { order: 'asc' } },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Adaptar resposta para manter compatibilidade
+    return processes.map(process => ({
+      ...process,
+      processType: process.processTypeVersion.processType,
+      stepExecutions: process.stepExecutions.map(se => ({
+        ...se,
+        step: se.stepVersion,
+      })),
+    }));
   }
 
-  //    Estatísticas para dashboard
   async getDashboardStats(userId: string, companyId: string) {
     const [
       totalProcesses,
@@ -522,25 +867,24 @@ export class ProcessesService {
       myTasks,
       recentProcesses,
     ] = await Promise.all([
-      // Total de processos
       this.prisma.processInstance.count({
         where: { companyId },
       }),
-      // Processos ativos
       this.prisma.processInstance.count({
         where: { companyId, status: 'IN_PROGRESS' },
       }),
-      // Processos concluídos
       this.prisma.processInstance.count({
         where: { companyId, status: 'COMPLETED' },
       }),
-      // Minhas tarefas pendentes
       this.getMyTasks(userId, companyId),
-      // Processos recentes
       this.prisma.processInstance.findMany({
         where: { companyId },
         include: {
-          processType: { select: { name: true } },
+          processTypeVersion: {
+            include: {
+              processType: { select: { name: true } },
+            },
+          },
           createdBy: { select: { name: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -553,102 +897,373 @@ export class ProcessesService {
       activeProcesses,
       completedProcesses,
       pendingTasks: myTasks.length,
-      recentProcesses,
+      recentProcesses: recentProcesses.map(process => ({
+        ...process,
+        processType: process.processTypeVersion.processType,
+      })),
     };
   }
 
-  async executeStep(executeDto: ExecuteStepDto, userId: string): Promise<StepExecution> {
+  async executeStep(
+    executeDto: ExecuteStepDto,
+    userId: string,
+  ): Promise<StepExecution> {
     const stepExecution = await this.prisma.stepExecution.findUnique({
       where: { id: executeDto.stepExecutionId },
       include: {
-        step: { include: { assignedToUser: true, assignedToSector: true } },
+        stepVersion: { 
+          include: { 
+            assignments: {
+              include: {
+                user: true,
+                sector: true,
+              },
+            },
+          },
+        },
         processInstance: {
           include: {
-            processType: { include: { steps: { orderBy: { order: 'asc' } } } },
+            processTypeVersion: {
+              include: {
+                steps: { orderBy: { order: 'asc' } },
+                formFields: { orderBy: { order: 'asc' } },
+              },
+            },
           },
         },
       },
     });
 
-    if (!stepExecution) throw new NotFoundException('Execução de etapa não encontrada');
-    await this.checkExecutePermission(stepExecution, userId);
-    if (stepExecution.status !== StepExecutionStatus.IN_PROGRESS)
-      throw new BadRequestException('Esta etapa não está em progresso');
-
-    if (executeDto.action && stepExecution.step.actions) {
-      const allowedActions = Array.isArray(stepExecution.step.actions)
-        ? stepExecution.step.actions
-        : JSON.parse(stepExecution.step.actions as any);
-      if (!allowedActions.includes(executeDto.action))
-        throw new BadRequestException('Ação não permitida para esta etapa');
+    if (!stepExecution) {
+      throw new NotFoundException('Execução de etapa não encontrada');
     }
 
-    if (stepExecution.step.requireAttachment) {
-      const attachmentCount = await this.prisma.attachment.count({ 
-        where: { stepExecutionId: executeDto.stepExecutionId } 
+    await this.checkExecutePermission(stepExecution, userId);
+
+    if (stepExecution.status !== StepExecutionStatus.IN_PROGRESS) {
+      throw new BadRequestException('Esta etapa não está em progresso');
+    }
+
+    // Processar etapa INPUT com configuração dinâmica
+    if (stepExecution.stepVersion.type === 'INPUT') {
+      return this.executeInputStep(stepExecution, executeDto, userId);
+    }
+
+    // Validação de ação para outros tipos
+    if (executeDto.action) {
+      let allowedActions: string[] = [];
+
+      if (stepExecution.stepVersion.type === 'APPROVAL') {
+        allowedActions = ['aprovar', 'reprovar'];
+      }
+
+      console.log('Action validation:', {
+        providedAction: executeDto.action,
+        allowedActions: allowedActions,
+        stepType: stepExecution.stepVersion.type,
       });
-      const minAttachments = stepExecution.step.minAttachments || 1;
-      if (attachmentCount < minAttachments)
-        throw new BadRequestException(`Esta etapa requer no mínimo ${minAttachments} anexo(s)`);
+
+      if (
+        allowedActions.length > 0 &&
+        !allowedActions.includes(executeDto.action)
+      ) {
+        throw new BadRequestException(
+          `Ação "${executeDto.action}" não permitida. Ações disponíveis: ${allowedActions.join(', ')}`,
+        );
+      }
+    }
+
+    if (stepExecution.stepVersion.type === 'APPROVAL') {
+      if (
+        !executeDto.action ||
+        !['aprovar', 'reprovar'].includes(executeDto.action)
+      ) {
+        throw new BadRequestException(
+          'Etapa de aprovação requer ação "aprovar" ou "reprovar"',
+        );
+      }
+
+      if (executeDto.action === 'reprovar' && !executeDto.comment?.trim()) {
+        throw new BadRequestException(
+          'Reprovação requer justificativa no comentário',
+        );
+      }
+    }
+
+    if (stepExecution.stepVersion.requireAttachment) {
+      const attachmentCount = await this.prisma.attachment.count({
+        where: { stepExecutionId: executeDto.stepExecutionId },
+      });
+      const minAttachments = stepExecution.stepVersion.minAttachments || 1;
+
+      console.log('Checking attachments:', {
+        required: stepExecution.stepVersion.requireAttachment,
+        count: attachmentCount,
+        minRequired: minAttachments,
+      });
+
+      if (attachmentCount < minAttachments) {
+        throw new BadRequestException(
+          `Esta etapa requer no mínimo ${minAttachments} anexo(s). Encontrados: ${attachmentCount}`,
+        );
+      }
     }
 
     return this.prisma.$transaction(async (tx) => {
+      let processedMetadata = executeDto.metadata || {};
+
+      if (stepExecution.stepVersion.type === 'APPROVAL') {
+        processedMetadata = {
+          ...processedMetadata,
+          approvalResult: executeDto.action,
+          approvalTimestamp: new Date().toISOString(),
+          approvalComment: executeDto.comment,
+          approvalDecision:
+            executeDto.action === 'aprovar' ? 'APPROVED' : 'REJECTED',
+        };
+      }
+
       const updatedExecution = await tx.stepExecution.update({
         where: { id: executeDto.stepExecutionId },
         data: {
           status: StepExecutionStatus.COMPLETED,
           action: executeDto.action,
           comment: executeDto.comment,
-          metadata: executeDto.metadata ?? undefined,
+          metadata: processedMetadata,
           executorId: userId,
           completedAt: new Date(),
         },
       });
 
-      const currentStep = stepExecution.step;
-      const allSteps = stepExecution.processInstance.processType.steps;
+      const currentStep = stepExecution.stepVersion;
+      const allSteps = stepExecution.processInstance.processTypeVersion.steps;
 
       let nextStepOrder: number | null = null;
       let shouldEnd = false;
+      let finalStatus: ProcessStatus = ProcessStatus.COMPLETED;
 
-      if (currentStep.conditions && executeDto.action) {
-        const conditions = typeof currentStep.conditions === 'string'
-          ? JSON.parse(currentStep.conditions)
-          : currentStep.conditions;
-
-        const condition = conditions[executeDto.action];
-        if (condition === 'END') {
+      if (stepExecution.stepVersion.type === 'APPROVAL') {
+        if (executeDto.action === 'reprovar') {
           shouldEnd = true;
-        } else if (condition === 'PREVIOUS' && currentStep.order > 1) {
-          nextStepOrder = currentStep.order - 1;
-          await tx.stepExecution.updateMany({
-            where: { processInstanceId: stepExecution.processInstanceId, step: { order: nextStepOrder } },
-            data: { status: StepExecutionStatus.IN_PROGRESS },
-          });
-        } else if (typeof condition === 'number') {
-          nextStepOrder = condition;
+          finalStatus = ProcessStatus.REJECTED;
+        } else if (executeDto.action === 'aprovar') {
+          nextStepOrder = currentStep.order + 1;
         }
+      } else if (currentStep.conditions && executeDto.action) {
+        try {
+          const conditions =
+            typeof currentStep.conditions === 'string'
+              ? JSON.parse(currentStep.conditions as string)
+              : currentStep.conditions;
+
+          const condition = conditions[executeDto.action];
+
+          if (condition === 'END') {
+            shouldEnd = true;
+            finalStatus = ProcessStatus.COMPLETED;
+          } else if (condition === 'PREVIOUS' && currentStep.order > 1) {
+            nextStepOrder = currentStep.order - 1;
+
+            await tx.stepExecution.updateMany({
+              where: {
+                processInstanceId: stepExecution.processInstanceId,
+                stepVersion: { order: nextStepOrder },
+              },
+              data: { status: StepExecutionStatus.IN_PROGRESS },
+            });
+          } else if (typeof condition === 'number') {
+            nextStepOrder = condition;
+          } else {
+            nextStepOrder = currentStep.order + 1;
+          }
+        } catch (conditionError) {
+          nextStepOrder = currentStep.order + 1;
+        }
+      } else {
+        nextStepOrder = currentStep.order + 1;
       }
 
-      if (!shouldEnd && nextStepOrder === null) nextStepOrder = currentStep.order + 1;
-      const nextStep = nextStepOrder ? allSteps.find(s => s.order === nextStepOrder) : null;
+      const nextStep = nextStepOrder
+        ? allSteps.find((s) => s.order === nextStepOrder)
+        : null;
+
+      if (nextStep && !shouldEnd) {
+        console.log('Activating next step:', {
+          stepId: nextStep.id,
+          stepName: nextStep.name,
+          order: nextStep.order,
+        });
+
+        await tx.stepExecution.updateMany({
+          where: {
+            processInstanceId: stepExecution.processInstanceId,
+            stepVersionId: nextStep.id,
+          },
+          data: {
+            status: StepExecutionStatus.IN_PROGRESS,
+            dueAt: nextStep.slaHours
+              ? new Date(Date.now() + nextStep.slaHours * 60 * 60 * 1000)
+              : null,
+          },
+        });
+
+        await tx.processInstance.update({
+          where: { id: stepExecution.processInstanceId },
+          data: { currentStepOrder: nextStepOrder || undefined },
+        });
+      } else {
+        console.log('Process ending:', {
+          shouldEnd,
+          hasNextStep: !!nextStep,
+          action: executeDto.action,
+          finalStatus: finalStatus,
+        });
+
+        await tx.processInstance.update({
+          where: { id: stepExecution.processInstanceId },
+          data: {
+            status: finalStatus,
+            completedAt: new Date(),
+          },
+        });
+      }
+
+      console.log('Step execution completed successfully');
+      return updatedExecution;
+    });
+  }
+
+  // Método específico para executar etapa INPUT
+  private async executeInputStep(
+    stepExecution: any,
+    executeDto: ExecuteStepDto,
+    userId: string,
+  ): Promise<StepExecution> {
+    console.log(
+      'Executing INPUT step with conditions:',
+      stepExecution.stepVersion.conditions,
+    );
+
+    // Parsear conditions
+    let stepConditions: any = {};
+    if (stepExecution.stepVersion.conditions) {
+      try {
+        stepConditions =
+          typeof stepExecution.stepVersion.conditions === 'string'
+            ? JSON.parse(stepExecution.stepVersion.conditions as string)
+            : stepExecution.stepVersion.conditions;
+      } catch (e) {
+        console.error('Error parsing step conditions:', e);
+      }
+    }
+
+    // Validar campos obrigatórios configurados
+    if (
+      stepConditions.requiredFields &&
+      Array.isArray(stepConditions.requiredFields)
+    ) {
+      for (const fieldName of stepConditions.requiredFields) {
+        if (
+          !executeDto.metadata ||
+          executeDto.metadata[fieldName] === undefined ||
+          executeDto.metadata[fieldName] === ''
+        ) {
+          const field =
+            stepExecution.processInstance.processTypeVersion.formFields.find(
+              (f: any) => f.name === fieldName,
+            );
+          const label = field?.label || fieldName;
+          throw new BadRequestException(
+            `Campo "${label}" é obrigatório nesta etapa`,
+          );
+        }
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Mesclar dados do formulário com formData do processo
+      const currentFormData =
+        (stepExecution.processInstance.formData as any) || {};
+      const newFormData = { ...currentFormData };
+
+      // Atualizar apenas campos visíveis nesta etapa
+      if (
+        stepConditions.visibleFields &&
+        Array.isArray(stepConditions.visibleFields)
+      ) {
+        for (const fieldName of stepConditions.visibleFields) {
+          if (
+            executeDto.metadata &&
+            executeDto.metadata[fieldName] !== undefined
+          ) {
+            newFormData[fieldName] = executeDto.metadata[fieldName];
+          }
+        }
+      } else {
+        // Se não há configuração de campos visíveis, aceitar todos
+        Object.assign(newFormData, executeDto.metadata || {});
+      }
+
+      // Atualizar formData do processo
+      await tx.processInstance.update({
+        where: { id: stepExecution.processInstanceId },
+        data: { formData: newFormData },
+      });
+
+      // Preparar metadata da execução
+      const executionMetadata: any = {
+        fieldsUpdated: Object.keys(executeDto.metadata || {}),
+        timestamp: new Date().toISOString(),
+      };
+
+      // Definir ação padrão se não fornecida
+      const action = executeDto.action || 'concluir';
+
+      // Atualizar execução da etapa
+      const updatedExecution = await tx.stepExecution.update({
+        where: { id: executeDto.stepExecutionId },
+        data: {
+          status: StepExecutionStatus.COMPLETED,
+          action: action,
+          comment: executeDto.comment,
+          metadata: executionMetadata,
+          executorId: userId,
+          completedAt: new Date(),
+        },
+      });
+
+      // Avançar para próxima etapa
+      const currentStep = stepExecution.stepVersion;
+      const allSteps = stepExecution.processInstance.processTypeVersion.steps;
+      const nextStepOrder = currentStep.order + 1;
+      const nextStep = allSteps.find((s: any) => s.order === nextStepOrder);
 
       if (nextStep) {
         await tx.stepExecution.updateMany({
-          where: { processInstanceId: stepExecution.processInstanceId, stepId: nextStep.id },
-          data: { status: StepExecutionStatus.IN_PROGRESS },
+          where: {
+            processInstanceId: stepExecution.processInstanceId,
+            stepVersionId: nextStep.id,
+          },
+          data: {
+            status: StepExecutionStatus.IN_PROGRESS,
+            dueAt: nextStep.slaHours
+              ? new Date(Date.now() + nextStep.slaHours * 60 * 60 * 1000)
+              : null,
+          },
         });
+
         await tx.processInstance.update({
           where: { id: stepExecution.processInstanceId },
-          data: { currentStepOrder: nextStepOrder ?? undefined },
+          data: { currentStepOrder: nextStepOrder },
         });
       } else {
-        const finalStatus = shouldEnd || executeDto.action === 'rejeitar'
-          ? ProcessStatus.REJECTED
-          : ProcessStatus.COMPLETED;
+        // Finalizar processo se não há próxima etapa
         await tx.processInstance.update({
           where: { id: stepExecution.processInstanceId },
-          data: { status: finalStatus, completedAt: new Date() },
+          data: {
+            status: ProcessStatus.COMPLETED,
+            completedAt: new Date(),
+          },
         });
       }
 
@@ -656,22 +1271,36 @@ export class ProcessesService {
     });
   }
 
-  async validateAndSign(stepExecutionId: string, attachmentId: string, validateDto: ValidateSignatureDto, userId: string): Promise<any> {
+  async validateAndSign(
+    stepExecutionId: string,
+    attachmentId: string,
+    validateDto: ValidateSignatureDto,
+    userId: string,
+  ): Promise<any> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('Usuário não encontrado');
 
-    const isPasswordValid = await bcrypt.compare(validateDto.password, user.password);
+    const isPasswordValid = await bcrypt.compare(
+      validateDto.password,
+      user.password,
+    );
     if (!isPasswordValid) throw new UnauthorizedException('Senha inválida');
 
     const attachment = await this.prisma.attachment.findUnique({
       where: { id: attachmentId },
-      include: { stepExecution: { include: { step: true } } },
+      include: { 
+        stepExecution: { 
+          include: { 
+            stepVersion: true 
+          } 
+        } 
+      },
     });
 
     if (!attachment) throw new NotFoundException('Anexo não encontrado');
     if (attachment.stepExecutionId !== stepExecutionId)
       throw new BadRequestException('Anexo não pertence a esta etapa');
-    if (!attachment.stepExecution.step.requiresSignature)
+    if (!attachment.stepExecution.stepVersion.requiresSignature)
       throw new BadRequestException('Esta etapa não requer assinatura');
     if (attachment.isSigned)
       throw new BadRequestException('Este documento já foi assinado');
@@ -681,11 +1310,11 @@ export class ProcessesService {
       data: { isSigned: true, signedPath: `signed-${attachment.filename}` },
     });
 
-    await this.prisma.stepExecution.update({ 
-      where: { id: stepExecutionId }, 
-      data: { signedAt: new Date() } 
+    await this.prisma.stepExecution.update({
+      where: { id: stepExecutionId },
+      data: { signedAt: new Date() },
     });
-    
+
     return { attachment: updatedAttachment };
   }
 
@@ -705,80 +1334,135 @@ export class ProcessesService {
     return `PROC-${year}-${nextNumber.toString().padStart(4, '0')}`;
   }
 
-  private async checkViewPermission(instance: any, userId: string): Promise<void> {
-    const userCompany = await this.prisma.userCompany.findFirst({ 
-      where: { userId, companyId: instance.companyId } 
+  private async checkViewPermission(
+    instance: any,
+    userId: string,
+  ): Promise<void> {
+    const userCompany = await this.prisma.userCompany.findFirst({
+      where: { userId, companyId: instance.companyId },
     });
-    if (!userCompany) throw new ForbiddenException('Sem permissão para visualizar este processo');
+    if (!userCompany)
+      throw new ForbiddenException(
+        'Sem permissão para visualizar este processo',
+      );
   }
 
-  private async checkExecutePermission(stepExecution: any, userId: string): Promise<void> {
-    const userCompany = await this.prisma.userCompany.findFirst({ 
-      where: { userId, companyId: stepExecution.processInstance.companyId } 
+  // INÍCIO DA SEÇÃO ATUALIZADA
+  private async checkExecutePermission(
+    stepExecution: any,
+    userId: string,
+  ): Promise<void> {
+    const userCompany = await this.prisma.userCompany.findFirst({
+      where: { userId, companyId: stepExecution.processInstance.companyId },
     });
+    
     if (!userCompany) throw new ForbiddenException('Sem permissão');
-
-    const step = stepExecution.step;
-    if (step.assignedToUserId === userId) return;
-    if (step.assignedToSectorId && userCompany.sectorId === step.assignedToSectorId) return;
+  
+    // Verificar se é atribuída ao criador
+    if (stepExecution.stepVersion.assignedToCreator) {
+      if (stepExecution.processInstance.createdById === userId) {
+        return; // Permitir se o usuário é o criador
+      }
+    }
+  
+    // Verificar assignments normais
+    const userAssignment = stepExecution.stepVersion.assignments?.find(
+      (a: any) => a.type === 'USER' && a.userId === userId && a.isActive
+    );
+    
+    const sectorAssignment = stepExecution.stepVersion.assignments?.find(
+      (a: any) => a.type === 'SECTOR' && a.sectorId === userCompany.sectorId && a.isActive
+    );
+  
+    if (userAssignment || sectorAssignment) return;
     if (userCompany.role === 'ADMIN') return;
-
+  
     throw new ForbiddenException('Sem permissão para executar esta etapa');
   }
+  // FIM DA SEÇÃO ATUALIZADA
 
-  private async validateFormData(formData: Record<string, any>, formFields: any[]): Promise<void> {
+  private async validateFormData(
+    formData: Record<string, any>,
+    formFields: any[],
+  ): Promise<void> {
     for (const field of formFields) {
+      if (field.type === 'FILE') {
+        continue;
+      }
+
       const value = formData[field.name];
-      if (field.required && (value === undefined || value === null || value === '')) {
+      if (
+        field.required &&
+        (value === undefined || value === null || value === '')
+      ) {
         throw new BadRequestException(`Campo "${field.label}" é obrigatório`);
       }
       if (value !== undefined && value !== null && value !== '') {
         switch (field.type) {
           case 'EMAIL':
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) 
-              throw new BadRequestException(`Campo "${field.label}" deve ser um email válido`);
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+              throw new BadRequestException(
+                `Campo "${field.label}" deve ser um email válido`,
+              );
             break;
           case 'CPF':
-            if (!/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(value)) 
-              throw new BadRequestException(`Campo "${field.label}" deve ser um CPF válido`);
+            if (!/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(value))
+              throw new BadRequestException(
+                `Campo "${field.label}" deve ser um CPF válido`,
+              );
             break;
           case 'CNPJ':
-            if (!/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(value)) 
-              throw new BadRequestException(`Campo "${field.label}" deve ser um CNPJ válido`);
+            if (!/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(value))
+              throw new BadRequestException(
+                `Campo "${field.label}" deve ser um CNPJ válido`,
+              );
             break;
           case 'NUMBER':
-            if (isNaN(Number(value))) 
-              throw new BadRequestException(`Campo "${field.label}" deve ser um número`);
+            if (isNaN(Number(value)))
+              throw new BadRequestException(
+                `Campo "${field.label}" deve ser um número`,
+              );
             break;
           case 'DATE':
-            if (isNaN(Date.parse(value))) 
-              throw new BadRequestException(`Campo "${field.label}" deve ser uma data válida`);
+            if (isNaN(Date.parse(value)))
+              throw new BadRequestException(
+                `Campo "${field.label}" deve ser uma data válida`,
+              );
             break;
         }
         if (field.validations) {
-          const validations = typeof field.validations === 'string' 
-            ? JSON.parse(field.validations) 
-            : field.validations;
-          
+          const validations =
+            typeof field.validations === 'string'
+              ? JSON.parse(field.validations)
+              : field.validations;
+
           if (validations.minLength && value.length < validations.minLength)
             throw new BadRequestException(
-              validations.customMessage || `Campo "${field.label}" deve ter no mínimo ${validations.minLength} caracteres`
+              validations.customMessage ||
+                `Campo "${field.label}" deve ter no mínimo ${validations.minLength} caracteres`,
             );
           if (validations.maxLength && value.length > validations.maxLength)
             throw new BadRequestException(
-              validations.customMessage || `Campo "${field.label}" deve ter no máximo ${validations.maxLength} caracteres`
+              validations.customMessage ||
+                `Campo "${field.label}" deve ter no máximo ${validations.maxLength} caracteres`,
             );
           if (validations.min && Number(value) < validations.min)
             throw new BadRequestException(
-              validations.customMessage || `Campo "${field.label}" deve ser maior ou igual a ${validations.min}`
+              validations.customMessage ||
+                `Campo "${field.label}" deve ser maior ou igual a ${validations.min}`,
             );
           if (validations.max && Number(value) > validations.max)
             throw new BadRequestException(
-              validations.customMessage || `Campo "${field.label}" deve ser menor ou igual a ${validations.max}`
+              validations.customMessage ||
+                `Campo "${field.label}" deve ser menor ou igual a ${validations.max}`,
             );
-          if (validations.pattern && !new RegExp(validations.pattern).test(value))
+          if (
+            validations.pattern &&
+            !new RegExp(validations.pattern).test(value)
+          )
             throw new BadRequestException(
-              validations.customMessage || `Campo "${field.label}" não está no formato correto`
+              validations.customMessage ||
+                `Campo "${field.label}" não está no formato correto`,
             );
         }
       }

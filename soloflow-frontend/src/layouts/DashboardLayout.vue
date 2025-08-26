@@ -355,6 +355,10 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useProcessStore } from '@/stores/processes'
+
+
+const processStore = useProcessStore()
 
 const router = useRouter()
 const route = useRoute()
@@ -370,8 +374,17 @@ const currentCompany = computed(() => authStore.activeCompany)
 const companies = computed(() => authStore.companies)
 
 // ✨ Dados Mock para demonstração
-const pendingTasks = ref(15)
-const pendingSignatures = ref(1)
+const pendingTasks = computed(() => {
+  return processStore.myTasks?.length || 0
+})
+const pendingSignatures  =computed(() => {
+  if (!processStore.myTasks) return 0
+  
+  return processStore.myTasks.filter(task => 
+    task.step?.requiresSignature === true
+  ).length
+})
+
 const notifications = ref([
   {
     id: 1,
@@ -403,6 +416,16 @@ function goToProfile() {
 
 function goToSettings() {
   router.push({ name: 'Settings' })
+}
+
+async function loadSidebarData() {
+  try {
+    if (authStore.user?.id && authStore.activeCompany?.id) {
+      await processStore.fetchMyTasks()
+    }
+  } catch (error) {
+    console.error('❌ Erro ao carregar dados do sidebar:', error)
+  }
 }
 
 async function switchCompany(companyId) {
