@@ -10,7 +10,44 @@ import { UpdateProcessTypeDto } from './dto/update-process-type.dto';
 import { CreateStepDto } from './dto/create-step.dto';
 import { CreateFormFieldDto } from './dto/create-form-field.dto';
 import { UpdateFormFieldDto } from './dto/update-form-field.dto';
-import { ProcessType, Step, FormField } from '@prisma/client';
+import { ProcessType } from '@prisma/client';
+
+// Interfaces para compatibilidade com o código existente
+interface Step {
+  id: string;
+  name: string;
+  description?: string | null;
+  instructions?: string | null;
+  slaHours?: number | null;
+  type: any;
+  order: number;
+  allowAttachment: boolean;
+  requiresSignature: boolean;
+  requireAttachment: boolean;
+  minAttachments?: number | null;
+  maxAttachments?: number | null;
+  allowedFileTypes?: any;
+  conditions?: any;
+  actions?: any;
+  assignedToUserId?: string | null;
+  assignedToSectorId?: string | null;
+  assignedToUser?: any;
+  assignedToSector?: any;
+}
+
+interface FormField {
+  id: string;
+  name: string;
+  label: string;
+  type: any;
+  placeholder?: string | null;
+  required: boolean;
+  order: number;
+  options?: any;
+  validations?: any;
+  defaultValue?: string | null;
+  helpText?: string | null;
+}
 
 @Injectable()
 export class ProcessTypesService {
@@ -55,45 +92,92 @@ export class ProcessTypesService {
 
         console.log('ProcessType created:', processType);
 
+        // Criar versão inicial
+        const version = await tx.processTypeVersion.create({
+          data: {
+            processTypeId: processType.id,
+            version: 1,
+            versionLabel: 'v1.0',
+            description: processTypeData.description,
+            isActive: true,
+            isDraft: false,
+            publishedAt: new Date(),
+          },
+        });
+
         if (steps && steps.length > 0) {
           for (let i = 0; i < steps.length; i++) {
             const step = steps[i];
             
-            let processedConditions = step.conditions;
+            let processedConditions: any = step.conditions;
             if (step.type === 'INPUT' && step.conditions && typeof step.conditions === 'object') {
-              processedConditions = JSON.stringify(step.conditions);
+              processedConditions = step.conditions;
             } else if (step.conditions && typeof step.conditions === 'object') {
-              processedConditions = JSON.stringify(step.conditions);
+              processedConditions = step.conditions;
             }
 
-            await tx.step.create({
+            const stepVersion = await tx.stepVersion.create({
               data: {
-                ...step,
-                processTypeId: processType.id,
+                name: step.name,
+                description: step.description,
                 instructions: step.instructions?.trim() || undefined,
                 slaHours: step.slaHours || undefined,
+                type: step.type,
                 order: step.order || (i + 1),
-                actions: step.actions ? JSON.stringify(step.actions) : '[]',
-                conditions: processedConditions || undefined,
+                allowAttachment: step.allowAttachment || false,
+                requiresSignature: step.requiresSignature || false,
+                requireAttachment: step.requireAttachment || false,
+                minAttachments: step.minAttachments || undefined,
+                maxAttachments: step.maxAttachments || undefined,
                 allowedFileTypes: step.allowedFileTypes ? JSON.stringify(step.allowedFileTypes) : undefined,
+                conditions: processedConditions || undefined,
+                processTypeVersionId: version.id,
               },
             });
+
+            // Criar assignments
+            if (step.assignedToUserId) {
+              await tx.stepAssignment.create({
+                data: {
+                  stepVersionId: stepVersion.id,
+                  type: 'USER',
+                  userId: step.assignedToUserId,
+                  priority: 1,
+                  isActive: true,
+                },
+              });
+            }
+
+            if (step.assignedToSectorId) {
+              await tx.stepAssignment.create({
+                data: {
+                  stepVersionId: stepVersion.id,
+                  type: 'SECTOR',
+                  sectorId: step.assignedToSectorId,
+                  priority: 1,
+                  isActive: true,
+                },
+              });
+            }
           }
         }
 
         if (formFields && formFields.length > 0) {
           for (let i = 0; i < formFields.length; i++) {
             const field = formFields[i];
-            await tx.formField.create({
+            await tx.formFieldVersion.create({
               data: {
-                ...field,
-                processTypeId: processType.id,
+                name: field.name,
+                label: field.label,
+                type: field.type,
+                placeholder: field.placeholder || undefined,
+                required: field.required,
                 order: field.order || (i + 1),
                 options: field.options ? JSON.stringify(field.options) : undefined,
                 validations: field.validations ? JSON.stringify(field.validations) : undefined,
-                placeholder: field.placeholder || undefined,
                 defaultValue: field.defaultValue || undefined,
                 helpText: field.helpText || undefined,
+                processTypeVersionId: version.id,
               },
             });
           }
@@ -102,14 +186,23 @@ export class ProcessTypesService {
         const fullProcessType = await tx.processType.findUnique({
           where: { id: processType.id },
           include: {
-            steps: { 
-              orderBy: { order: 'asc' },
+            versions: {
+              where: { isActive: true },
               include: {
-                assignedToUser: { select: { id: true, name: true, email: true } },
-                assignedToSector: { select: { id: true, name: true } },
+                steps: { 
+                  orderBy: { order: 'asc' },
+                  include: {
+                    assignments: {
+                      include: {
+                        user: { select: { id: true, name: true, email: true } },
+                        sector: { select: { id: true, name: true } },
+                      },
+                    },
+                  },
+                },
+                formFields: { orderBy: { order: 'asc' } },
               },
             },
-            formFields: { orderBy: { order: 'asc' } },
             company: {
               select: {
                 id: true,
@@ -123,7 +216,7 @@ export class ProcessTypesService {
           throw new NotFoundException('Erro ao recuperar tipo de processo recém-criado');
         }
 
-        return this.parseProcessTypeFields(fullProcessType);
+        return this.adaptProcessTypeResponse(fullProcessType);
       });
     } catch (error) {
       console.error('Error creating process type:', error);
@@ -144,34 +237,52 @@ export class ProcessTypesService {
         isActive: true 
       },
       include: {
-        steps: { 
-          orderBy: { order: 'asc' },
+        versions: {
+          where: { isActive: true },
           include: {
-            assignedToUser: { select: { id: true, name: true, email: true } },
-            assignedToSector: { select: { id: true, name: true } },
+            steps: { 
+              orderBy: { order: 'asc' },
+              include: {
+                assignments: {
+                  include: {
+                    user: { select: { id: true, name: true, email: true } },
+                    sector: { select: { id: true, name: true } },
+                  },
+                },
+              },
+            },
+            formFields: { orderBy: { order: 'asc' } },
+            instances: true,
           },
         },
-        formFields: { orderBy: { order: 'asc' } },
-        _count: { select: { instances: true } },
       },
       orderBy: { name: 'asc' },
     });
 
-    return processTypes.map(pt => this.parseProcessTypeFields(pt));
+    return processTypes.map(pt => this.adaptProcessTypeResponse(pt));
   }
 
   async findOne(id: string): Promise<ProcessType> {
     const processType = await this.prisma.processType.findUnique({
       where: { id },
       include: {
-        steps: {
-          orderBy: { order: 'asc' },
+        versions: {
+          where: { isActive: true },
           include: {
-            assignedToUser: { select: { id: true, name: true, email: true } },
-            assignedToSector: { select: { id: true, name: true } },
+            steps: {
+              orderBy: { order: 'asc' },
+              include: {
+                assignments: {
+                  include: {
+                    user: { select: { id: true, name: true, email: true } },
+                    sector: { select: { id: true, name: true } },
+                  },
+                },
+              },
+            },
+            formFields: { orderBy: { order: 'asc' } },
           },
         },
-        formFields: { orderBy: { order: 'asc' } },
         company: true,
       },
     });
@@ -180,7 +291,7 @@ export class ProcessTypesService {
       throw new NotFoundException('Tipo de processo não encontrado');
     }
 
-    return this.parseProcessTypeFields(processType);
+    return this.adaptProcessTypeResponse(processType);
   }
 
   async update(id: string, dto: UpdateProcessTypeDto): Promise<ProcessType> {
@@ -196,14 +307,23 @@ export class ProcessTypesService {
           description: safeDto.description || undefined,
         },
         include: {
-          steps: { 
-            orderBy: { order: 'asc' },
+          versions: {
+            where: { isActive: true },
             include: {
-              assignedToUser: { select: { id: true, name: true, email: true } },
-              assignedToSector: { select: { id: true, name: true } },
+              steps: { 
+                orderBy: { order: 'asc' },
+                include: {
+                  assignments: {
+                    include: {
+                      user: { select: { id: true, name: true, email: true } },
+                      sector: { select: { id: true, name: true } },
+                    },
+                  },
+                },
+              },
+              formFields: { orderBy: { order: 'asc' } },
             },
           },
-          formFields: { orderBy: { order: 'asc' } },
           company: {
             select: {
               id: true,
@@ -213,35 +333,49 @@ export class ProcessTypesService {
         },
       });
 
-      return this.parseProcessTypeFields(updated);
+      return this.adaptProcessTypeResponse(updated);
     } catch (error) {
       console.error('Error updating process type:', error);
       throw new BadRequestException('Erro ao atualizar tipo de processo: ' + error.message);
     }
   }
 
+  async remove(id: string): Promise<void> {
+    const processType = await this.findOne(id);
+    
+    try {
+      await this.prisma.processType.update({
+        where: { id },
+        data: { isActive: false },
+      });
+    } catch (error) {
+      console.error('Error removing process type:', error);
+      throw new BadRequestException('Erro ao remover tipo de processo: ' + error.message);
+    }
+  }
+
   async addFormField(processTypeId: string, dto: CreateFormFieldDto): Promise<FormField> {
     const processType = await this.findOne(processTypeId);
-
-    await this.prisma.formField.updateMany({
-      where: { processTypeId, order: { gte: dto.order } },
-      data: { order: { increment: 1 } },
-    });
+    const version = await this.getActiveVersion(processTypeId);
 
     try {
-      const created = await this.prisma.formField.create({
+      const created = await this.prisma.formFieldVersion.create({
         data: {
-          ...dto,
-          processTypeId,
+          name: dto.name,
+          label: dto.label,
+          type: dto.type,
+          placeholder: dto.placeholder || undefined,
+          required: dto.required,
+          order: dto.order,
           options: dto.options ? JSON.stringify(dto.options) : undefined,
           validations: dto.validations ? JSON.stringify(dto.validations) : undefined,
-          placeholder: dto.placeholder || undefined,
           defaultValue: dto.defaultValue || undefined,
           helpText: dto.helpText || undefined,
+          processTypeVersionId: version.id,
         },
       });
 
-      return this.parseFormFieldData(created);
+      return this.adaptFormFieldResponse(created);
     } catch (error) {
       console.error('Error adding form field:', error);
       throw new BadRequestException('Erro ao adicionar campo: ' + error.message);
@@ -249,66 +383,114 @@ export class ProcessTypesService {
   }
 
   async updateFormField(fieldId: string, dto: UpdateFormFieldDto): Promise<FormField> {
-    const field = await this.prisma.formField.findUnique({ where: { id: fieldId } });
+    const field = await this.prisma.formFieldVersion.findUnique({ where: { id: fieldId } });
     if (!field) {
       throw new NotFoundException('Campo não encontrado');
     }
 
     try {
-      const updated = await this.prisma.formField.update({
+      const updated = await this.prisma.formFieldVersion.update({
         where: { id: fieldId },
         data: {
-          ...dto,
+          name: dto.name,
+          label: dto.label,
+          type: dto.type,
+          placeholder: dto.placeholder || undefined,
+          required: dto.required,
           options: dto.options ? JSON.stringify(dto.options) : undefined,
           validations: dto.validations ? JSON.stringify(dto.validations) : undefined,
-          placeholder: dto.placeholder || undefined,
           defaultValue: dto.defaultValue || undefined,
           helpText: dto.helpText || undefined,
         },
       });
 
-      return this.parseFormFieldData(updated);
+      return this.adaptFormFieldResponse(updated);
     } catch (error) {
       console.error('Error updating form field:', error);
       throw new BadRequestException('Erro ao atualizar campo: ' + error.message);
     }
   }
 
-  async addStep(processTypeId: string, dto: CreateStepDto): Promise<Step> {
-    const processType = await this.findOne(processTypeId);
-    await this.validateSteps([dto], processType.companyId);
-
-    await this.prisma.step.updateMany({
-      where: { processTypeId, order: { gte: dto.order } },
-      data: { order: { increment: 1 } },
-    });
+  async removeFormField(fieldId: string): Promise<void> {
+    const field = await this.prisma.formFieldVersion.findUnique({ where: { id: fieldId } });
+    if (!field) {
+      throw new NotFoundException('Campo não encontrado');
+    }
 
     try {
-      let processedConditions = dto.conditions;
+      await this.prisma.formFieldVersion.delete({ where: { id: fieldId } });
+    } catch (error) {
+      console.error('Error removing form field:', error);
+      throw new BadRequestException('Erro ao remover campo: ' + error.message);
+    }
+  }
+
+  async addStep(processTypeId: string, dto: CreateStepDto): Promise<Step> {
+    const processType = await this.findOne(processTypeId);
+    const version = await this.getActiveVersion(processTypeId);
+    await this.validateSteps([dto], processType.companyId);
+
+    try {
+      let processedConditions: any = dto.conditions;
       if (dto.type === 'INPUT' && dto.conditions && typeof dto.conditions === 'object') {
-        processedConditions = JSON.stringify(dto.conditions);
+        processedConditions = dto.conditions;
       } else if (dto.conditions && typeof dto.conditions === 'object') {
-        processedConditions = JSON.stringify(dto.conditions);
+        processedConditions = dto.conditions;
       }
 
-      const created = await this.prisma.step.create({
+      const created = await this.prisma.stepVersion.create({
         data: {
-          ...dto,
-          processTypeId,
+          name: dto.name,
+          description: dto.description,
           instructions: dto.instructions?.trim() || undefined,
           slaHours: dto.slaHours || undefined,
-          actions: dto.actions ? JSON.stringify(dto.actions) : '[]',
-          conditions: processedConditions || undefined,
+          type: dto.type,
+          order: dto.order,
+          allowAttachment: dto.allowAttachment || false,
+          requiresSignature: dto.requiresSignature || false,
+          requireAttachment: dto.requireAttachment || false,
+          minAttachments: dto.minAttachments || undefined,
+          maxAttachments: dto.maxAttachments || undefined,
           allowedFileTypes: dto.allowedFileTypes ? JSON.stringify(dto.allowedFileTypes) : undefined,
-          description: dto.description || undefined,
+          conditions: processedConditions || undefined,
+          processTypeVersionId: version.id,
         },
         include: {
-          assignedToUser: { select: { id: true, name: true, email: true } },
-          assignedToSector: { select: { id: true, name: true } },
+          assignments: {
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+              sector: { select: { id: true, name: true } },
+            },
+          },
         },
       });
 
-      return this.parseStepData(created);
+      // Criar assignments
+      if (dto.assignedToUserId) {
+        await this.prisma.stepAssignment.create({
+          data: {
+            stepVersionId: created.id,
+            type: 'USER',
+            userId: dto.assignedToUserId,
+            priority: 1,
+            isActive: true,
+          },
+        });
+      }
+
+      if (dto.assignedToSectorId) {
+        await this.prisma.stepAssignment.create({
+          data: {
+            stepVersionId: created.id,
+            type: 'SECTOR',
+            sectorId: dto.assignedToSectorId,
+            priority: 1,
+            isActive: true,
+          },
+        });
+      }
+
+      return this.adaptStepResponse(created);
     } catch (error) {
       console.error('Error adding step:', error);
       throw new BadRequestException('Erro ao adicionar etapa: ' + error.message);
@@ -316,9 +498,9 @@ export class ProcessTypesService {
   }
 
   async updateStep(stepId: string, dto: Partial<CreateStepDto>): Promise<Step> {
-    const step = await this.prisma.step.findUnique({
+    const step = await this.prisma.stepVersion.findUnique({
       where: { id: stepId },
-      include: { processType: true },
+      include: { processTypeVersion: { include: { processType: true } } },
     });
 
     if (!step) {
@@ -326,253 +508,172 @@ export class ProcessTypesService {
     }
 
     if (dto.assignedToUserId || dto.assignedToSectorId) {
-      await this.validateSteps([dto as CreateStepDto], step.processType.companyId);
+      await this.validateSteps([dto as CreateStepDto], step.processTypeVersion.processType.companyId);
     }
 
     try {
-      let processedConditions = dto.conditions;
+      let processedConditions: any = dto.conditions;
       if (dto.type === 'INPUT' && dto.conditions && typeof dto.conditions === 'object') {
-        processedConditions = JSON.stringify(dto.conditions);
+        processedConditions = dto.conditions;
       } else if (dto.conditions && typeof dto.conditions === 'object') {
-        processedConditions = JSON.stringify(dto.conditions);
+        processedConditions = dto.conditions;
       }
 
-      const updated = await this.prisma.step.update({
+      const updated = await this.prisma.stepVersion.update({
         where: { id: stepId },
         data: {
-          ...dto,
-          actions: dto.actions ? JSON.stringify(dto.actions) : undefined,
+          name: dto.name,
+          description: dto.description,
           instructions: dto.instructions?.trim() || undefined,
           slaHours: dto.slaHours || undefined,
-          conditions: processedConditions !== undefined ? processedConditions : undefined,
+          type: dto.type,
+          order: dto.order,
+          allowAttachment: dto.allowAttachment,
+          requiresSignature: dto.requiresSignature,
+          requireAttachment: dto.requireAttachment,
+          minAttachments: dto.minAttachments,
+          maxAttachments: dto.maxAttachments,
           allowedFileTypes: dto.allowedFileTypes ? JSON.stringify(dto.allowedFileTypes) : undefined,
-          description: dto.description || undefined,
+          conditions: processedConditions !== undefined ? processedConditions : undefined,
         },
         include: {
-          assignedToUser: { select: { id: true, name: true, email: true } },
-          assignedToSector: { select: { id: true, name: true } },
+          assignments: {
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+              sector: { select: { id: true, name: true } },
+            },
+          },
         },
       });
 
-      return this.parseStepData(updated);
+      return this.adaptStepResponse(updated);
     } catch (error) {
       console.error('Error updating step:', error);
       throw new BadRequestException('Erro ao atualizar etapa: ' + error.message);
     }
   }
 
-  async removeFormField(fieldId: string): Promise<void> {
-    const field = await this.prisma.formField.findUnique({ where: { id: fieldId } });
-    if (!field) {
-      throw new NotFoundException('Campo não encontrado');
-    }
-
-    try {
-      await this.prisma.$transaction([
-        this.prisma.formField.delete({ where: { id: fieldId } }),
-        this.prisma.formField.updateMany({
-          where: {
-            processTypeId: field.processTypeId,
-            order: { gt: field.order },
-          },
-          data: { order: { decrement: 1 } },
-        }),
-      ]);
-    } catch (error) {
-      console.error('Error removing form field:', error);
-      throw new BadRequestException('Erro ao remover campo: ' + error.message);
-    }
-  }
-
-  async createNewVersion(processTypeId: string, changes: any) {
-  const processType = await this.prisma.processType.findUnique({
-    where: { id: processTypeId },
-    include: { 
-      versions: { 
-        orderBy: { version: 'desc' }, 
-        take: 1 
-      }
-    }
-  });
-
-  const nextVersion = (processType.versions[0]?.version || 0) + 1;
-  
-  return this.prisma.processTypeVersion.create({
-    data: {
-      processTypeId,
-      version: nextVersion,
-      versionLabel: `v${nextVersion}.0`,
-      ...changes,
-      steps: {
-        create: changes.steps.map((step, index) => ({
-          ...step,
-          assignments: {
-            create: this.buildStepAssignments(step)
-          }
-        }))
-      }
-    }
-  });
-}
-
-async resolveStepAssignments(
-  stepVersionId: string, 
-  processInstance: ProcessInstance
-): Promise<string[]> {
-  const assignments = await this.prisma.stepAssignment.findMany({
-    where: { stepVersionId, isActive: true },
-    orderBy: { priority: 'asc' }
-  });
-
-  const resolvedUserIds: string[] = [];
-
-  for (const assignment of assignments) {
-    switch (assignment.type) {
-      case 'USER':
-        if (assignment.userId) {
-          resolvedUserIds.push(assignment.userId);
-        }
-        break;
-        
-      case 'ROLE':
-        const roleUserIds = await this.resolveDynamicRole(
-          assignment.dynamicRole, 
-          processInstance
-        );
-        resolvedUserIds.push(...roleUserIds);
-        break;
-        
-      case 'SECTOR':
-        const sectorUserIds = await this.getUsersBySector(assignment.sectorId);
-        resolvedUserIds.push(...sectorUserIds);
-        break;
-    }
-  }
-
-  return [...new Set(resolvedUserIds)]; // Remove duplicados
-}
-
-private async resolveDynamicRole(
-  role: DynamicRole, 
-  processInstance: ProcessInstance
-): Promise<string[]> {
-  switch (role) {
-    case 'PROCESS_CREATOR':
-      return [processInstance.createdById];
-      
-    case 'SECTOR_MANAGER':
-      // Buscar gerente do setor do criador
-      const creatorCompany = await this.prisma.userCompany.findFirst({
-        where: { 
-          userId: processInstance.createdById,
-          companyId: processInstance.companyId 
-        },
-        include: { sector: true }
-      });
-      
-      if (creatorCompany?.sectorId) {
-        return this.getManagersBySector(creatorCompany.sectorId);
-      }
-      break;
-      
-    case 'COMPANY_ADMIN':
-      return this.getCompanyAdmins(processInstance.companyId);
-  }
-  
-  return [];
-}
-
   async removeStep(stepId: string): Promise<void> {
-    const step = await this.prisma.step.findUnique({ where: { id: stepId } });
+    const step = await this.prisma.stepVersion.findUnique({ where: { id: stepId } });
     if (!step) {
       throw new NotFoundException('Etapa não encontrada');
     }
 
-    const executions = await this.prisma.stepExecution.count({ where: { stepId } });
+    const executions = await this.prisma.stepExecution.count({ where: { stepVersionId: stepId } });
     if (executions > 0) {
       throw new BadRequestException('Não é possível remover etapa com execuções');
     }
 
     try {
-      await this.prisma.$transaction([
-        this.prisma.step.delete({ where: { id: stepId } }),
-        this.prisma.step.updateMany({
-          where: { 
-            processTypeId: step.processTypeId, 
-            order: { gt: step.order } 
-          },
-          data: { order: { decrement: 1 } },
-        }),
-      ]);
+      await this.prisma.stepVersion.delete({ where: { id: stepId } });
     } catch (error) {
       console.error('Error removing step:', error);
       throw new BadRequestException('Erro ao remover etapa: ' + error.message);
     }
   }
 
-  private parseProcessTypeFields(processType: any): any {
+  // Métodos auxiliares para adaptação de dados
+  private adaptProcessTypeResponse(processType: any): any {
+    const activeVersion = processType.versions?.[0];
+    if (!activeVersion) return processType;
+
     return {
       ...processType,
-      steps: processType.steps?.map(step => this.parseStepData(step)) || [],
-      formFields: processType.formFields?.map(field => this.parseFormFieldData(field)) || [],
+      steps: activeVersion.steps?.map(step => this.adaptStepResponse(step)) || [],
+      formFields: activeVersion.formFields?.map(field => this.adaptFormFieldResponse(field)) || [],
+      _count: { instances: activeVersion.instances?.length || 0 },
     };
   }
 
-  private parseStepData(step: any): any {
-    const parsed = { ...step };
+  private adaptStepResponse(stepVersion: any): Step {
+    const userAssignment = stepVersion.assignments?.find(a => a.type === 'USER');
+    const sectorAssignment = stepVersion.assignments?.find(a => a.type === 'SECTOR');
 
+    let parsedConditions = stepVersion.conditions;
     try {
-      if (step.actions && typeof step.actions === 'string') {
-        parsed.actions = JSON.parse(step.actions);
+      if (stepVersion.conditions && typeof stepVersion.conditions === 'string') {
+        parsedConditions = JSON.parse(stepVersion.conditions);
       }
     } catch (e) {
-      console.warn('Error parsing step actions:', e);
-      parsed.actions = [];
+      parsedConditions = stepVersion.conditions;
     }
 
+    let parsedAllowedFileTypes = stepVersion.allowedFileTypes;
     try {
-      if (step.conditions && typeof step.conditions === 'string') {
-        parsed.conditions = JSON.parse(step.conditions);
+      if (stepVersion.allowedFileTypes && typeof stepVersion.allowedFileTypes === 'string') {
+        parsedAllowedFileTypes = JSON.parse(stepVersion.allowedFileTypes);
       }
     } catch (e) {
-      console.warn('Error parsing step conditions:', e);
-      parsed.conditions = {};
+      parsedAllowedFileTypes = stepVersion.allowedFileTypes;
     }
 
-    try {
-      if (step.allowedFileTypes && typeof step.allowedFileTypes === 'string') {
-        parsed.allowedFileTypes = JSON.parse(step.allowedFileTypes);
-      }
-    } catch (e) {
-      console.warn('Error parsing step allowedFileTypes:', e);
-      parsed.allowedFileTypes = [];
-    }
-
-    return parsed;
+    return {
+      id: stepVersion.id,
+      name: stepVersion.name,
+      description: stepVersion.description,
+      instructions: stepVersion.instructions,
+      slaHours: stepVersion.slaHours,
+      type: stepVersion.type,
+      order: stepVersion.order,
+      allowAttachment: stepVersion.allowAttachment,
+      requiresSignature: stepVersion.requiresSignature,
+      requireAttachment: stepVersion.requireAttachment,
+      minAttachments: stepVersion.minAttachments,
+      maxAttachments: stepVersion.maxAttachments,
+      allowedFileTypes: parsedAllowedFileTypes,
+      conditions: parsedConditions,
+      actions: [], // Será implementado conforme necessário
+      assignedToUserId: userAssignment?.userId || null,
+      assignedToSectorId: sectorAssignment?.sectorId || null,
+      assignedToUser: userAssignment?.user || null,
+      assignedToSector: sectorAssignment?.sector || null,
+    };
   }
 
-  private parseFormFieldData(field: any): any {
-    const parsed = { ...field };
-
+  private adaptFormFieldResponse(fieldVersion: any): FormField {
+    let parsedOptions = fieldVersion.options;
     try {
-      if (field.options && typeof field.options === 'string') {
-        parsed.options = JSON.parse(field.options);
+      if (fieldVersion.options && typeof fieldVersion.options === 'string') {
+        parsedOptions = JSON.parse(fieldVersion.options);
       }
     } catch (e) {
-      console.warn('Error parsing field options:', e);
-      parsed.options = [];
+      parsedOptions = fieldVersion.options;
     }
 
+    let parsedValidations = fieldVersion.validations;
     try {
-      if (field.validations && typeof field.validations === 'string') {
-        parsed.validations = JSON.parse(field.validations);
+      if (fieldVersion.validations && typeof fieldVersion.validations === 'string') {
+        parsedValidations = JSON.parse(fieldVersion.validations);
       }
     } catch (e) {
-      console.warn('Error parsing field validations:', e);
-      parsed.validations = {};
+      parsedValidations = fieldVersion.validations;
     }
 
-    return parsed;
+    return {
+      id: fieldVersion.id,
+      name: fieldVersion.name,
+      label: fieldVersion.label,
+      type: fieldVersion.type,
+      placeholder: fieldVersion.placeholder,
+      required: fieldVersion.required,
+      order: fieldVersion.order,
+      options: parsedOptions,
+      validations: parsedValidations,
+      defaultValue: fieldVersion.defaultValue,
+      helpText: fieldVersion.helpText,
+    };
+  }
+
+  private async getActiveVersion(processTypeId: string) {
+    const version = await this.prisma.processTypeVersion.findFirst({
+      where: { processTypeId, isActive: true },
+    });
+
+    if (!version) {
+      throw new NotFoundException('Versão ativa não encontrada');
+    }
+
+    return version;
   }
 
   private async validateSteps(steps: CreateStepDto[], companyId: string): Promise<void> {

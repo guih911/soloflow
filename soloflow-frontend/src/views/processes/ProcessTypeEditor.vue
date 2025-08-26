@@ -158,9 +158,9 @@
                       <v-icon size="16">mdi-account-check</v-icon>
                       Responsável: {{ getResponsibleName(step) }}
                     </div>
-                    <div v-if="step.slaDays || step.slaHours" class="mt-1">
+                    <div v-if="step.slaHours" class="mt-1">
                       <v-icon size="16">mdi-clock-outline</v-icon>
-                      SLA: {{ formatSlaText(step.slaDays || Math.ceil(step.slaHours / 24)) }}
+                      SLA: {{ formatSlaText(step.slaHours) }}
                     </div>
                     <div v-if="step.instructions" class="mt-1">
                       <v-icon size="16">mdi-text-box</v-icon>
@@ -283,8 +283,8 @@
                 label="Setor Responsável" clearable />
             </v-col>
             <v-col cols="12" md="6">
-              <v-text-field v-model.number="stepData.slaDays" label="SLA (Prazo em dias)" type="number" min="1"
-                max="365" hint="Tempo limite para conclusão da etapa" persistent-hint />
+              <v-text-field v-model.number="stepData.slaHours" label="SLA (Prazo em horas)" type="number" min="1"
+                max="8760" hint="Tempo limite para conclusão da etapa" persistent-hint />
             </v-col>
             <v-col cols="12" md="6">
               <v-switch v-model="stepData.allowAttachment" label="Permitir Anexos" color="primary" />
@@ -304,7 +304,7 @@
               <div class="d-flex align-center justify-space-between mb-4">
                 <h4 class="text-subtitle-1">
                   <v-icon start color="primary">mdi-form-textbox</v-icon>
-                  Formulário Específico da Etapa INPUT
+                  Campos Dinâmicos da Etapa INPUT
                 </h4>
                 <v-btn color="primary" size="small" @click="addField(true)" prepend-icon="mdi-plus">
                   Adicionar Campo
@@ -489,20 +489,12 @@ function getResponsibleName(step) {
   return 'Não definido'
 }
 
-function formatSlaText(days) {
-  if (!days) return ''
-  if (days === 1) return '1 dia'
-  if (days <= 7) return `${days} dias`
-  if (days <= 30) {
-    const weeks = Math.floor(days / 7)
-    const remainingDays = days % 7
-    let result = `${weeks} sem${weeks > 1 ? 's' : ''}`
-    if (remainingDays > 0) {
-      result += ` ${remainingDays}d`
-    }
-    return result
-  }
-  return `${days} dias`
+function formatSlaText(hours) {
+  if (!hours) return ''
+  if (hours <= 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  const remainingHours = hours % 24
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days} dia(s)`
 }
 
 function getInputFieldsCount(step) {
@@ -511,9 +503,9 @@ function getInputFieldsCount(step) {
       ? JSON.parse(step.conditions)
       : step.conditions
     const count = conditions?.fields?.length || 0
-    return count > 0 ? `${count} campo(s) específico(s)` : 'Nenhum campo específico'
+    return count > 0 ? `${count} campo(s) dinâmico(s)` : 'Nenhum campo dinâmico'
   } catch {
-    return '0 campos específicos'
+    return '0 campos dinâmicos'
   }
 }
 
@@ -615,7 +607,7 @@ function removeStep(index) {
 
 function resetStepData() {
   editingStepIndex.value = null
-  stepData.value = { name: '', description: '', instructions: '', slaDays: null, type: 'INPUT', allowAttachment: false, requiresSignature: false, requireAttachment: false, actions: [], assignedToUserId: null, assignedToSectorId: null }
+  stepData.value = { name: '', description: '', instructions: '', slaHours: null, type: 'INPUT', allowAttachment: false, requiresSignature: false, requireAttachment: false, actions: [], assignedToUserId: null, assignedToSectorId: null }
   inputConfig.value = { fields: [] }
 }
 
