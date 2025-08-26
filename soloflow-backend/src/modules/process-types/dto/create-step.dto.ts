@@ -3,19 +3,16 @@ import { Type } from 'class-transformer';
 import { StepType, FieldType } from '@prisma/client';
 
 export interface InputStepConditions {
-  // Campos dinâmicos para a etapa
+
   fields?: StepFieldDto[];
-  
-  // Lista de nomes de campos visíveis nesta etapa
+
   visibleFields?: string[];
-  
-  // Lista de nomes de campos obrigatórios nesta etapa
+ 
   requiredFields?: string[];
   
-  // Campos que serão armazenados apenas no metadata da execução
+ 
   stepLocalFields?: string[];
-  
-  // Configurações especiais para validações específicas de campos
+ 
   overrides?: Record<string, {
     regex?: string;
     min?: number;
@@ -23,7 +20,7 @@ export interface InputStepConditions {
     errorMessage?: string;
   }>;
   
-  // Campos para pré-preencher com dados de outras etapas
+
   prefillFrom?: Array<{
     stepOrder: number;
     fields: string[];
@@ -55,7 +52,7 @@ export class StepFieldDto {
 
   @IsOptional()
   @IsArray()
-  options?: any[]; // Para dropdown/checkbox
+  options?: any[]; 
 
   @IsOptional()
   @IsObject()
@@ -91,14 +88,20 @@ export class CreateStepDto {
 
   @IsOptional()
   @IsString()
-  @Length(0, 2000, { message: 'Instruções devem ter no máximo 2000 caracteres' })
+  @Length(0, 2000, { message: 'InstruÃ§Ãµes devem ter no mÃ¡ximo 2000 caracteres' })
   instructions?: string;
 
   @IsOptional()
   @IsInt()
-  @Min(1, { message: 'SLA deve ser no mínimo 1 hora' })
-  @Max(8760, { message: 'SLA deve ser no máximo 8760 horas (1 ano)' })
+  @Min(1, { message: 'SLA deve ser no mÃ­nimo 1 hora' })
+  @Max(8760, { message: 'SLA deve ser no mÃ¡ximo 8760 horas (1 ano)' })
   slaHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1, { message: 'SLA deve ser no mÃ­nimo 1 dia' })
+  @Max(365, { message: 'SLA deve ser no mÃ¡ximo 365 dias (1 ano)' })
+  slaDays?: number;
 
   @IsEnum(StepType)
   type: StepType;
@@ -147,38 +150,56 @@ export class CreateStepDto {
   @IsUUID()
   assignedToSectorId?: string;
 
+
+  @IsOptional()
+  @IsBoolean()
+  assignedToCreator?: boolean;
+
+  
+  @IsOptional()
+  @IsObject()
+  assignmentConditions?: Record<string, any>;
+
+  
   @IsOptional()
   @IsObject()
   conditions?: Record<string, any>;
 
-  
+  @IsOptional()
+  @IsObject()
+  flowConditions?: Record<string, any>;
+
+
+  @IsOptional()
+  @IsBoolean()
+  reuseData?: boolean;
+
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => StepFieldDto)
   inputFields?: StepFieldDto[];
 
-  // ✅ MANTIDO: typeConfig genérico para outros tipos
   @IsOptional()
   @IsObject()
   typeConfig?: {
-    // Para INPUT: campos específicos (AGORA USANDO inputFields)
+
     requiredFields?: string[];
     validation?: Record<string, any>;
     
-    // Para APPROVAL: critérios
+
     approvalCriteria?: string;
     requireJustification?: boolean;
     
-    // Para UPLOAD: configurações de arquivo
+
     maxFileSize?: number;
     acceptedFormats?: string[];
     
-    // Para SIGNATURE: configurações de assinatura
+
     signatureType?: 'digital' | 'electronic';
     requireCertificate?: boolean;
     
-    // Para REVIEW: checklist
+    
     reviewChecklist?: string[];
   };
 }
