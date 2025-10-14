@@ -22,10 +22,10 @@
             />
           </v-avatar>
           <div>
-            <!-- Nome do campo como título principal -->
+            <!-- Nome do campo como tÃ­tulo principal -->
             <h3 class="text-h5 font-weight-bold">{{ fieldInfo.label }}</h3>
             <div class="d-flex align-center text-body-2 text-medium-emphasis mt-1">
-              <span>{{ getFileTypeName(fileData.mimeType) }} • {{ formatFileSize(fileData.size) }}</span>
+              <span>{{ getFileTypeName(fileData.mimeType) }} â€¢ {{ formatFileSize(fileData.size) }}</span>
               <!-- Badge de origem -->
               <v-chip
                 size="x-small"
@@ -34,7 +34,7 @@
                 class="ml-2"
               >
                 <v-icon start size="10">mdi-form-textbox</v-icon>
-                Solicitação Inicial
+                SolicitaÃ§Ã£o Inicial
               </v-chip>
             </div>
           </div>
@@ -48,7 +48,7 @@
 
       <v-divider />
 
-      <!-- ✅ CONTENT WRAPPER COM FUNDO BRANCO FIXO -->
+      <!-- âœ… CONTENT WRAPPER COM FUNDO BRANCO FIXO -->
       <div class="field-modal-content-wrapper">
         <!-- Loading state -->
         <div v-if="loading" class="preview-state-overlay">
@@ -71,7 +71,7 @@
           </div>
         </div>
 
-        <!-- ✅ PREVIEW COM FUNDO BRANCO GARANTIDO -->
+        <!-- âœ… PREVIEW COM FUNDO BRANCO GARANTIDO -->
         <div v-else-if="previewUrl" class="preview-content-fixed">
           <!-- PDF Preview -->
           <iframe
@@ -95,15 +95,15 @@
           </div>
         </div>
 
-        <!-- Não suportado -->
+        <!-- NÃ£o suportado -->
         <div v-else class="preview-state-overlay">
           <div class="text-center py-12">
             <v-icon size="80" color="grey-lighten-2">
               {{ getFileIcon(fileData.mimeType) }}
             </v-icon>
-            <h3 class="text-h6 mt-4">Visualização não disponível</h3>
+            <h3 class="text-h6 mt-4">VisualizaÃ§Ã£o nÃ£o disponÃ­vel</h3>
             <p class="text-body-2 text-grey mt-2">
-              Este tipo de arquivo não pode ser visualizado diretamente.
+              Este tipo de arquivo nÃ£o pode ser visualizado diretamente.
             </p>
             <v-btn
               color="primary"
@@ -124,7 +124,7 @@
       <v-card-actions class="pa-6">
         <div class="d-flex align-center text-caption text-medium-emphasis">
           <v-icon size="16" class="mr-1">mdi-information</v-icon>
-          Arquivo do campo "{{ fieldInfo.label }}" da solicitação inicial
+          Arquivo do campo "{{ fieldInfo.label }}" da solicitaÃ§Ã£o inicial
         </div>
         
         <v-spacer />
@@ -200,14 +200,14 @@ const isPdf = computed(() => {
 // Watch para carregar preview quando modal abre
 watch(() => props.modelValue, (newVal) => {
   if (newVal && props.fileData?.attachmentId && canPreview.value) {
-    console.log('🔍 FieldFileModal: Loading preview for field file')
+    console.log('ðŸ” FieldFileModal: Loading preview for field file')
     loadPreview()
   } else {
     cleanup()
   }
 })
 
-// Método de carregamento usando blob
+// MÃ©todo de carregamento usando blob
 async function loadPreview() {
   if (!props.fileData?.attachmentId || !canPreview.value) return
   
@@ -215,18 +215,18 @@ async function loadPreview() {
   error.value = ''
   
   try {
-    console.log('🔍 Loading FIELD file preview:', {
+    console.log('ðŸ” Loading FIELD file preview:', {
       fieldLabel: props.fieldInfo.label,
       attachmentId: props.fileData.attachmentId,
       mimeType: props.fileData.mimeType
     })
     
-    // Usar método blob para evitar problemas de autenticação
+    // Usar mÃ©todo blob para evitar problemas de autenticaÃ§Ã£o
     const response = await api.get(`/processes/attachment/${props.fileData.attachmentId}/view`, {
       responseType: 'blob'
     })
     
-    console.log('✅ Field file blob loaded successfully')
+    console.log('âœ… Field file blob loaded successfully')
     
     // Limpar URL anterior se existir
     cleanup()
@@ -238,11 +238,11 @@ async function loadPreview() {
     
     previewUrl.value = URL.createObjectURL(blob)
     
-    console.log('🎯 Field file preview URL created:', previewUrl.value)
+    console.log('ðŸŽ¯ Field file preview URL created:', previewUrl.value)
     
   } catch (err) {
-    console.error('❌ Error loading field file preview:', err)
-    error.value = 'Erro ao carregar visualização: ' + (err.response?.data?.message || err.message)
+    console.error('âŒ Error loading field file preview:', err)
+    error.value = 'Erro ao carregar visualizaÃ§Ã£o: ' + (err.response?.data?.message || err.message)
   } finally {
     loading.value = false
   }
@@ -251,13 +251,13 @@ async function loadPreview() {
 function onLoad() {
   loading.value = false
   error.value = ''
-  console.log('✅ Field file preview loaded successfully')
+  console.log('âœ… Field file preview loaded successfully')
 }
 
 function onError() {
   loading.value = false
-  error.value = 'Não foi possível carregar o arquivo'
-  console.error('❌ Field file preview load error')
+  error.value = 'NÃ£o foi possÃ­vel carregar o arquivo'
+  console.error('âŒ Field file preview load error')
 }
 
 async function openPreviewInNewTab() {
@@ -324,7 +324,7 @@ function cleanup() {
   loading.value = false
 }
 
-// Métodos auxiliares
+// MÃ©todos auxiliares
 function getFileExtension(filename) {
   if (!filename) return '.pdf'
   const parts = filename.split('.')

@@ -20,7 +20,7 @@
     <!-- Lista de Empresas -->
     <v-row>
       <v-col
-        v-for="company in companies"
+        v-for="company in paginatedCompanies"
         :key="company.id"
         cols="12"
         md="6"
@@ -112,6 +112,41 @@
         </v-hover>
       </v-col>
     </v-row>
+
+    <!-- ✨ Paginação -->
+    <div v-if="companies.length > 0" class="pagination-section mt-8">
+      <v-card elevation="0" class="pagination-card">
+        <v-card-text class="d-flex align-center justify-space-between flex-wrap ga-4 py-4">
+          <div class="pagination-info">
+            <span class="text-body-2 text-medium-emphasis">
+              Mostrando {{ paginationStart }} - {{ paginationEnd }} de {{ companies.length }} empresas
+            </span>
+          </div>
+
+          <div class="pagination-controls d-flex align-center ga-3">
+            <v-select
+              v-model="itemsPerPage"
+              :items="itemsPerPageOptions"
+              density="compact"
+              variant="outlined"
+              hide-details
+              class="items-per-page-select"
+              label="Por página"
+              style="max-width: 130px;"
+            />
+
+            <v-pagination
+              v-model="currentPage"
+              :length="totalPages"
+              :total-visible="5"
+              rounded="circle"
+              density="comfortable"
+              class="pagination-component"
+            />
+          </div>
+        </v-card-text>
+      </v-card>
+    </div>
 
     <!-- Estado vazio -->
     <v-card
@@ -231,7 +266,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCompanyStore } from '@/stores/company'
 import { formatCNPJ, formatPhone } from '@/utils/format'
@@ -246,6 +281,11 @@ const valid = ref(false)
 const saving = ref(false)
 const editingItem = ref(null)
 
+// ✨ Estado de paginação
+const currentPage = ref(1)
+const itemsPerPage = ref(12)
+const itemsPerPageOptions = [6, 12, 18, 24, 30]
+
 const form = ref(null)
 const formData = ref({
   name: '',
@@ -258,6 +298,31 @@ const formData = ref({
 // Computed
 const loading = computed(() => companyStore.loading)
 const companies = computed(() => companyStore.companies)
+
+// ✨ Computed de paginação
+const totalPages = computed(() => {
+  return Math.ceil(companies.value.length / itemsPerPage.value)
+})
+
+const paginationStart = computed(() => {
+  return companies.value.length === 0 ? 0 : (currentPage.value - 1) * itemsPerPage.value + 1
+})
+
+const paginationEnd = computed(() => {
+  const end = currentPage.value * itemsPerPage.value
+  return Math.min(end, companies.value.length)
+})
+
+const paginatedCompanies = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return companies.value.slice(start, end)
+})
+
+// ✨ Watcher para resetar página quando itens por página mudam
+watch(itemsPerPage, () => {
+  currentPage.value = 1
+})
 
 // Regras de validação
 const nameRules = [
@@ -341,3 +406,62 @@ onMounted(() => {
   companyStore.fetchCompanies()
 })
 </script>
+
+<style scoped>
+/* ✨ Paginação */
+.pagination-section {
+  margin-top: 32px;
+}
+
+.pagination-card {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: white;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+
+.pagination-info {
+  font-weight: 500;
+}
+
+.pagination-controls {
+  flex-wrap: wrap;
+}
+
+.items-per-page-select :deep(.v-field) {
+  border-radius: 12px;
+}
+
+.pagination-component :deep(.v-pagination__item) {
+  border-radius: 12px;
+  font-weight: 600;
+  min-width: 40px;
+  height: 40px;
+}
+
+.pagination-component :deep(.v-pagination__item--is-active) {
+  background: linear-gradient(135deg, #1976D2, #42A5F5);
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+}
+
+/* ✨ Responsividade */
+@media (max-width: 768px) {
+  .pagination-controls {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pagination-info {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* ✨ Tema Escuro */
+@media (prefers-color-scheme: dark) {
+  .pagination-card {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+</style>

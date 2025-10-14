@@ -55,10 +55,31 @@
       {{ error }}
     </v-alert>
 
+    <!-- ✨ Filtro de Busca -->
+    <v-card v-if="!loading || processTypes.length > 0" class="filter-card mb-6" elevation="2">
+      <v-card-text class="py-4">
+        <v-row align="center">
+          <v-col cols="12">
+            <v-text-field
+              v-model="searchQuery"
+              label="Buscar tipo de processo por nome"
+              prepend-inner-icon="mdi-magnify"
+              clearable
+              variant="outlined"
+              density="comfortable"
+              hide-details
+              class="search-field"
+              placeholder="Digite o nome do tipo de processo..."
+            />
+          </v-col>
+        </v-row>
+      </v-card-text>
+    </v-card>
+
     <!-- Lista de Tipos de Processo -->
     <v-row v-if="!loading || processTypes.length > 0">
       <v-col
-        v-for="processType in processTypesWithInfo"
+        v-for="processType in paginatedProcessTypes"
         :key="processType.id"
         cols="12"
         md="6"
@@ -245,6 +266,41 @@
       </v-col>
     </v-row>
 
+    <!-- ✨ Paginação -->
+    <div v-if="filteredProcessTypes.length > 0" class="pagination-section mt-8">
+      <v-card elevation="0" class="pagination-card">
+        <v-card-text class="d-flex align-center justify-space-between flex-wrap ga-4 py-4">
+          <div class="pagination-info">
+            <span class="text-body-2 text-medium-emphasis">
+              Mostrando {{ paginationStart }} - {{ paginationEnd }} de {{ filteredProcessTypes.length }} tipos de processo
+            </span>
+          </div>
+
+          <div class="pagination-controls d-flex align-center ga-3">
+            <v-select
+              v-model="itemsPerPage"
+              :items="itemsPerPageOptions"
+              density="compact"
+              variant="outlined"
+              hide-details
+              class="items-per-page-select"
+              label="Por página"
+              style="max-width: 130px;"
+            />
+
+            <v-pagination
+              v-model="currentPage"
+              :length="totalPages"
+              :total-visible="5"
+              rounded="circle"
+              density="comfortable"
+              class="pagination-component"
+            />
+          </div>
+        </v-card-text>
+      </v-card>
+    </div>
+
     <!-- Estado vazio -->
     <v-card
       v-if="!loading && processTypes.length === 0 && !error"
@@ -266,6 +322,31 @@
       >
         <v-icon start>mdi-plus</v-icon>
         Criar Primeiro Tipo
+      </v-btn>
+    </v-card>
+
+    <!-- ✨ Estado vazio de busca -->
+    <v-card
+      v-if="!loading && processTypes.length > 0 && filteredProcessTypes.length === 0"
+      class="text-center py-12"
+      elevation="0"
+    >
+      <v-icon size="64" color="grey-lighten-1">
+        mdi-file-search
+      </v-icon>
+      <p class="text-h6 mt-4 text-grey">
+        Nenhum tipo de processo encontrado
+      </p>
+      <p class="text-body-2 text-grey mb-4">
+        Não encontramos tipos de processo que correspondam à busca "{{ searchQuery }}"
+      </p>
+      <v-btn
+        color="primary"
+        variant="outlined"
+        @click="clearSearch"
+      >
+        <v-icon start>mdi-filter-remove</v-icon>
+        Limpar Busca
       </v-btn>
     </v-card>
 
@@ -300,7 +381,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProcessTypeStore } from '@/stores/processTypes'
 import { useAuthStore } from '@/stores/auth'
@@ -314,6 +395,12 @@ const refreshing = ref(false)
 const showSnackbar = ref(false)
 const snackbarMessage = ref('')
 const snackbarColor = ref('success')
+
+// ✨ Estado de busca e paginação
+const searchQuery = ref('')
+const currentPage = ref(1)
+const itemsPerPage = ref(12)
+const itemsPerPageOptions = [6, 12, 18, 24, 30]
 
 // Computed
 const loading = computed(() => processTypeStore.loading)
@@ -351,6 +438,47 @@ const processTypesWithInfo = computed(() => {
   })
 })
 
+// ✨ Computed para filtrar por busca
+const filteredProcessTypes = computed(() => {
+  let result = processTypesWithInfo.value
+
+  // Filtro por busca de nome
+  if (searchQuery.value) {
+    const search = searchQuery.value.toLowerCase().trim()
+    result = result.filter(pt => 
+      pt.name.toLowerCase().includes(search) ||
+      pt.description?.toLowerCase().includes(search)
+    )
+  }
+
+  return result
+})
+
+// ✨ Computed de paginação
+const totalPages = computed(() => {
+  return Math.ceil(filteredProcessTypes.value.length / itemsPerPage.value)
+})
+
+const paginationStart = computed(() => {
+  return filteredProcessTypes.value.length === 0 ? 0 : (currentPage.value - 1) * itemsPerPage.value + 1
+})
+
+const paginationEnd = computed(() => {
+  const end = currentPage.value * itemsPerPage.value
+  return Math.min(end, filteredProcessTypes.value.length)
+})
+
+const paginatedProcessTypes = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return filteredProcessTypes.value.slice(start, end)
+})
+
+// ✨ Watchers para resetar página quando filtros mudam
+watch([searchQuery, itemsPerPage], () => {
+  currentPage.value = 1
+})
+
 // Métodos auxiliares
 function getStepTypeColor(type) {
   const colors = {
@@ -367,6 +495,12 @@ function showMessage(message, color = 'success') {
   snackbarMessage.value = message
   snackbarColor.value = color
   showSnackbar.value = true
+}
+
+// ✨ Método para limpar busca
+function clearSearch() {
+  searchQuery.value = ''
+  currentPage.value = 1
 }
 
 // Métodos principais
@@ -488,5 +622,81 @@ onMounted(async () => {
 
 .position-absolute {
   position: absolute;
+}
+
+/* ✨ Filter Card */
+.filter-card {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(10px);
+}
+
+.search-field :deep(.v-field) {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+}
+
+/* ✨ Paginação */
+.pagination-section {
+  margin-top: 32px;
+}
+
+.pagination-card {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: white;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+
+.pagination-info {
+  font-weight: 500;
+}
+
+.pagination-controls {
+  flex-wrap: wrap;
+}
+
+.items-per-page-select :deep(.v-field) {
+  border-radius: 12px;
+}
+
+.pagination-component :deep(.v-pagination__item) {
+  border-radius: 12px;
+  font-weight: 600;
+  min-width: 40px;
+  height: 40px;
+}
+
+.pagination-component :deep(.v-pagination__item--is-active) {
+  background: linear-gradient(135deg, #1976D2, #42A5F5);
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+}
+
+/* ✨ Responsividade */
+@media (max-width: 768px) {
+  .pagination-controls {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pagination-info {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* ✨ Tema Escuro */
+@media (prefers-color-scheme: dark) {
+  .filter-card,
+  .pagination-card {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .search-field :deep(.v-field) {
+    background: rgba(255, 255, 255, 0.05);
+  }
 }
 </style>

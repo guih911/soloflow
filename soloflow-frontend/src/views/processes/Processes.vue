@@ -37,7 +37,7 @@
     <!-- ✨ Grid de Cards Profissionais -->
     <div v-if="!loading" class="process-grid">
       <div class="cards-container">
-        <div v-for="processType in filteredProcessTypes" :key="processType.id" class="card-wrapper">
+        <div v-for="processType in paginatedProcessTypes" :key="processType.id" class="card-wrapper">
           <v-hover v-slot="{ isHovering, props }">
             <v-card 
               v-bind="props" 
@@ -50,10 +50,6 @@
               }" 
               @click="startProcessCreation(processType)"
             >
-
-           
-               
-
               <!-- ✨ Header do Card Redesenhado -->
               <div class="card-header">
                 <div class="header-content-wrapper">
@@ -87,9 +83,6 @@
                     Nenhuma descrição disponível para este tipo de processo.
                   </p>
                 </div>
-
-                <!-- ✨ Sem Métricas de Performance -->
-                <!-- Removido: métricas desnecessárias -->
               </div>
 
               <!-- ✨ Footer com Ação Principal -->
@@ -113,6 +106,41 @@
             </v-card>
           </v-hover>
         </div>
+      </div>
+
+      <!-- ✨ Paginação -->
+      <div v-if="filteredProcessTypes.length > 0" class="pagination-section mt-8">
+        <v-card elevation="0" class="pagination-card">
+          <v-card-text class="d-flex align-center justify-space-between flex-wrap ga-4 py-4">
+            <div class="pagination-info">
+              <span class="text-body-2 text-medium-emphasis">
+                Mostrando {{ paginationStart }} - {{ paginationEnd }} de {{ filteredProcessTypes.length }} processos
+              </span>
+            </div>
+
+            <div class="pagination-controls d-flex align-center ga-3">
+              <v-select
+                v-model="itemsPerPage"
+                :items="itemsPerPageOptions"
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="items-per-page-select"
+                label="Por página"
+                style="max-width: 130px;"
+              />
+
+              <v-pagination
+                v-model="currentPage"
+                :length="totalPages"
+                :total-visible="5"
+                rounded="circle"
+                density="comfortable"
+                class="pagination-component"
+              />
+            </div>
+          </v-card-text>
+        </v-card>
       </div>
     </div>
 
@@ -169,7 +197,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useProcessTypeStore } from '@/stores/processTypes'
@@ -181,6 +209,11 @@ const processTypeStore = useProcessTypeStore()
 // ✨ Estado Reativo
 const search = ref('')
 const refreshing = ref(false)
+
+// ✨ Estado de Paginação
+const currentPage = ref(1)
+const itemsPerPage = ref(12)
+const itemsPerPageOptions = [8, 12, 16, 24, 32]
 
 // ✨ Computed Properties
 const loading = computed(() => processTypeStore.loading)
@@ -218,6 +251,31 @@ const filteredProcessTypes = computed(() => {
     
     return a.name.localeCompare(b.name)
   })
+})
+
+// ✨ Computed de Paginação
+const totalPages = computed(() => {
+  return Math.ceil(filteredProcessTypes.value.length / itemsPerPage.value)
+})
+
+const paginationStart = computed(() => {
+  return filteredProcessTypes.value.length === 0 ? 0 : (currentPage.value - 1) * itemsPerPage.value + 1
+})
+
+const paginationEnd = computed(() => {
+  const end = currentPage.value * itemsPerPage.value
+  return Math.min(end, filteredProcessTypes.value.length)
+})
+
+const paginatedProcessTypes = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return filteredProcessTypes.value.slice(start, end)
+})
+
+// ✨ Watchers para resetar página quando filtros mudam
+watch([search, itemsPerPage], () => {
+  currentPage.value = 1
 })
 
 // ✨ Métodos Auxiliares
@@ -263,6 +321,7 @@ function startProcessCreation(processType) {
 
 function clearFilters() {
   search.value = ''
+  currentPage.value = 1
 }
 
 function goToProcessTypes() {
@@ -378,31 +437,6 @@ onMounted(async () => {
   border-color: rgba(0, 0, 0, 0.08) !important;
 }
 
-
-
-/* ✨ Status Badges */
-.status-badges {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 10;
-  display: flex;
-  gap: 6px;
-}
-
-.featured-badge {
-  border-color: rgba(0, 0, 0, 0.23) !important;
-  color: rgba(0, 0, 0, 0.6) !important;
-  background: transparent !important;
-  font-weight: 500;
-}
-
-.status-badge {
-  background: #F44336 !important;
-  color: white !important;
-  font-weight: 600;
-}
-
 /* ✨ Card Header */
 .card-header {
   padding: 24px 24px 20px;
@@ -461,10 +495,6 @@ onMounted(async () => {
   color: rgba(0, 0, 0, 0.6) !important;
 }
 
-.meta-divider {
-  color: rgba(0, 0, 0, 0.3) !important;
-}
-
 /* ✨ Card Body */
 .card-body {
   padding: 20px 24px;
@@ -489,40 +519,6 @@ onMounted(async () => {
   font-size: 0.95rem;
   font-style: italic;
   margin: 0;
-  display: block;
-}
-
-/* ✨ Process Metrics */
-.process-metrics {
-  background: rgba(25, 118, 210, 0.03);
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid rgba(25, 118, 210, 0.08);
-}
-
-.metric-row {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-}
-
-.metric-item {
-  text-align: center;
-}
-
-.metric-value {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: rgba(0, 0, 0, 0.87) !important;
-  line-height: 1.2;
-  display: block;
-}
-
-.metric-label {
-  font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.6) !important;
-  margin-top: 2px;
-  line-height: 1.2;
   display: block;
 }
 
@@ -553,6 +549,44 @@ onMounted(async () => {
   transform: none !important;
 }
 
+/* ✨ Paginação */
+.pagination-section {
+  margin-top: 32px;
+}
+
+.pagination-card {
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.pagination-info {
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.pagination-controls {
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.items-per-page-select :deep(.v-field) {
+  border-radius: 4px;
+}
+
+.pagination-component :deep(.v-pagination__item) {
+  border-radius: 4px;
+  font-weight: 500;
+  min-width: 36px;
+  height: 36px;
+}
+
+.pagination-component :deep(.v-pagination__item--is-active) {
+  background: #1976D2;
+  color: #fff;
+  box-shadow: none;
+}
 /* ✨ Empty State */
 .empty-state {
   border-radius: 24px;
@@ -628,8 +662,14 @@ onMounted(async () => {
     font-size: 1.1rem;
   }
 
-  .metric-row {
-    gap: 8px;
+  .pagination-controls {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pagination-info {
+    width: 100%;
+    text-align: center;
   }
 }
 
@@ -654,7 +694,8 @@ onMounted(async () => {
 
 /* ✨ Tema Escuro */
 @media (prefers-color-scheme: dark) {
-  .filter-card {
+  .filter-card,
+  .pagination-card {
     border-color: rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.05);
   }
@@ -680,15 +721,7 @@ onMounted(async () => {
     color: rgba(255, 255, 255, 0.5);
   }
 
-  .metric-value {
-    color: rgba(255, 255, 255, 0.9);
-  }
-
   .process-meta {
-    color: rgba(255, 255, 255, 0.6);
-  }
-
-  .metric-label {
     color: rgba(255, 255, 255, 0.6);
   }
 
@@ -698,12 +731,11 @@ onMounted(async () => {
   }
 }
 
-/* ✨ Micro-interações */
 .professional-card {
   will-change: transform, box-shadow;
 }
 
-/* ✨ Estados de foco para acessibilidade */
+
 .professional-card:focus-visible {
   outline: 2px solid #1976D2;
   outline-offset: 2px;

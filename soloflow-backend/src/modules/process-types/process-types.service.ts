@@ -12,6 +12,12 @@ import { CreateFormFieldDto } from './dto/create-form-field.dto';
 import { UpdateFormFieldDto } from './dto/update-form-field.dto';
 import { ProcessType } from '@prisma/client';
 
+// Interface estendida para update com versionamento
+interface UpdateProcessTypeWithVersioningDto extends UpdateProcessTypeDto {
+  steps?: CreateStepDto[];
+  formFields?: CreateFormFieldDto[];
+}
+
 // Interfaces para compatibilidade com o código existente
 interface Step {
   id: string;
@@ -19,7 +25,7 @@ interface Step {
   description?: string | null;
   instructions?: string | null;
   slaHours?: number | null;
-  slaDays?: number | null; // Novo campo
+  slaDays?: number | null;
   type: any;
   order: number;
   allowAttachment: boolean;
@@ -34,10 +40,10 @@ interface Step {
   assignedToSectorId?: string | null;
   assignedToUser?: any;
   assignedToSector?: any;
-  assignedToCreator: boolean; // Novo campo
-  assignmentConditions?: any; // Novo campo
-  flowConditions?: any; // Novo campo
-  reuseData?: any; // Novo campo
+  assignedToCreator: boolean;
+  assignmentConditions?: any;
+  flowConditions?: any;
+  reuseData?: any;
 }
 
 interface FormField {
@@ -107,93 +113,92 @@ export class ProcessTypesService {
             isActive: true,
             isDraft: false,
             publishedAt: new Date(),
+            changelog: 'Versão inicial criada'
           },
         });
 
         if (steps && steps.length > 0) {
-            // INÍCIO DA SEÇÃO ATUALIZADA
-            for (let i = 0; i < steps.length; i++) {
-                const step = steps[i];
-              
-                // Converter dias para horas para compatibilidade
-                const slaHours = step.slaDays ? step.slaDays * 24 : step.slaHours;
-              
-                let processedConditions: any = step.conditions;
-                if (step.type === 'INPUT' && step.conditions && typeof step.conditions === 'object') {
-                  processedConditions = step.conditions;
-                } else if (step.conditions && typeof step.conditions === 'object') {
-                  processedConditions = step.conditions;
-                }
-              
-                const stepVersion = await tx.stepVersion.create({
+          for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+          
+            // Converter dias para horas para compatibilidade
+            const slaHours = step.slaDays ? step.slaDays * 24 : step.slaHours;
+          
+            let processedConditions: any = step.conditions;
+            if (step.type === 'INPUT' && step.conditions && typeof step.conditions === 'object') {
+              processedConditions = step.conditions;
+            } else if (step.conditions && typeof step.conditions === 'object') {
+              processedConditions = step.conditions;
+            }
+          
+            const stepVersion = await tx.stepVersion.create({
+              data: {
+                name: step.name,
+                description: step.description,
+                instructions: step.instructions?.trim() || undefined,
+                slaHours: slaHours || undefined,
+                slaDays: step.slaDays || undefined,
+                type: step.type,
+                order: step.order || (i + 1),
+                allowAttachment: step.allowAttachment || false,
+                requiresSignature: step.requiresSignature || false,
+                requireAttachment: step.requireAttachment || false,
+                minAttachments: step.minAttachments || undefined,
+                maxAttachments: step.maxAttachments || undefined,
+                allowedFileTypes: step.allowedFileTypes ? JSON.stringify(step.allowedFileTypes) : undefined,
+                conditions: processedConditions || undefined,
+                actions: step.actions ? JSON.stringify(step.actions) : undefined,
+                
+                // Novos campos
+                assignedToCreator: step.assignedToCreator || false,
+                assignmentConditions: step.assignmentConditions || undefined,
+                flowConditions: step.flowConditions || undefined,
+                reuseData: step.reuseData || undefined,
+                
+                processTypeVersionId: version.id,
+              },
+            });
+          
+            // Criar assignments apenas se não for assignedToCreator
+            if (!step.assignedToCreator) {
+              if (step.assignedToUserId) {
+                await tx.stepAssignment.create({
                   data: {
-                    name: step.name,
-                    description: step.description,
-                    instructions: step.instructions?.trim() || undefined,
-                    slaHours: slaHours || undefined,
-                    slaDays: step.slaDays || undefined, // Salvar também em dias
-                    type: step.type,
-                    order: step.order || (i + 1),
-                    allowAttachment: step.allowAttachment || false,
-                    requiresSignature: step.requiresSignature || false,
-                    requireAttachment: step.requireAttachment || false,
-                    minAttachments: step.minAttachments || undefined,
-                    maxAttachments: step.maxAttachments || undefined,
-                    allowedFileTypes: step.allowedFileTypes ? JSON.stringify(step.allowedFileTypes) : undefined,
-                    conditions: processedConditions || undefined,
-                    actions: step.actions ? JSON.stringify(step.actions) : undefined,
-                    
-                    // Novos campos
-                    assignedToCreator: step.assignedToCreator || false,
-                    assignmentConditions: step.assignmentConditions || undefined,
-                    flowConditions: step.flowConditions || undefined,
-                    reuseData: step.reuseData || undefined,
-                    
-                    processTypeVersionId: version.id,
+                    stepVersionId: stepVersion.id,
+                    type: 'USER',
+                    userId: step.assignedToUserId,
+                    priority: 1,
+                    isActive: true,
                   },
                 });
+              }
+          
+              if (step.assignedToSectorId) {
+                await tx.stepAssignment.create({
+                  data: {
+                    stepVersionId: stepVersion.id,
+                    type: 'SECTOR',
+                    sectorId: step.assignedToSectorId,
+                    priority: 1,
+                    isActive: true,
+                  },
+                });
+              }
               
-                // Criar assignments apenas se não for assignedToCreator
-                if (!step.assignedToCreator) {
-                  if (step.assignedToUserId) {
-                    await tx.stepAssignment.create({
-                      data: {
-                        stepVersionId: stepVersion.id,
-                        type: 'USER',
-                        userId: step.assignedToUserId,
-                        priority: 1,
-                        isActive: true,
-                      },
-                    });
-                  }
-              
-                  if (step.assignedToSectorId) {
-                    await tx.stepAssignment.create({
-                      data: {
-                        stepVersionId: stepVersion.id,
-                        type: 'SECTOR',
-                        sectorId: step.assignedToSectorId,
-                        priority: 1,
-                        isActive: true,
-                      },
-                    });
-                  }
-                  
-                  // Se houver condições de atribuição
-                  if (step.assignmentConditions) {
-                    await tx.stepAssignment.create({
-                      data: {
-                        stepVersionId: stepVersion.id,
-                        type: 'CONDITIONAL',
-                        priority: 0, // Maior prioridade para condicionais
-                        isActive: true,
-                        conditionalConfig: step.assignmentConditions,
-                      },
-                    });
-                  }
-                }
+              // Se houver condições de atribuição
+              if (step.assignmentConditions) {
+                await tx.stepAssignment.create({
+                  data: {
+                    stepVersionId: stepVersion.id,
+                    type: 'CONDITIONAL',
+                    priority: 0,
+                    isActive: true,
+                    conditionalConfig: step.assignmentConditions,
+                  },
+                });
+              }
             }
-            // FIM DA SEÇÃO ATUALIZADA
+          }
         }
 
         if (formFields && formFields.length > 0) {
@@ -328,10 +333,278 @@ export class ProcessTypesService {
     return this.adaptProcessTypeResponse(processType);
   }
 
-  async update(id: string, dto: UpdateProcessTypeDto): Promise<ProcessType> {
-    const processType = await this.findOne(id);
+  // IMPLEMENTAÇÃO DO VERSIONAMENTO NO UPDATE
+  async update(id: string, dto: UpdateProcessTypeWithVersioningDto): Promise<ProcessType> {
+    console.log('Updating process type with versioning:', id, dto);
 
-    const { companyId, formFields, ...safeDto } = dto;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // 1. Encontrar o ProcessType principal
+        const processType = await tx.processType.findUnique({
+          where: { id },
+          include: {
+            versions: {
+              where: { isActive: true },
+              include: {
+                steps: { 
+                  orderBy: { order: 'asc' },
+                  include: {
+                    assignments: true
+                  }
+                },
+                formFields: { orderBy: { order: 'asc' } }
+              }
+            }
+          }
+        });
+
+        if (!processType) {
+          throw new NotFoundException('Tipo de processo não encontrado');
+        }
+
+        const currentVersion = processType.versions[0];
+        if (!currentVersion) {
+          throw new NotFoundException('Versão ativa não encontrada');
+        }
+
+        // 2. Desativar a versão atual
+        await tx.processTypeVersion.update({
+          where: { id: currentVersion.id },
+          data: { isActive: false }
+        });
+
+        // 3. Criar nova versão incrementada
+        const newVersionNumber = currentVersion.version + 1;
+        const newVersion = await tx.processTypeVersion.create({
+          data: {
+            processTypeId: id,
+            version: newVersionNumber,
+            versionLabel: `v${newVersionNumber}.0`,
+            description: dto.description || currentVersion.description,
+            isActive: true,
+            isDraft: false,
+            publishedAt: new Date(),
+            changelog: `Versão ${newVersionNumber} - Atualização automática`
+          }
+        });
+
+        // 4. Criar novos FormFieldVersions baseados no DTO ou manter os existentes
+        let formFieldsToCreate: any[] = [];
+        
+        if (dto.formFields && Array.isArray(dto.formFields)) {
+          // Se vêm fields novos do DTO, usar eles
+          formFieldsToCreate = dto.formFields;
+        } else if (currentVersion.formFields && currentVersion.formFields.length > 0) {
+          // Se não vêm fields novos, recriar os existentes na nova versão
+          formFieldsToCreate = currentVersion.formFields.map(existingField => ({
+            name: existingField.name,
+            label: existingField.label,
+            type: existingField.type,
+            placeholder: existingField.placeholder,
+            required: existingField.required,
+            order: existingField.order,
+            options: existingField.options,
+            validations: existingField.validations,
+            defaultValue: existingField.defaultValue,
+            helpText: existingField.helpText,
+          }));
+        }
+        
+        if (formFieldsToCreate && formFieldsToCreate.length > 0) {
+          for (let i = 0; i < formFieldsToCreate.length; i++) {
+            const field = formFieldsToCreate[i];
+            await tx.formFieldVersion.create({
+              data: {
+                name: field.name,
+                label: field.label,
+                type: field.type,
+                placeholder: field.placeholder || undefined,
+                required: field.required,
+                order: field.order || (i + 1),
+                options: field.options ? JSON.stringify(field.options) : undefined,
+                validations: field.validations ? JSON.stringify(field.validations) : undefined,
+                defaultValue: field.defaultValue || undefined,
+                helpText: field.helpText || undefined,
+                processTypeVersionId: newVersion.id,
+              },
+            });
+          }
+        }
+
+        // 5. Criar novos StepVersions baseados no DTO ou manter os existentes
+        let stepsToCreate: any[] = [];
+        
+        if (dto.steps && Array.isArray(dto.steps)) {
+          // Se vêm steps novos do DTO, usar eles
+          stepsToCreate = dto.steps;
+          // Validar steps antes de criar
+          await this.validateSteps(dto.steps, processType.companyId);
+        } else if (currentVersion.steps && currentVersion.steps.length > 0) {
+          // Se não vêm steps novos, recriar os existentes na nova versão
+          stepsToCreate = currentVersion.steps.map(existingStep => {
+            // Extrair assignments existentes para compatibilidade
+            const userAssignment = existingStep.assignments?.find(a => a.type === 'USER');
+            const sectorAssignment = existingStep.assignments?.find(a => a.type === 'SECTOR');
+            
+            return {
+              name: existingStep.name,
+              description: existingStep.description,
+              instructions: existingStep.instructions,
+              slaHours: existingStep.slaHours,
+              slaDays: existingStep.slaDays,
+              type: existingStep.type,
+              order: existingStep.order,
+              allowAttachment: existingStep.allowAttachment,
+              requiresSignature: existingStep.requiresSignature,
+              requireAttachment: existingStep.requireAttachment,
+              minAttachments: existingStep.minAttachments,
+              maxAttachments: existingStep.maxAttachments,
+              allowedFileTypes: existingStep.allowedFileTypes,
+              conditions: existingStep.conditions,
+              actions: existingStep.actions,
+              assignedToCreator: existingStep.assignedToCreator,
+              assignmentConditions: existingStep.assignmentConditions,
+              flowConditions: existingStep.flowConditions,
+              reuseData: existingStep.reuseData,
+              // Mapear assignments de volta para campos compatíveis
+              assignedToUserId: userAssignment?.userId || null,
+              assignedToSectorId: sectorAssignment?.sectorId || null,
+            };
+          });
+        }
+        
+        if (stepsToCreate && stepsToCreate.length > 0) {
+          for (let i = 0; i < stepsToCreate.length; i++) {
+            const step = stepsToCreate[i];
+            
+            // Converter dias para horas para compatibilidade
+            const slaHours = step.slaDays ? step.slaDays * 24 : step.slaHours;
+            
+            let processedConditions: any = step.conditions;
+            if (step.type === 'INPUT' && step.conditions && typeof step.conditions === 'object') {
+              processedConditions = step.conditions;
+            } else if (step.conditions && typeof step.conditions === 'object') {
+              processedConditions = step.conditions;
+            }
+            
+            const newStepVersion = await tx.stepVersion.create({
+              data: {
+                name: step.name,
+                description: step.description,
+                instructions: step.instructions?.trim() || undefined,
+                slaHours: slaHours || undefined,
+                slaDays: step.slaDays || undefined,
+                type: step.type,
+                order: step.order || (i + 1),
+                allowAttachment: step.allowAttachment || false,
+                requiresSignature: step.requiresSignature || false,
+                requireAttachment: step.requireAttachment || false,
+                minAttachments: step.minAttachments || undefined,
+                maxAttachments: step.maxAttachments || undefined,
+                allowedFileTypes: step.allowedFileTypes ? JSON.stringify(step.allowedFileTypes) : undefined,
+                conditions: processedConditions || undefined,
+                actions: step.actions ? JSON.stringify(step.actions) : undefined,
+                
+                // Novos campos
+                assignedToCreator: step.assignedToCreator || false,
+                assignmentConditions: step.assignmentConditions || undefined,
+                flowConditions: step.flowConditions || undefined,
+                reuseData: step.reuseData || undefined,
+                
+                processTypeVersionId: newVersion.id,
+              },
+            });
+
+            // Criar assignments para a nova versão da etapa
+            if (!step.assignedToCreator) {
+              if (step.assignedToUserId) {
+                await tx.stepAssignment.create({
+                  data: {
+                    stepVersionId: newStepVersion.id,
+                    type: 'USER',
+                    userId: step.assignedToUserId,
+                    priority: 1,
+                    isActive: true,
+                  },
+                });
+              }
+          
+              if (step.assignedToSectorId) {
+                await tx.stepAssignment.create({
+                  data: {
+                    stepVersionId: newStepVersion.id,
+                    type: 'SECTOR',
+                    sectorId: step.assignedToSectorId,
+                    priority: 1,
+                    isActive: true,
+                  },
+                });
+              }
+              
+              // Se houver condições de atribuição
+              if (step.assignmentConditions) {
+                await tx.stepAssignment.create({
+                  data: {
+                    stepVersionId: newStepVersion.id,
+                    type: 'CONDITIONAL',
+                    priority: 0,
+                    isActive: true,
+                    conditionalConfig: step.assignmentConditions,
+                  },
+                });
+              }
+            }
+          }
+        }
+
+        // 6. Atualizar o ProcessType principal com a nova versão
+        const updatedProcessType = await tx.processType.update({
+          where: { id },
+          data: {
+            name: dto.name || processType.name,
+            description: dto.description || processType.description,
+            updatedAt: new Date()
+          },
+          include: {
+            versions: {
+              where: { isActive: true },
+              include: {
+                steps: { 
+                  orderBy: { order: 'asc' },
+                  include: {
+                    assignments: {
+                      include: {
+                        user: { select: { id: true, name: true, email: true } },
+                        sector: { select: { id: true, name: true } },
+                      },
+                    },
+                  },
+                },
+                formFields: { orderBy: { order: 'asc' } },
+              },
+            },
+            company: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        });
+
+        console.log(`Process type updated. New version: ${newVersionNumber}`);
+        return this.adaptProcessTypeResponse(updatedProcessType);
+      });
+
+    } catch (error) {
+      console.error('Error updating process type with versioning:', error);
+      throw new BadRequestException('Erro ao atualizar tipo de processo: ' + error.message);
+    }
+  }
+
+  // Método para updates simples (sem versionamento completo)
+  async updateBasic(id: string, dto: UpdateProcessTypeDto): Promise<ProcessType> {
+    const { formFields, ...safeDto } = dto as any;
 
     try {
       const updated = await this.prisma.processType.update({
@@ -616,10 +889,11 @@ export class ProcessTypesService {
       steps: activeVersion.steps?.map(step => this.adaptStepResponse(step)) || [],
       formFields: activeVersion.formFields?.map(field => this.adaptFormFieldResponse(field)) || [],
       _count: { instances: activeVersion.instances?.length || 0 },
+      version: activeVersion.version,
+      versionLabel: activeVersion.versionLabel,
     };
   }
     
-  // INÍCIO DA SEÇÃO ATUALIZADA
   private adaptStepResponse(stepVersion: any): Step {
     const userAssignment = stepVersion.assignments?.find(a => a.type === 'USER');
     const sectorAssignment = stepVersion.assignments?.find(a => a.type === 'SECTOR');
@@ -658,7 +932,7 @@ export class ProcessTypesService {
       description: stepVersion.description,
       instructions: stepVersion.instructions,
       slaHours: stepVersion.slaHours,
-      slaDays: stepVersion.slaDays, // Incluir dias
+      slaDays: stepVersion.slaDays,
       type: stepVersion.type,
       order: stepVersion.order,
       allowAttachment: stepVersion.allowAttachment,
@@ -683,7 +957,6 @@ export class ProcessTypesService {
       assignedToSector: sectorAssignment?.sector || null,
     };
   }
-  // FIM DA SEÇÃO ATUALIZADA
 
   private adaptFormFieldResponse(fieldVersion: any): FormField {
     let parsedOptions = fieldVersion.options;
@@ -735,8 +1008,8 @@ export class ProcessTypesService {
     console.log('Validating steps for company:', companyId);
 
     for (const step of steps) {
-      if (!step.assignedToUserId && !step.assignedToSectorId) {
-        throw new BadRequestException(`Etapa "${step.name}" deve ter um responsável (usuário ou setor)`);
+      if (!step.assignedToUserId && !step.assignedToSectorId && !step.assignedToCreator && !step.assignmentConditions) {
+        throw new BadRequestException(`Etapa "${step.name}" deve ter um responsável (usuário, setor, criador ou condicional)`);
       }
 
       if (step.assignedToUserId && step.assignedToSectorId) {

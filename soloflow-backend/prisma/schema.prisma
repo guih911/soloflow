@@ -1,9 +1,3 @@
-// Schema Prisma Refatorado e Corrigido
-// Estrutura mantida:
-// 1. Versionamento completo (ProcessType -> ProcessTypeVersion -> StepVersion)
-// 2. Transições explícitas entre etapas (StepTransition)
-// 3. Atribuição flexível de etapas (StepAssignment)
-
 generator client {
   provider = "prisma-client-js"
 }

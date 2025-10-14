@@ -13,7 +13,7 @@
               <p class="text-h6 text-medium-emphasis">{{ process.code }} - {{ process.title }}</p>
             </div>
           </div>
-          <div class="d-flex flex-wrap gap-4 mt-3">
+          <div class="d-flex flex-wrap mt-3 chips-container">
             <v-chip size="small" :color="getStepTypeColor(stepExecution.step.type)" variant="tonal">
               <v-icon start size="16">{{ getStepTypeIcon(stepExecution.step.type) }}</v-icon>
               {{ getStepTypeText(stepExecution.step.type) }}
@@ -62,22 +62,8 @@
                 Prazo final: {{ slaStatus.deadline }}
               </div>
             </div>
-
-            <v-expansion-panels v-if="stepExecution.step.instructions" class="instructions-panel mb-6" variant="accordion">
-              <v-expansion-panel>
-                <v-expansion-panel-title>
-                  <div class="d-flex align-center">
-                    <v-icon class="mr-3" color="info">mdi-lightbulb</v-icon>
-                    <div class="font-weight-medium text-info">Instruções para Execução</div>
-                  </div>
-                </v-expansion-panel-title>
-                <v-expansion-panel-text>
-                  <div class="formatted-instructions" v-html="formatInstructions(stepExecution.step.instructions)" />
-                </v-expansion-panel-text>
-              </v-expansion-panel>
-            </v-expansion-panels>
             
-            <v-card v-if="reuseDataFields.length > 0" class="reuse-data-card mb-6" variant="outlined">
+            <v-card v-if="reuseDataFields.length > 0" class="reuse-data-card mb-6 border-none" variant="outlined">
               <v-card-title class="d-flex align-center">
                 <v-icon color="secondary" class="mr-2">mdi-refresh</v-icon>
                 Informações de Etapas Anteriores
@@ -105,13 +91,35 @@
                         >
                           <template v-if="field.type === 'field'">
                             <v-list-item-title>{{ field.fieldLabel }}</v-list-item-title>
-                            <v-list-item-subtitle>{{ field.value }}</v-list-item-subtitle>
+                            <v-list-item-subtitle>
+                              <template v-if="isFileField(field)">
+                                <v-chip 
+                                  size="small" 
+                                  color="primary" 
+                                  variant="outlined"
+                                  @click="viewFileField(field)"
+                                  class="mt-1"
+                                >
+                                  <v-icon start size="12">{{ getFileIcon(getFileTypeFromName(field.value)) }}</v-icon>
+                                  {{ field.value }}
+                                </v-chip>
+                              </template>
+                              <template v-else>
+                                {{ field.value }}
+                              </template>
+                            </v-list-item-subtitle>
                           </template>
                           <template v-else-if="field.type === 'attachments'">
                             <v-list-item-title>Anexos ({{ field.attachments.length }})</v-list-item-title>
                             <v-list-item-subtitle>
                               <div v-for="attachment in field.attachments" :key="attachment.id" class="mt-1">
-                                <v-chip size="x-small" @click="viewAttachment(attachment)">
+                                <v-chip 
+                                  size="x-small" 
+                                  color="primary" 
+                                  variant="outlined"
+                                  @click="viewAttachment(attachment)"
+                                  class="cursor-pointer"
+                                >
                                   <v-icon start size="12">{{ getFileIcon(attachment.mimeType) }}</v-icon>
                                   {{ attachment.originalName }}
                                 </v-chip>
@@ -126,7 +134,7 @@
               </v-card-text>
             </v-card>
 
-            <v-card v-if="approvalContextData" class="approval-context-card mb-6" variant="outlined">
+            <v-card v-if="approvalContextData" class="approval-context-card mb-6" >
               <v-card-title class="d-flex align-center">
                 <v-icon color="info" class="mr-2">mdi-information</v-icon>
                 Contexto da Etapa Anterior
@@ -166,7 +174,10 @@
                       v-for="attachment in approvalContextData.attachments"
                       :key="attachment.id"
                       size="small"
+                      color="primary"
+                      variant="outlined"
                       @click="viewAttachment(attachment)"
+                      class="cursor-pointer"
                     >
                       <v-icon start size="16">{{ getFileIcon(attachment.mimeType) }}</v-icon>
                       {{ attachment.originalName }}
@@ -175,6 +186,7 @@
                 </div>
               </v-card-text>
             </v-card>
+
             <v-form ref="form" v-model="valid" class="execution-form">
               <div v-if="stepExecution.step.type === 'INPUT'" class="form-section mb-2">
                 <div class="section-header mb-4">
@@ -183,7 +195,72 @@
                 </div>
                 <v-row v-if="stepFormFields.length > 0">
                   <v-col v-for="field in stepFormFields" :key="field.name" :cols="getFieldCols(field)">
-                    <component :is="getFieldComponent(field.type)" v-model="formData.metadata[field.name]" :label="getFieldLabel(field)" :placeholder="field.placeholder" :hint="field.helpText" :persistent-hint="!!field.helpText" :rules="getFieldRules(field)" :items="getFieldOptions(field)" :type="getFieldInputType(field.type)" variant="outlined" density="comfortable" />
+                    <!-- Campo especial para arquivo -->
+                    <template v-if="field.type === 'FILE'">
+                      <div class="file-field-container" style="position: relative;">
+                        <v-text-field
+                          :model-value="getFileFieldDisplayValue(field.name)"
+                          :label="getFieldLabel(field)"
+                          :placeholder="field.placeholder || 'Clique para selecionar arquivo(s)'"
+                          :hint="field.helpText"
+                          :persistent-hint="!!field.helpText"
+                          :rules="getFieldRules(field)"
+                          variant="outlined"
+                          density="comfortable"
+                          readonly
+                          @click="triggerFileInput(field.name)"
+                          class="file-input-field"
+                          style="cursor: pointer;"
+                        >
+                          <template v-slot:append-inner>
+                            <v-icon>mdi-paperclip</v-icon>
+                          </template>
+                        </v-text-field>
+                        
+                        <input 
+                          :ref="el => setFileInputRef(`fileInput_${field.name}`, el)"
+                          type="file" 
+                          style="display: none" 
+                          :multiple="(field.maxFiles || 1) > 1"
+                          @change="handleFieldFileSelect($event, field)"
+                          :accept="getFieldFileTypes(field)"
+                        />
+                        
+                        <!-- Chips dos arquivos selecionados abaixo do input -->
+                        <div v-if="getFieldFiles(field.name).length > 0" class="selected-files-chips mt-2">
+                          <v-chip
+                            v-for="(file, fileIndex) in getFieldFiles(field.name)"
+                            :key="fileIndex"
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                            closable
+                            @click:close="removeFieldFile(field.name, fileIndex)"
+                            class="mr-2 mb-1"
+                          >
+                            <v-icon start size="14">{{ getFileIcon(file.type) }}</v-icon>
+                            {{ file.name }}
+                          </v-chip>
+                        </div>
+                      </div>
+                    </template>
+                    
+                    <!-- Campos normais -->
+                    <template v-else>
+                      <component 
+                        :is="getFieldComponent(field.type)" 
+                        v-model="formData.metadata[field.name]" 
+                        :label="getFieldLabel(field)" 
+                        :placeholder="field.placeholder" 
+                        :hint="field.helpText" 
+                        :persistent-hint="!!field.helpText" 
+                        :rules="getFieldRules(field)" 
+                        :items="getFieldOptions(field)" 
+                        :type="getFieldInputType(field.type)" 
+                        variant="outlined" 
+                        density="comfortable" 
+                      />
+                    </template>
                   </v-col>
                 </v-row>
                 <div v-else class="text-center py-6 text-medium-emphasis">
@@ -231,15 +308,8 @@
                 </v-card>
               </div>
 
-              <div class="form-section mb-6">
-                <div class="section-header mb-4">
-                  <h3 class="text-h6 font-weight-bold d-flex align-center"><v-icon color="primary" class="mr-2">mdi-comment-edit</v-icon>Comentário<v-chip v-if="isCommentRequired" size="x-small" color="error" class="ml-2">Obrigatório</v-chip></h3>
-                  <p class="text-body-2 text-medium-emphasis">{{ getCommentHelpText() }}</p>
-                </div>
-                <v-textarea v-model="formData.comment" label="Seu comentário sobre esta etapa" :placeholder="getCommentPlaceholder()" rows="4" counter="1000" :rules="getCommentRules()" variant="outlined" class="comment-textarea" />
-              </div>
-
-              <div v-if="stepExecution.step.allowAttachment" class="form-section">
+              <!-- Seção de Anexos movida para cima da seção de Comentário -->
+              <div v-if="stepExecution.step.allowAttachment" class="form-section mb-6">
                 <div class="section-header mb-4">
                   <h3 class="text-h6 font-weight-bold d-flex align-center"><v-icon color="primary" class="mr-2">mdi-paperclip</v-icon>Anexos<v-chip v-if="stepExecution.step.requireAttachment" size="x-small" color="error" class="ml-2">Obrigatório</v-chip></h3>
                   <p class="text-body-2 text-medium-emphasis">{{ stepExecution.step.requireAttachment ? 'Esta etapa requer pelo menos um anexo' : 'Anexe documentos relacionados' }}</p>
@@ -272,6 +342,15 @@
                 </div>
                 <v-alert v-if="stepExecution.step.requiresSignature" type="warning" variant="tonal" class="mt-4" rounded="lg"><v-icon start>mdi-draw-pen</v-icon><div class="ml-2"><div class="font-weight-medium">Assinatura Digital Obrigatória</div><div class="mt-1">Todos os documentos PDF devem ser assinados digitalmente.</div></div></v-alert>
               </div>
+
+              <!-- Seção de Comentário -->
+              <div class="form-section mb-6">
+                <div class="section-header mb-4">
+                  <h3 class="text-h6 font-weight-bold d-flex align-center"><v-icon color="primary" class="mr-2">mdi-comment-edit</v-icon>Comentário<v-chip v-if="isCommentRequired" size="x-small" color="error" class="ml-2">Obrigatório</v-chip></h3>
+                  <p class="text-body-2 text-medium-emphasis">{{ getCommentHelpText() }}</p>
+                </div>
+                <v-textarea v-model="formData.comment" label="Seu comentário sobre esta etapa" :placeholder="getCommentPlaceholder()" rows="4" counter="1000" :rules="getCommentRules()" variant="outlined" class="comment-textarea" />
+              </div>
             </v-form>
           </div>
 
@@ -302,31 +381,32 @@
               <v-list-item v-if="slaStatus.hasDeadline"><template v-slot:prepend><v-icon color="primary">mdi-timer-outline</v-icon></template><v-list-item-title>Prazo</v-list-item-title><v-list-item-subtitle>{{ slaStatus.deadline }}</v-list-item-subtitle></v-list-item>
             </v-list>
           </v-card-text>
+          
+          <!-- Instruções movidas para dentro do card de detalhes -->
+          <template v-if="stepExecution.step.instructions">
+            <v-divider />
+            <v-expansion-panels variant="accordion" class="instructions-panel">
+              <v-expansion-panel>
+                <v-expansion-panel-title>
+                  <div class="d-flex align-center">
+                    <v-icon class="mr-3" color="info">mdi-lightbulb</v-icon>
+                    <div class="font-weight-medium text-info">Instruções para Execução</div>
+                  </div>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <div class="formatted-instructions" v-html="formatInstructions(stepExecution.step.instructions)" />
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+          </template>
         </v-card>
 
-        <v-card v-if="previousStepsData.length > 0" class="info-card mb-4" elevation="2">
-          <v-card-title class="d-flex align-center pa-4"><v-icon color="secondary" class="mr-2">mdi-history</v-icon>Informações Anteriores</v-card-title>
-          <v-divider />
-          <v-expansion-panels variant="accordion">
-            <v-expansion-panel v-for="stepData in previousStepsData" :key="stepData.id">
-              <v-expansion-panel-title>
-                <div>
-                  <div class="font-weight-bold">{{ stepData.stepName }}</div>
-                  <div class="text-caption text-medium-emphasis">Concluído por {{ stepData.userName }} em {{ formatDate(stepData.completedAt) }}</div>
-                </div>
-              </v-expansion-panel-title>
-              <v-expansion-panel-text class="previous-step-details">
-                <div v-if="Object.keys(stepData.data).length > 0">
-                  <div v-for="(value, key) in stepData.data" :key="key" class="detail-item">
-                    <div class="detail-key">{{ key }}</div>
-                    <div class="detail-value">{{ value }}</div>
-                  </div>
-                </div>
-                 <div v-else class="text-caption text-medium-emphasis">Nenhum dado específico informado nesta etapa.</div>
-              </v-expansion-panel-text>
-            </v-expansion-panel>
-          </v-expansion-panels>
-        </v-card>
+        <!-- Componente de informações de etapas anteriores -->
+        <PreviousStepsInfo 
+          v-if="previousStepsData.length > 0" 
+          :previous-steps-data="previousStepsData" 
+          class="mb-4"
+        />
 
         <ProcessHistory :history="process.stepExecutions" :process-form-fields="process.processType?.formFields || []" />
       </v-col>
@@ -347,6 +427,7 @@ import duration from 'dayjs/plugin/duration'
 import 'dayjs/locale/pt-br'
 
 import ProcessHistory from '@/components/ProcessHistory.vue'
+import PreviousStepsInfo from '@/components/PreviousStepsInfo.vue'
 import { VTextField, VTextarea, VSelect, VCheckbox, VSwitch } from 'vuetify/components'
 
 dayjs.extend(relativeTime)
@@ -361,6 +442,8 @@ const valid = ref(false)
 const saving = ref(false)
 const attachments = ref([])
 const uploadedAttachments = ref([])
+const fieldFiles = ref({}) // Arquivos específicos dos campos FILE
+const fileInputRefs = ref({}) // Referências dos inputs de arquivo
 const instructionsExpanded = ref(false)
 const form = ref(null)
 const fileInput = ref(null)
@@ -456,7 +539,6 @@ const previousStepsData = computed(() => {
     })
 })
 
-// INÍCIO DA SEÇÃO ADICIONADA
 const reuseDataFields = computed(() => {
   if (!stepExecution.value?.step.reuseData) return []
   
@@ -586,7 +668,6 @@ const approvalContextData = computed(() => {
   
   return contextData
 })
-// FIM DA SEÇÃO ADICIONADA
 
 const isCommentRequired = computed(() => {
   return stepExecution.value?.step.type === 'APPROVAL' && formData.value.action === 'reprovar'
@@ -630,10 +711,11 @@ function getFieldComponent(type) {
     DROPDOWN: VSelect, 
     CHECKBOX: VCheckbox, 
     CURRENCY: VTextField, 
-    FILE: VTextField
+    FILE: 'file-upload-field' // Componente especial para arquivo
   }
   return componentMap[type] || VTextField
 }
+
 function getFieldInputType(type) {
   const typeMap = {
     NUMBER: 'number',
@@ -643,6 +725,7 @@ function getFieldInputType(type) {
   }
   return typeMap[type] || 'text'
 }
+
 function getFieldCols(field) {
   switch (field.type) {
     case 'TEXTAREA':
@@ -653,10 +736,12 @@ function getFieldCols(field) {
       return { cols: 12, md: 6 }
   }
 }
+
 function getFieldLabel(field) {
   const label = field.label || field.name
   return field.required ? `${label} *` : label
 }
+
 function getFieldOptions(field) {
   if (!field.options) return []
   try {
@@ -669,6 +754,7 @@ function getFieldOptions(field) {
     return []
   }
 }
+
 function getFieldRules(field) {
   const rules = []
   if (field.required) {
@@ -715,22 +801,19 @@ function getFieldRules(field) {
   }
   return rules
 }
-function toggleInstructions() { instructionsExpanded.value = !instructionsExpanded.value }
+
 function formatInstructions(instructions) {
   if (!instructions) return ''
   return instructions.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>').replace(/^(.*)$/, '<p>$1</p>').replace(/• /g, '&bull; ').replace(/✅/g, '<span style="color: #4CAF50;">✅</span>').replace(/❌/g, '<span style="color: #f44336;">❌</span>').replace(/⚠️/g, '<span style="color: #FF9800;">⚠️</span>').replace(/📋/g, '<span style="color: #2196F3;">📋</span>').replace(/💡/g, '<span style="color: #FFC107;">💡</span>')
 }
-function getInstructionsPreview(instructions) {
-  if (!instructions) return ''
-  const firstLine = instructions.split('\n')[0]
-  return firstLine.length > 100 ? firstLine.substring(0, 100) + '...' : firstLine
-}
+
 function getCommentHelpText() {
   if (stepExecution.value?.step.type === 'APPROVAL') {
     return formData.value.action === 'reprovar' ? 'Justifique sua decisão de reprovação (obrigatório)' : 'Adicione observações sobre sua decisão de aprovação'
   }
   return 'Comentário opcional sobre esta etapa'
 }
+
 function getCommentPlaceholder() {
   if (stepExecution.value?.step.type === 'APPROVAL') {
     if (formData.value.action === 'aprovar') return 'Ex: Processo analisado e aprovado conforme critérios estabelecidos. Documentação está completa e em conformidade...'
@@ -739,6 +822,7 @@ function getCommentPlaceholder() {
   }
   return 'Descreva sua análise, observações ou justificativa para a ação tomada...'
 }
+
 function getCommentRules() {
   const rules = []
   if (isCommentRequired.value) rules.push(v => !!v?.trim() || 'Comentário é obrigatório')
@@ -748,45 +832,54 @@ function getCommentRules() {
   }
   return rules
 }
+
 function getStepTypeColor(type) {
   const colors = { INPUT: 'blue', APPROVAL: 'orange', UPLOAD: 'purple', REVIEW: 'teal', SIGNATURE: 'red' }
   return colors[type] || 'grey'
 }
+
 function getStepTypeIcon(type) {
   const icons = { INPUT: 'mdi-form-textbox', APPROVAL: 'mdi-check-decagram', UPLOAD: 'mdi-upload', REVIEW: 'mdi-eye-check', SIGNATURE: 'mdi-draw-pen' }
   return icons[type] || 'mdi-help-circle'
 }
+
 function getStepTypeText(type) {
   const texts = { INPUT: 'Entrada de Dados', APPROVAL: 'Aprovação', UPLOAD: 'Upload de Arquivo', REVIEW: 'Revisão', SIGNATURE: 'Assinatura' }
   return texts[type] || type
 }
+
 function getActionLabel(action) {
   const labels = { aprovar: 'Aprovar', reprovar: 'Reprovar', rejeitar: 'Rejeitar', enviar: 'Enviar', devolver: 'Devolver', aceitar: 'Aceitar', recusar: 'Recusar', continuar: 'Continuar', finalizar: 'Finalizar' }
   return labels[action.toLowerCase()] || action
 }
+
 function getActionDescription(action) {
   const descriptions = { aprovar: 'Aprovar e avançar para próxima etapa', reprovar: 'Reprovar e encerrar processo', rejeitar: 'Rejeitar e devolver para etapa anterior', enviar: 'Enviar para próxima etapa', devolver: 'Devolver para correções', aceitar: 'Aceitar as informações fornecidas', recusar: 'Recusar e solicitar alterações', continuar: 'Continuar o fluxo do processo', finalizar: 'Finalizar esta etapa' }
   return descriptions[action.toLowerCase()] || 'Executar esta ação'
 }
+
 function getResponsibleName(execution) {
   if (execution.step.assignedToUser) return execution.step.assignedToUser.name
   if (execution.step.assignedToSector) return `Setor ${execution.step.assignedToSector.name}`
   return 'Não definido'
 }
+
 function getFileIcon(type) {
-  if (type.includes('pdf')) return 'mdi-file-pdf-box'
-  if (type.includes('image')) return 'mdi-file-image'
-  if (type.includes('word')) return 'mdi-file-word'
-  if (type.includes('excel')) return 'mdi-file-excel'
+  if (type?.includes('pdf')) return 'mdi-file-pdf-box'
+  if (type?.includes('image')) return 'mdi-file-image'
+  if (type?.includes('word')) return 'mdi-file-word'
+  if (type?.includes('excel')) return 'mdi-file-excel'
   return 'mdi-file'
 }
+
 function getFileTypeColor(type) {
-  if (type.includes('pdf')) return 'red'
-  if (type.includes('image')) return 'blue'
-  if (type.includes('word')) return 'indigo'
-  if (type.includes('excel')) return 'green'
+  if (type?.includes('pdf')) return 'red'
+  if (type?.includes('image')) return 'blue'
+  if (type?.includes('word')) return 'indigo'
+  if (type?.includes('excel')) return 'green'
   return 'grey'
 }
+
 function formatFileSize(bytes) {
   if (bytes === 0) return '0 Bytes'
   const k = 1024
@@ -794,20 +887,204 @@ function formatFileSize(bytes) {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }
-function formatDate(date) { return dayjs(date).format('DD/MM/YYYY HH:mm') }
-function getExecutionStatusMessage() {
-  if (stepExecution.value?.step.type === 'APPROVAL') {
-    if (formData.value.action === 'aprovar') return 'Processo será aprovado e seguirá para próxima etapa'
-    if (formData.value.action === 'reprovar') return 'Processo será reprovado e encerrado definitivamente'
-    return 'Selecione sua decisão de aprovação'
-  }
-  const totalAttachments = attachments.value.length
-  const signedAttachments = attachments.value.filter(f => f.signed).length
-  const requiresSignature = stepExecution.value?.step.requiresSignature
-  if (requiresSignature && totalAttachments > 0) return `${signedAttachments}/${totalAttachments} documentos assinados`
-  if (totalAttachments > 0) return `${totalAttachments} arquivo(s) anexado(s)`
-  return 'Preencha as informações necessárias'
+
+function formatDate(date) { 
+  return dayjs(date).format('DD/MM/YYYY HH:mm') 
 }
+
+// Funções para gerenciar arquivos de campos FILE
+function setFileInputRef(key, el) {
+  if (el) {
+    fileInputRefs.value[key] = el
+  }
+}
+
+function getFieldFiles(fieldName) {
+  return fieldFiles.value[fieldName] || []
+}
+
+function getFileFieldDisplayValue(fieldName) {
+  const files = getFieldFiles(fieldName)
+  if (files.length === 0) return ''
+  if (files.length === 1) return files[0].name
+  return `${files.length} arquivos selecionados`
+}
+
+function getFieldFileTypes(field) {
+  if (field.allowedFileTypes) {
+    try {
+      const types = typeof field.allowedFileTypes === 'string' ? JSON.parse(field.allowedFileTypes) : field.allowedFileTypes
+      return Array.isArray(types) ? types.join(',') : field.allowedFileTypes
+    } catch {
+      return field.allowedFileTypes
+    }
+  }
+  return '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx'
+}
+
+function triggerFileInput(fieldName) {
+  const inputKey = `fileInput_${fieldName}`
+  const input = fileInputRefs.value[inputKey]
+  if (input) {
+    input.click()
+  } else {
+    // Fallback para seletor direto
+    const fallbackInput = document.querySelector(`input[data-field="${fieldName}"]`)
+    if (fallbackInput) fallbackInput.click()
+  }
+}
+
+function handleFieldFileSelect(event, field) {
+  const files = Array.from(event.target.files)
+  if (files.length === 0) return
+  
+  const fieldName = field.name
+  const maxFiles = field.maxFiles || 1
+  const allowedTypes = getFieldFileTypes(field)
+  
+  // Inicializar array se não existir
+  if (!fieldFiles.value[fieldName]) {
+    fieldFiles.value[fieldName] = []
+  }
+  
+  const currentFiles = fieldFiles.value[fieldName]
+  
+  for (const file of files) {
+    // Verificar limite de arquivos
+    if (currentFiles.length >= maxFiles) {
+      window.showSnackbar?.(`Máximo ${maxFiles} arquivo(s) permitido(s) para este campo`, 'warning')
+      break
+    }
+    
+    // Verificar tamanho do arquivo (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      window.showSnackbar?.(`Arquivo ${file.name} muito grande (máx: 10MB)`, 'error')
+      continue
+    }
+    
+    // Verificar tipo de arquivo se especificado
+    if (allowedTypes && allowedTypes !== '*') {
+      const fileExt = '.' + file.name.split('.').pop().toLowerCase()
+      const allowedExts = allowedTypes.split(',').map(t => t.trim().toLowerCase())
+      const isTypeAllowed = allowedExts.some(ext => {
+        if (ext.startsWith('.')) {
+          return fileExt === ext
+        } else {
+          return file.type.includes(ext) || file.type === ext
+        }
+      })
+      
+      if (!isTypeAllowed) {
+        window.showSnackbar?.(`Tipo de arquivo ${file.name} não permitido para este campo`, 'error')
+        continue
+      }
+    }
+    
+    // Verificar se arquivo já existe (evitar duplicatas)
+    const isDuplicate = currentFiles.some(existing => 
+      existing.name === file.name && existing.size === file.size
+    )
+    
+    if (isDuplicate) {
+      window.showSnackbar?.(`Arquivo ${file.name} já foi selecionado`, 'warning')
+      continue
+    }
+    
+    // Adicionar arquivo à lista
+    currentFiles.push({
+      file,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      id: Date.now() + Math.random()
+    })
+    
+    // Atualizar o valor do campo no formData para validação
+    updateFieldValue(fieldName, field)
+  }
+  
+  // Limpar o input para permitir selecionar o mesmo arquivo novamente se necessário
+  event.target.value = ''
+  
+  if (files.length > 0) {
+    window.showSnackbar?.(`${files.length} arquivo(s) selecionado(s) para ${field.label || field.name}`, 'success')
+  }
+}
+
+function updateFieldValue(fieldName, field) {
+  const files = fieldFiles.value[fieldName] || []
+  const maxFiles = field?.maxFiles || 1
+  
+  if (maxFiles === 1) {
+    formData.value.metadata[fieldName] = files.length > 0 ? files[0].name : ''
+  } else {
+    formData.value.metadata[fieldName] = files.map(f => f.name).join(', ')
+  }
+}
+
+function removeFieldFile(fieldName, fileIndex) {
+  if (fieldFiles.value[fieldName]) {
+    const removedFile = fieldFiles.value[fieldName][fileIndex]
+    fieldFiles.value[fieldName].splice(fileIndex, 1)
+    
+    // Atualizar o valor no formData
+    const field = stepFormFields.value.find(f => f.name === fieldName)
+    updateFieldValue(fieldName, field)
+    
+    window.showSnackbar?.(`Arquivo "${removedFile.name}" removido`, 'info')
+  }
+}
+
+function getFieldFileErrors(field) {
+  const errors = []
+  const fieldName = field.name
+  const files = getFieldFiles(fieldName)
+  
+  if (field.required && files.length === 0) {
+    errors.push(`${field.label || field.name} é obrigatório`)
+  }
+  
+  const maxFiles = field.maxFiles || 1
+  if (files.length > maxFiles) {
+    errors.push(`Máximo ${maxFiles} arquivo(s) permitido(s)`)
+  }
+  
+  return errors
+}
+
+// Novas funções para identificar e tratar campos de arquivo
+function isFileField(field) {
+  // Verifica se é um campo de arquivo baseado no nome do arquivo ou extensão
+  if (!field.value) return false
+  const fileExtensions = /\.(pdf|doc|docx|xls|xlsx|jpg|jpeg|png|gif|bmp|txt)$/i
+  return fileExtensions.test(field.value)
+}
+
+function getFileTypeFromName(fileName) {
+  if (!fileName) return ''
+  if (fileName.toLowerCase().includes('.pdf')) return 'application/pdf'
+  if (fileName.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp)$/)) return 'image/'
+  if (fileName.toLowerCase().includes('.doc')) return 'application/word'
+  if (fileName.toLowerCase().includes('.xls')) return 'application/excel'
+  return 'application/octet-stream'
+}
+
+function viewFileField(field) {
+  // Para campos de arquivo de etapas anteriores, tentar abrir o arquivo
+  try {
+    // Assumindo que o valor contém o nome do arquivo ou path
+    const fileName = field.value
+    window.showSnackbar?.(`Tentando abrir arquivo: ${fileName}`, 'info')
+    // Aqui você pode implementar a lógica específica para abrir arquivos de campos
+    // Por exemplo, construir uma URL baseada no nome do arquivo
+    // const url = `/api/files/${fileName}`
+    // window.open(url, '_blank')
+  } catch (error) {
+    console.error('Error viewing file field:', error)
+    window.showSnackbar?.('Erro ao visualizar arquivo', 'error')
+  }
+}
+
 async function handleFileSelect(event) {
   const files = Array.from(event.target.files)
   for (const file of files) {
@@ -830,89 +1107,18 @@ async function handleFileSelect(event) {
     window.showSnackbar?.(`${files.length} arquivo(s) adicionado(s)`, 'success')
   }
 }
+
 function removeFile(index) {
   const fileName = attachments.value[index].name
   attachments.value.splice(index, 1)
   window.showSnackbar?.(`Arquivo "${fileName}" removido`, 'info')
 }
-function openSignatureDialog(file, index) { console.log('Opening signature dialog for:', file.name) }
-async function executeStep() {
-  if (!valid.value || !canSubmit.value) {
-    window.showSnackbar?.('Por favor, corrija os erros antes de continuar', 'warning')
-    return
-  }
-  if (stepExecution.value?.step.type === 'APPROVAL') {
-    if (!formData.value.action || !['aprovar', 'reprovar'].includes(formData.value.action)) {
-      window.showSnackbar?.('Selecione uma decisão de aprovação válida', 'warning')
-      return
-    }
-    if (formData.value.action === 'reprovar' && !formData.value.comment?.trim()) {
-      window.showSnackbar?.('Justificativa é obrigatória para reprovação', 'warning')
-      return
-    }
-  }
-  if (!stepExecution.value?.id) {
-    console.error('stepExecutionId is missing:', stepExecution.value)
-    window.showSnackbar?.('Erro: ID da execução da etapa não encontrado', 'error')
-    return
-  }
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-  if (!uuidRegex.test(stepExecution.value.id)) {
-    console.error('Invalid stepExecutionId format:', stepExecution.value.id)
-    window.showSnackbar?.('Erro: ID da execução da etapa em formato inválido', 'error')
-    return
-  }
-  saving.value = true
-  try {
-    if (attachments.value.length > 0) {
-      for (const attachment of attachments.value) {
-        try {
-          const uploaded = await processStore.uploadAttachment(attachment.file, stepExecution.value.id)
-          uploadedAttachments.value.push(uploaded)
-          if (attachment.signed && attachment.signatureData) {
-            await processStore.signAttachment(uploaded.id, attachment.signatureData)
-          }
-        } catch (uploadError) {
-          console.error('Error uploading attachment:', uploadError)
-          window.showSnackbar?.(`Erro ao enviar arquivo ${attachment.name}`, 'warning')
-        }
-      }
-    }
-    const executeData = {
-      stepExecutionId: stepExecution.value.id,
-      action: formData.value.action || null,
-      comment: formData.value.comment?.trim() || null,
-      metadata: formData.value.metadata && Object.keys(formData.value.metadata).length > 0 ? formData.value.metadata : {}
-    }
-    if (!executeData.stepExecutionId) throw new Error('stepExecutionId é obrigatório')
-    if (stepExecution.value?.step.type === 'APPROVAL' && !executeData.action) throw new Error('Ação é obrigatória para etapas de aprovação')
-    await processStore.executeStep(executeData)
-    let successMessage = 'Etapa concluída com sucesso! 🎉'
-    if (stepExecution.value?.step.type === 'APPROVAL') {
-      if (formData.value.action === 'aprovar') successMessage = 'Processo aprovado com sucesso! ✅'
-      else if (formData.value.action === 'reprovar') successMessage = 'Processo reprovado. ❌'
-    }
-    window.showSnackbar?.(successMessage, 'success')
-    setTimeout(() => { router.push(`/processes/${route.params.id}`) }, 1000)
-  } catch (error) {
-    console.error('Error executing step:', error)
-    let errorMessage = 'Erro ao executar etapa'
-    if (error.response?.status === 400) {
-      if (error.response?.data?.message) {
-        if (Array.isArray(error.response.data.message)) errorMessage = error.response.data.message.join(', ')
-        else errorMessage = error.response.data.message
-      } else errorMessage = 'Dados inválidos. Verifique os campos preenchidos.'
-    } else if (error.response?.data?.message) errorMessage = error.response.data.message
-    else if (error.message) errorMessage = error.message
-    window.showSnackbar?.(errorMessage, 'error')
-  } finally {
-    saving.value = false
-  }
-  }
-function goBack() { router.push(`/processes/${route.params.id}`) }
 
-// INÍCIO DA SEÇÃO ADICIONADA
-// Função auxiliar para agrupar dados reutilizados por etapa
+function openSignatureDialog(file, index) { 
+  console.log('Opening signature dialog for:', file.name) 
+}
+
+// Função para agrupar dados reutilizados por etapa
 function groupReuseDataByStep(fields) {
   const groups = {}
   
@@ -941,7 +1147,129 @@ async function viewAttachment(attachment) {
     window.showSnackbar?.('Erro ao visualizar anexo', 'error')
   }
 }
-// FIM DA SEÇÃO ADICIONADA
+
+async function executeStep() {
+  if (!valid.value || !canSubmit.value) {
+    window.showSnackbar?.('Por favor, corrija os erros antes de continuar', 'warning')
+    return
+  }
+  
+  // Validar campos FILE obrigatórios
+  for (const field of stepFormFields.value) {
+    if (field.type === 'FILE' && field.required) {
+      const files = getFieldFiles(field.name)
+      if (files.length === 0) {
+        window.showSnackbar?.(`Campo ${field.label || field.name} é obrigatório`, 'warning')
+        return
+      }
+    }
+  }
+  
+  if (stepExecution.value?.step.type === 'APPROVAL') {
+    if (!formData.value.action || !['aprovar', 'reprovar'].includes(formData.value.action)) {
+      window.showSnackbar?.('Selecione uma decisão de aprovação válida', 'warning')
+      return
+    }
+    if (formData.value.action === 'reprovar' && !formData.value.comment?.trim()) {
+      window.showSnackbar?.('Justificativa é obrigatória para reprovação', 'warning')
+      return
+    }
+  }
+  if (!stepExecution.value?.id) {
+    console.error('stepExecutionId is missing:', stepExecution.value)
+    window.showSnackbar?.('Erro: ID da execução da etapa não encontrado', 'error')
+    return
+  }
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  if (!uuidRegex.test(stepExecution.value.id)) {
+    console.error('Invalid stepExecutionId format:', stepExecution.value.id)
+    window.showSnackbar?.('Erro: ID da execução da etapa em formato inválido', 'error')
+    return
+  }
+  saving.value = true
+  try {
+    // Upload dos anexos gerais da etapa
+    if (attachments.value.length > 0) {
+      for (const attachment of attachments.value) {
+        try {
+          const uploaded = await processStore.uploadAttachment(attachment.file, stepExecution.value.id)
+          uploadedAttachments.value.push(uploaded)
+          if (attachment.signed && attachment.signatureData) {
+            await processStore.signAttachment(uploaded.id, attachment.signatureData)
+          }
+        } catch (uploadError) {
+          console.error('Error uploading attachment:', uploadError)
+          window.showSnackbar?.(`Erro ao enviar arquivo ${attachment.name}`, 'warning')
+        }
+      }
+    }
+    
+    // Upload dos arquivos de campos FILE
+    const fieldFileUploads = {}
+    for (const field of stepFormFields.value) {
+      if (field.type === 'FILE') {
+        const files = getFieldFiles(field.name)
+        if (files.length > 0) {
+          const uploadedFiles = []
+          for (const fileObj of files) {
+            try {
+              const uploaded = await processStore.uploadAttachment(fileObj.file, stepExecution.value.id)
+              uploadedFiles.push({
+                id: uploaded.id,
+                name: uploaded.originalName || fileObj.name,
+                size: fileObj.size,
+                type: fileObj.type
+              })
+            } catch (uploadError) {
+              console.error('Error uploading field file:', uploadError)
+              window.showSnackbar?.(`Erro ao enviar arquivo ${fileObj.name} do campo ${field.label}`, 'warning')
+            }
+          }
+          if (uploadedFiles.length > 0) {
+            // Armazenar informações dos arquivos no metadata
+            fieldFileUploads[field.name] = uploadedFiles
+            // Atualizar metadata com IDs dos arquivos para referência futura
+            formData.value.metadata[field.name + '_files'] = uploadedFiles.map(f => f.id)
+          }
+        }
+      }
+    }
+    
+    const executeData = {
+      stepExecutionId: stepExecution.value.id,
+      action: formData.value.action || null,
+      comment: formData.value.comment?.trim() || null,
+      metadata: formData.value.metadata && Object.keys(formData.value.metadata).length > 0 ? formData.value.metadata : {}
+    }
+    if (!executeData.stepExecutionId) throw new Error('stepExecutionId é obrigatório')
+    if (stepExecution.value?.step.type === 'APPROVAL' && !executeData.action) throw new Error('Ação é obrigatória para etapas de aprovação')
+    await processStore.executeStep(executeData)
+    let successMessage = 'Etapa concluída com sucesso!'
+    if (stepExecution.value?.step.type === 'APPROVAL') {
+      if (formData.value.action === 'aprovar') successMessage = 'Processo aprovado com sucesso!'
+      else if (formData.value.action === 'reprovar') successMessage = 'Processo reprovado.'
+    }
+    window.showSnackbar?.(successMessage, 'success')
+    setTimeout(() => { router.push(`/processes/${route.params.id}`) }, 1000)
+  } catch (error) {
+    console.error('Error executing step:', error)
+    let errorMessage = 'Erro ao executar etapa'
+    if (error.response?.status === 400) {
+      if (error.response?.data?.message) {
+        if (Array.isArray(error.response.data.message)) errorMessage = error.response.data.message.join(', ')
+        else errorMessage = error.response.data.message
+      } else errorMessage = 'Dados inválidos. Verifique os campos preenchidos.'
+    } else if (error.response?.data?.message) errorMessage = error.response.data.message
+    else if (error.message) errorMessage = error.message
+    window.showSnackbar?.(errorMessage, 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+function goBack() { 
+  router.push(`/processes/${route.params.id}`) 
+}
 
 onMounted(async () => {
   try {
@@ -963,51 +1291,240 @@ onMounted(async () => {
     processStore.loading = false
   }
 })
+
 onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
 </script>
 
 <style scoped>
-.step-execution-container { max-width: 1400px; margin: 0 auto; padding: 0 16px; }
-.execution-header { background: linear-gradient(135deg, rgba(25, 118, 210, 0.08), rgba(66, 165, 245, 0.04)); border-radius: 20px; padding: 32px; border: 1px solid rgba(25, 118, 210, 0.1); backdrop-filter: blur(10px); }
-.step-avatar { box-shadow: 0 4px 20px rgba(25, 118, 210, 0.3); border: 3px solid rgba(255, 255, 255, 0.9); }
-.instructions-panel {
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+.step-execution-container { 
+  max-width: 1400px; 
+  margin: 0 auto; 
+  padding: 0 16px; 
 }
-.formatted-instructions { font-size: 0.95rem; line-height: 1.7; color: rgba(0, 0, 0, 0.8); padding: 16px; }
-.formatted-instructions :deep(p) { margin-bottom: 12px; }
-.formatted-instructions :deep(p:last-child) { margin-bottom: 0; }
-.approval-decision-card { background: rgba(255, 152, 0, 0.02); border: none; }
-.approval-options { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
-.approval-option { cursor: pointer; transition: all 0.3s ease; border-radius: 16px; border: 2px solid rgba(0, 0, 0, 0.08); min-height: 140px; }
-.approval-option:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
-.approval-option.approval-selected { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); transform: translateY(-2px); }
-.approval-approve.approval-selected { border-color: rgb(var(--v-theme-success)); background: rgba(76, 175, 80, 0.04); }
-.approval-reject.approval-selected { border-color: rgb(var(--v-theme-error)); background: rgba(244, 67, 54, 0.04); }
-.approval-label { font-weight: 700; font-size: 1.1rem; margin-bottom: 8px; }
-.approval-description { font-size: 0.85rem; color: rgba(0, 0, 0, 0.6); line-height: 1.4; }
-.execution-form-card, .info-card { border-radius: 16px; border: 1px solid rgba(0, 0, 0, 0.06); overflow: hidden; }
-.form-card-header { background: linear-gradient(135deg, rgba(25, 118, 210, 0.06), rgba(66, 165, 245, 0.03)); border-bottom: 1px solid rgba(25, 118, 210, 0.1); }
-.form-card-content { background: white; }
-.form-card-actions { background: rgba(25, 118, 210, 0.02); border-top: 1px solid rgba(0, 0, 0, 0.06); }
-.form-section { margin-bottom: 32px; }
-.section-header h3 { color: rgba(0, 0, 0, 0.87); margin-bottom: 8px; }
-.section-header p { margin: 0; }
-.execute-btn { border-radius: 12px; font-weight: 600; text-transform: none; letter-spacing: 0.25px; box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3); padding: 16px 32px; }
-.execute-btn:hover { box-shadow: 0 6px 16px rgba(25, 118, 210, 0.4); transform: translateY(-1px); }
-.actions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px; }
-.action-option { cursor: pointer; transition: all 0.3s ease; border-radius: 12px; border: 2px solid rgba(0, 0, 0, 0.08); }
-.action-option:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1); }
-.action-option.action-selected { border-color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.04); box-shadow: 0 6px 20px rgba(var(--v-theme-primary), 0.2); transform: translateY(-2px); }
-.action-label { font-weight: 600; font-size: 1rem; margin-bottom: 4px; }
-.action-description { font-size: 0.8rem; color: rgba(0, 0, 0, 0.6); }
-.previous-step-details { background-color: rgba(0,0,0,0.02); }
-.detail-item { display: flex; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid rgba(0,0,0,0.06); }
-.detail-item:last-child { border-bottom: none; }
-.detail-key { font-weight: 500; color: #555; font-size: 0.85rem; margin-right: 16px; }
-.detail-value { font-size: 0.9rem; text-align: right; word-break: break-word; }
-@media (max-width: 768px) { .step-execution-container { padding: 0 12px; } .execution-header { padding: 20px; } .approval-options { grid-template-columns: 1fr; gap: 16px; } .approval-option { min-height: 120px; } .actions-grid { grid-template-columns: 1fr; } }
+
+.execution-header { 
+  background: linear-gradient(135deg, rgba(25, 118, 210, 0.08), rgba(66, 165, 245, 0.04)); 
+  border-radius: 20px; 
+  padding: 32px; 
+  border: 1px solid rgba(25, 118, 210, 0.1); 
+  backdrop-filter: blur(10px); 
+}
+
+.step-avatar { 
+  box-shadow: 0 4px 20px rgba(25, 118, 210, 0.3); 
+  border: 3px solid rgba(255, 255, 255, 0.9); 
+}
+
+/* Espaçamento entre chips */
+.chips-container {
+  gap: 8px;
+}
+
+.chips-container .v-chip {
+  margin-right: 0 !important;
+}
+
+.instructions-panel {
+  border-radius: 0;
+  overflow: hidden;
+  border: none;
+  box-shadow: none;
+}
+
+.formatted-instructions { 
+  font-size: 0.95rem; 
+  line-height: 1.7; 
+  color: rgba(0, 0, 0, 0.8); 
+  padding: 16px; 
+}
+
+.formatted-instructions :deep(p) { 
+  margin-bottom: 12px; 
+}
+
+.formatted-instructions :deep(p:last-child) { 
+  margin-bottom: 0; 
+}
+
+.approval-decision-card { 
+  background: rgba(255, 152, 0, 0.02); 
+  border: none; 
+}
+
+.approval-options { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 24px; 
+  margin-top: 16px; 
+}
+
+.approval-option { 
+  cursor: pointer; 
+  transition: all 0.3s ease; 
+  border-radius: 16px; 
+  border: 2px solid rgba(0, 0, 0, 0.08); 
+  min-height: 140px; 
+}
+
+.approval-option:hover { 
+  transform: translateY(-2px); 
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); 
+}
+
+.approval-option.approval-selected { 
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); 
+  transform: translateY(-2px); 
+}
+
+.approval-approve.approval-selected { 
+  border-color: rgb(var(--v-theme-success)); 
+  background: rgba(76, 175, 80, 0.04); 
+}
+
+.approval-reject.approval-selected { 
+  border-color: rgb(var(--v-theme-error)); 
+  background: rgba(244, 67, 54, 0.04); 
+}
+
+.approval-label { 
+  font-weight: 700; 
+  font-size: 1.1rem; 
+  margin-bottom: 8px; 
+}
+
+.approval-description { 
+  font-size: 0.85rem; 
+  color: rgba(0, 0, 0, 0.6); 
+  line-height: 1.4; 
+}
+
+.execution-form-card, .info-card { 
+  border-radius: 16px; 
+  border: 1px solid rgba(0, 0, 0, 0.06); 
+  overflow: hidden; 
+}
+
+.form-card-header { 
+  background: linear-gradient(135deg, rgba(25, 118, 210, 0.06), rgba(66, 165, 245, 0.03)); 
+  border-bottom: 1px solid rgba(25, 118, 210, 0.1); 
+}
+
+.form-card-content { 
+  background: white; 
+}
+
+.form-card-actions { 
+  background: rgba(25, 118, 210, 0.02); 
+  border-top: 1px solid rgba(0, 0, 0, 0.06); 
+}
+
+.form-section { 
+  margin-bottom: 32px; 
+}
+
+.section-header h3 { 
+  color: rgba(0, 0, 0, 0.87); 
+  margin-bottom: 8px; 
+}
+
+.section-header p { 
+  margin: 0; 
+}
+
+.execute-btn { 
+  border-radius: 12px; 
+  font-weight: 600; 
+  text-transform: none; 
+  letter-spacing: 0.25px; 
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3); 
+  padding: 16px 32px; 
+}
+
+.execute-btn:hover { 
+  box-shadow: 0 6px 16px rgba(25, 118, 210, 0.4); 
+  transform: translateY(-1px); 
+}
+
+.actions-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+  gap: 16px; 
+  margin-top: 16px; 
+}
+
+.action-option { 
+  cursor: pointer; 
+  transition: all 0.3s ease; 
+  border-radius: 12px; 
+  border: 2px solid rgba(0, 0, 0, 0.08); 
+}
+
+.action-option:hover { 
+  transform: translateY(-2px); 
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1); 
+}
+
+.action-option.action-selected { 
+  border-color: rgb(var(--v-theme-primary)); 
+  background: rgba(var(--v-theme-primary), 0.04); 
+  box-shadow: 0 6px 20px rgba(var(--v-theme-primary), 0.2); 
+  transform: translateY(-2px); 
+}
+
+.action-label { 
+  font-weight: 600; 
+  font-size: 1rem; 
+  margin-bottom: 4px; 
+}
+
+.action-description { 
+  font-size: 0.8rem; 
+  color: rgba(0, 0, 0, 0.6); 
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.file-field-container {
+  position: relative;
+}
+
+.file-input-field {
+  cursor: pointer !important;
+}
+
+.file-input-field :deep(.v-field__input) {
+  cursor: pointer !important;
+}
+
+.file-input-field :deep(.v-field__field) {
+  cursor: pointer !important;
+}
+
+.selected-files-chips {
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) { 
+  .step-execution-container { 
+    padding: 0 12px; 
+  } 
+  .execution-header { 
+    padding: 20px; 
+  } 
+  .approval-options { 
+    grid-template-columns: 1fr; 
+    gap: 16px; 
+  } 
+  .approval-option { 
+    min-height: 120px; 
+  } 
+  .actions-grid { 
+    grid-template-columns: 1fr; 
+  } 
+}
 </style>

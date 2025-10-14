@@ -81,13 +81,7 @@
                   class="mr-1 mb-1"
                 >
                   {{ company.companyName }}
-                  <v-icon
-                    v-if="company.isDefault"
-                    end
-                    size="12"
-                  >
-                    mdi-star
-                  </v-icon>
+        
                 </v-chip>
               </template>
             </v-tooltip>
@@ -213,7 +207,6 @@
             <div>
               <div class="d-flex align-center justify-space-between mb-4">
                 <h3 class="text-h6">
-                  <v-icon class="mr-2">mdi-domain</v-icon>
                   Empresas e Permissões
                 </h3>
                 <v-btn
@@ -250,12 +243,6 @@
                 >
                   <v-card-title class="d-flex align-center justify-space-between py-3 bg-grey-lighten-5">
                     <div class="d-flex align-center">
-                      <v-icon
-                        :color="company.isDefault ? 'warning' : 'primary'"
-                        class="mr-3"
-                      >
-                        {{ company.isDefault ? 'mdi-star' : 'mdi-domain' }}
-                      </v-icon>
                       <div>
                         <div class="font-weight-medium">
                           Empresa {{ index + 1 }}

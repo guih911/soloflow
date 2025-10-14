@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/services/api'
+import { useAuthStore } from './auth'
 
 export const useProcessTypeStore = defineStore('processTypes', () => {
   const processTypes = ref([])
@@ -93,13 +94,35 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     error.value = null
     
     try {
-      console.log('📄 Fetching process types...')
+      // 🔧 FIX: Obter companyId do authStore
+      const authStore = useAuthStore()
+      const companyId = authStore.activeCompanyId
       
-      const response = await api.get('/process-types')
+      // 🔧 FIX: Validar se temos companyId
+      if (!companyId) {
+        console.error('❌ No active company ID found')
+        throw new Error('ID da empresa não encontrado. Por favor, selecione uma empresa.')
+      }
+
+      console.log('📥 Fetching process types for company:', companyId)
       
-      console.log('📋 Raw response:', response.data.length, 'items')
+      // 🔧 FIX: Adicionar companyId como query parameter
+      const response = await api.get('/process-types', {
+        params: { companyId }
+      })
       
-      processTypes.value = response.data.map(pt => {
+      console.log('📋 Raw response:', response.data)
+      
+      // 🔧 FIX: Normalizar resposta (pode vir com ou sem wrapper)
+      let data = response.data
+      if (data.success && Array.isArray(data.data)) {
+        data = data.data
+      } else if (!Array.isArray(data)) {
+        console.warn('⚠️ Unexpected response format:', data)
+        data = []
+      }
+      
+      processTypes.value = data.map(pt => {
         const normalized = normalizeProcessType(pt)
         
         normalized.steps = normalized.steps.map(normalizeStep)
@@ -113,7 +136,19 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
     } catch (err) {
       console.error('❌ Error fetching process types:', err)
-      error.value = err.response?.data?.message || 'Erro ao buscar tipos de processo'
+      
+      // 🔧 FIX: Mensagens de erro mais específicas
+      if (err.response?.status === 400) {
+        error.value = 'Parâmetro companyId inválido ou ausente'
+      } else if (err.response?.status === 401) {
+        error.value = 'Não autorizado. Faça login novamente.'
+      } else if (err.response?.data?.message) {
+        error.value = err.response.data.message
+      } else if (err.message) {
+        error.value = err.message
+      } else {
+        error.value = 'Erro ao buscar tipos de processo'
+      }
       
       processTypes.value = []
       
@@ -132,7 +167,13 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
       const response = await api.get(`/process-types/${id}`)
       
-      const normalized = normalizeProcessType(response.data)
+      // 🔧 FIX: Normalizar resposta (pode vir com ou sem wrapper)
+      let data = response.data
+      if (data.success && data.data) {
+        data = data.data
+      }
+      
+      const normalized = normalizeProcessType(data)
       normalized.steps = normalized.steps.map(normalizeStep)
       normalized.formFields = normalized.formFields.map(normalizeFormField)
       
@@ -211,9 +252,15 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
       const response = await api.post('/process-types', cleanData)
       
-      console.log('✅ Process type created:', response.data.id)
+      // 🔧 FIX: Normalizar resposta
+      let created = response.data
+      if (created.success && created.data) {
+        created = created.data
+      }
       
-      const created = normalizeProcessType(response.data)
+      console.log('✅ Process type created:', created.id)
+      
+      created = normalizeProcessType(created)
       created.steps = created.steps.map(normalizeStep)
       created.formFields = created.formFields.map(normalizeFormField)
       
@@ -249,6 +296,8 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         name: data.name?.trim(),
         description: data.description?.trim() || null,
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : undefined,
+        steps: data.steps,
+        formFields: data.formFields,
       }
       
       Object.keys(cleanData).forEach(key => {
@@ -259,9 +308,15 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
       const response = await api.patch(`/process-types/${id}`, cleanData)
       
+      // 🔧 FIX: Normalizar resposta
+      let updated = response.data
+      if (updated.success && updated.data) {
+        updated = updated.data
+      }
+      
       console.log('✅ Process type updated')
       
-      const updated = normalizeProcessType(response.data)
+      updated = normalizeProcessType(updated)
       updated.steps = updated.steps.map(normalizeStep)
       updated.formFields = updated.formFields.map(normalizeFormField)
       

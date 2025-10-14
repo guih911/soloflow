@@ -3,11 +3,17 @@ import {
   Get,
   Post,
   Body,
+  Patch,
   Param,
   Delete,
-  Put,
+  Query,
+  BadRequestException,
+  NotFoundException,
+  HttpCode,
+  HttpStatus,
+  Logger,
   UseGuards,
-  Request,
+  Request
 } from '@nestjs/common';
 import { ProcessTypesService } from './process-types.service';
 import { CreateProcessTypeDto } from './dto/create-process-type.dto';
@@ -15,117 +21,335 @@ import { UpdateProcessTypeDto } from './dto/update-process-type.dto';
 import { CreateStepDto } from './dto/create-step.dto';
 import { CreateFormFieldDto } from './dto/create-form-field.dto';
 import { UpdateFormFieldDto } from './dto/update-form-field.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-// Definir interfaces para compatibilidade
-interface FormField {
-  id: string;
-  name: string;
-  label: string;
-  type: any;
-  placeholder?: string | null;
-  required: boolean;
-  order: number;
-  options?: any;
-  validations?: any;
-  defaultValue?: string | null;
-  helpText?: string | null;
-}
-
-interface Step {
-  id: string;
-  name: string;
-  description?: string | null;
-  instructions?: string | null;
-  slaHours?: number | null;
-  type: any;
-  order: number;
-  allowAttachment: boolean;
-  requiresSignature: boolean;
-  requireAttachment: boolean;
-  minAttachments?: number | null;
-  maxAttachments?: number | null;
-  allowedFileTypes?: any;
-  conditions?: any;
-  actions?: any;
-  assignedToUserId?: string | null;
-  assignedToSectorId?: string | null;
-  assignedToUser?: any;
-  assignedToSector?: any;
+// Interface estendida para updates com versionamento
+interface UpdateProcessTypeWithVersioningDto extends UpdateProcessTypeDto {
+  steps?: CreateStepDto[];
+  formFields?: CreateFormFieldDto[];
 }
 
 @Controller('process-types')
-@UseGuards(JwtAuthGuard)
 export class ProcessTypesController {
-  constructor(private readonly processTypesService: ProcessTypesService) {}
+  private readonly logger = new Logger(ProcessTypesController.name);
+
+  constructor(private readonly processTypesService: ProcessTypesService) {
+    this.logger.log('ProcessTypesController initialized');
+  }
 
   @Post()
-  create(@Body() createProcessTypeDto: CreateProcessTypeDto) {
-    return this.processTypesService.create(createProcessTypeDto);
+  @HttpCode(HttpStatus.CREATED)
+  async create(@Body() createProcessTypeDto: CreateProcessTypeDto, @Request() req?: any) {
+    this.logger.log(`POST /process-types - Creating process type: ${createProcessTypeDto.name}`);
+    this.logger.debug(`Request body:`, JSON.stringify(createProcessTypeDto, null, 2));
+    
+    try {
+      // Validação básica
+      if (!createProcessTypeDto.companyId) {
+        throw new BadRequestException('companyId is required');
+      }
+
+      const result = await this.processTypesService.create(createProcessTypeDto);
+      this.logger.log(`✅ Process type created successfully: ${result.id} - ${result.name}`);
+      return {
+        success: true,
+        data: result,
+        message: 'Process type created successfully'
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error creating process type: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   @Get()
-  findAll(@Request() req) {
-    const companyId = req.user.companyId || req.user.company?.id;
-    return this.processTypesService.findAll(companyId);
+  async findAll(@Query('companyId') companyId?: string) {
+    this.logger.log(`GET /process-types - Finding all process types for company: ${companyId}`);
+    
+    if (!companyId) {
+      this.logger.error('Missing companyId query parameter');
+      throw new BadRequestException('companyId query parameter is required');
+    }
+    
+    try {
+      const result = await this.processTypesService.findAll(companyId);
+      this.logger.log(`✅ Found ${result.length} process types for company ${companyId}`);
+      return {
+        success: true,
+        data: result,
+        count: result.length
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error finding process types: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.processTypesService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    this.logger.log(`GET /process-types/${id} - Finding process type`);
+    
+    if (!id || id === 'undefined' || id === 'null') {
+      throw new BadRequestException('Invalid process type ID');
+    }
+    
+    try {
+      const result = await this.processTypesService.findOne(id);
+      if (!result) {
+        this.logger.warn(`Process type not found: ${id}`);
+        throw new NotFoundException(`Process type with ID ${id} not found`);
+      }
+      // Correção: usar cast ou verificação de propriedade
+      const version = (result as any).version || (result as any).versionLabel || 1;
+      this.logger.log(`✅ Process type found: ${result.name} (v${version})`);
+      return {
+        success: true,
+        data: result
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error finding process type ${id}: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
-  @Put(':id')
-  update(@Param('id') id: string, @Body() updateProcessTypeDto: UpdateProcessTypeDto) {
-    return this.processTypesService.update(id, updateProcessTypeDto);
+  @Patch(':id')
+  @HttpCode(HttpStatus.OK)
+  async update(
+    @Param('id') id: string, 
+    @Body() updateProcessTypeDto: UpdateProcessTypeWithVersioningDto,
+    @Request() req?: any
+  ) {
+    this.logger.log(`PATCH /process-types/${id} - Updating process type with versioning`);
+    this.logger.debug(`Request body:`, JSON.stringify(updateProcessTypeDto, null, 2));
+    
+    if (!id || id === 'undefined' || id === 'null') {
+      throw new BadRequestException('Invalid process type ID');
+    }
+
+    try {
+      // Verificar se o processo existe antes de tentar atualizar
+      const existingProcess = await this.processTypesService.findOne(id);
+      if (!existingProcess) {
+        this.logger.warn(`Process type not found for update: ${id}`);
+        throw new NotFoundException(`Process type with ID ${id} not found`);
+      }
+
+      const currentVersion = (existingProcess as any).version || (existingProcess as any).versionLabel || 1;
+      this.logger.log(`Updating process type: ${existingProcess.name} (current version: ${currentVersion})`);
+      
+      // Chamar o método de update com versionamento
+      const result = await this.processTypesService.update(id, updateProcessTypeDto);
+      
+      const newVersion = (result as any).version || (result as any).versionLabel || 'N/A';
+      this.logger.log(`✅ Process type updated successfully: ${result.id} - ${result.name} (new version: ${newVersion})`);
+      
+      return {
+        success: true,
+        data: result,
+        message: `Process type updated successfully. New version: ${newVersion}`
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error updating process type ${id}: ${error.message}`, error.stack);
+      
+      // Fornecer mensagens de erro mais específicas
+      if (error.name === 'NotFoundException') {
+        throw new NotFoundException(`Process type with ID ${id} not found`);
+      } else if (error.name === 'BadRequestException') {
+        throw error;
+      } else {
+        throw new BadRequestException(`Failed to update process type: ${error.message}`);
+      }
+    }
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.processTypesService.remove(id);
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('id') id: string) {
+    this.logger.log(`DELETE /process-types/${id} - Removing process type`);
+    
+    if (!id || id === 'undefined' || id === 'null') {
+      throw new BadRequestException('Invalid process type ID');
+    }
+
+    try {
+      // Verificar se existe antes de remover
+      const existingProcess = await this.processTypesService.findOne(id);
+      if (!existingProcess) {
+        this.logger.warn(`Process type not found for deletion: ${id}`);
+        throw new NotFoundException(`Process type with ID ${id} not found`);
+      }
+
+      await this.processTypesService.remove(id);
+      this.logger.log(`✅ Process type removed successfully: ${id} - ${existingProcess.name}`);
+      
+      return {
+        success: true,
+        message: 'Process type removed successfully'
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error removing process type ${id}: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
-  // Form Fields endpoints
-  @Post(':id/form-fields')
-  addFormField(
-    @Param('id') processTypeId: string,
+  // ==================== FORM FIELDS ENDPOINTS ====================
+
+  @Post(':processTypeId/form-fields')
+  @HttpCode(HttpStatus.CREATED)
+  async addFormField(
+    @Param('processTypeId') processTypeId: string,
     @Body() createFormFieldDto: CreateFormFieldDto
-  ): Promise<FormField> {
-    return this.processTypesService.addFormField(processTypeId, createFormFieldDto);
+  ): Promise<any> {
+    this.logger.log(`POST /process-types/${processTypeId}/form-fields - Adding form field`);
+    
+    try {
+      const result = await this.processTypesService.addFormField(processTypeId, createFormFieldDto);
+      this.logger.log(`✅ Form field added: ${result.name}`);
+      return {
+        success: true,
+        data: result,
+        message: 'Form field added successfully'
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error adding form field: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
-  @Put('form-fields/:fieldId')
-  updateFormField(
+  @Patch('form-fields/:fieldId')
+  async updateFormField(
     @Param('fieldId') fieldId: string,
     @Body() updateFormFieldDto: UpdateFormFieldDto
-  ): Promise<FormField> {
-    return this.processTypesService.updateFormField(fieldId, updateFormFieldDto);
+  ): Promise<any> {
+    this.logger.log(`PATCH /process-types/form-fields/${fieldId} - Updating form field`);
+    
+    try {
+      const result = await this.processTypesService.updateFormField(fieldId, updateFormFieldDto);
+      this.logger.log(`✅ Form field updated: ${result.name}`);
+      return {
+        success: true,
+        data: result,
+        message: 'Form field updated successfully'
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error updating form field: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   @Delete('form-fields/:fieldId')
-  removeFormField(@Param('fieldId') fieldId: string): Promise<void> {
-    return this.processTypesService.removeFormField(fieldId);
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeFormField(@Param('fieldId') fieldId: string) {
+    this.logger.log(`DELETE /process-types/form-fields/${fieldId} - Removing form field`);
+    
+    try {
+      await this.processTypesService.removeFormField(fieldId);
+      this.logger.log(`✅ Form field removed: ${fieldId}`);
+      return {
+        success: true,
+        message: 'Form field removed successfully'
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error removing form field: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
-  // Steps endpoints
-  @Post(':id/steps')
-  addStep(
-    @Param('id') processTypeId: string,
+  // ==================== STEPS ENDPOINTS ====================
+
+  @Post(':processTypeId/steps')
+  @HttpCode(HttpStatus.CREATED)
+  async addStep(
+    @Param('processTypeId') processTypeId: string,
     @Body() createStepDto: CreateStepDto
-  ): Promise<Step> {
-    return this.processTypesService.addStep(processTypeId, createStepDto);
+  ): Promise<any> {
+    this.logger.log(`POST /process-types/${processTypeId}/steps - Adding step: ${createStepDto.name}`);
+    
+    try {
+      const result = await this.processTypesService.addStep(processTypeId, createStepDto);
+      this.logger.log(`✅ Step added: ${result.name} (Order: ${result.order})`);
+      return {
+        success: true,
+        data: result,
+        message: 'Step added successfully'
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error adding step: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
-  @Put('steps/:stepId')
-  updateStep(
+  @Patch('steps/:stepId')
+  async updateStep(
     @Param('stepId') stepId: string,
     @Body() updateStepDto: Partial<CreateStepDto>
-  ): Promise<Step> {
-    return this.processTypesService.updateStep(stepId, updateStepDto);
+  ): Promise<any> {
+    this.logger.log(`PATCH /process-types/steps/${stepId} - Updating step`);
+    
+    try {
+      const result = await this.processTypesService.updateStep(stepId, updateStepDto);
+      this.logger.log(`✅ Step updated: ${result.name}`);
+      return {
+        success: true,
+        data: result,
+        message: 'Step updated successfully'
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error updating step: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   @Delete('steps/:stepId')
-  removeStep(@Param('stepId') stepId: string): Promise<void> {
-    return this.processTypesService.removeStep(stepId);
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeStep(@Param('stepId') stepId: string) {
+    this.logger.log(`DELETE /process-types/steps/${stepId} - Removing step`);
+    
+    try {
+      await this.processTypesService.removeStep(stepId);
+      this.logger.log(`✅ Step removed: ${stepId}`);
+      return {
+        success: true,
+        message: 'Step removed successfully'
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error removing step: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+
+
+  @Get('debug/health')
+  getHealth() {
+    this.logger.log('GET /process-types/debug/health - Health check');
+    return {
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      service: 'ProcessTypesController',
+      message: 'Service is running'
+    };
+  }
+
+  @Get('debug/routes')
+  getRoutes() {
+    this.logger.log('GET /process-types/debug/routes - Listing available routes');
+    return {
+      routes: [
+        'GET /process-types?companyId=xxx - List all process types',
+        'GET /process-types/:id - Get single process type',
+        'POST /process-types - Create new process type',
+        'PATCH /process-types/:id - Update process type (with versioning)',
+        'DELETE /process-types/:id - Delete process type',
+        'POST /process-types/:processTypeId/form-fields - Add form field',
+        'PATCH /process-types/form-fields/:fieldId - Update form field',
+        'DELETE /process-types/form-fields/:fieldId - Delete form field',
+        'POST /process-types/:processTypeId/steps - Add step',
+        'PATCH /process-types/steps/:stepId - Update step',
+        'DELETE /process-types/steps/:stepId - Delete step',
+        'GET /process-types/debug/health - Health check',
+        'GET /process-types/debug/routes - This endpoint'
+      ],
+      timestamp: new Date().toISOString()
+    };
   }
 }

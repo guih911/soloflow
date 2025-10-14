@@ -8,7 +8,14 @@ async function main() {
 
   // 1. Limpar dados existentes em ordem de dependência
   console.log('Cleaning existing data...');
-  await prisma.attachment.deleteMany({});
+  
+  // Deletar apenas as tabelas que existem
+  try {
+    await prisma.attachment.deleteMany({});
+  } catch (e) {
+    console.log('Attachment table does not exist yet, skipping...');
+  }
+  
   await prisma.stepExecution.deleteMany({});
   await prisma.processInstance.deleteMany({});
   await prisma.stepAssignment.deleteMany({});
@@ -24,12 +31,12 @@ async function main() {
   // 2. Criar Entidades Fundamentais
   console.log('Creating core entities...');
 
-  // Criar a Empresa (ONG)
-  const ong = await prisma.company.create({
+  // Criar a Empresa (Soloflow)
+  const soloflow = await prisma.company.create({
     data: {
-      name: 'ONG Bem Maior',
+      name: 'Soloflow',
       cnpj: '11.222.333/0001-44',
-      email: 'contato@ongbemmaior.org',
+      email: 'contato@soloflow.com.br',
       phone: '(62) 3222-4444',
       isActive: true,
     },
@@ -37,19 +44,19 @@ async function main() {
 
   // Criar Setores
   const financeiro = await prisma.sector.create({
-    data: { name: 'Financeiro', companyId: ong.id },
+    data: { name: 'Financeiro', companyId: soloflow.id },
   });
   const diretoria = await prisma.sector.create({
-    data: { name: 'Diretoria', companyId: ong.id },
+    data: { name: 'Diretoria', companyId: soloflow.id },
   });
   const juridico = await prisma.sector.create({
-    data: { name: 'Jurídico', companyId: ong.id },
+    data: { name: 'Jurídico', companyId: soloflow.id },
   });
   const compras = await prisma.sector.create({
-    data: { name: 'Compras', companyId: ong.id },
+    data: { name: 'Compras', companyId: soloflow.id },
   });
   const equipe = await prisma.sector.create({
-    data: { name: 'Equipe Geral', companyId: ong.id },
+    data: { name: 'Equipe Geral', companyId: soloflow.id },
   });
 
   // Criar Usuários com diferentes papéis
@@ -57,35 +64,35 @@ async function main() {
   const admin = await prisma.user.create({
     data: {
       name: 'Admin do Sistema',
-      email: 'admin@ong.org',
+      email: 'admin@soloflow.com.br',
       password: hashedPassword,
     },
   });
   const diretor = await prisma.user.create({
-    data: { name: 'Carlos Diretor', email: 'diretor@ong.org', password: hashedPassword },
+    data: { name: 'Carlos Diretor', email: 'diretor@soloflow.com.br', password: hashedPassword },
   });
   const gestorFinanceiro = await prisma.user.create({
-    data: { name: 'Ana Financeiro', email: 'financeiro@ong.org', password: hashedPassword },
+    data: { name: 'Ana Financeiro', email: 'financeiro@soloflow.com.br', password: hashedPassword },
   });
   const advogado = await prisma.user.create({
-    data: { name: 'João Jurídico', email: 'juridico@ong.org', password: hashedPassword },
+    data: { name: 'João Jurídico', email: 'juridico@soloflow.com.br', password: hashedPassword },
   });
   const comprador = await prisma.user.create({
-    data: { name: 'Maria Compras', email: 'compras@ong.org', password: hashedPassword },
+    data: { name: 'Maria Compras', email: 'compras@soloflow.com.br', password: hashedPassword },
   });
   const membroEquipe = await prisma.user.create({
-    data: { name: 'Pedro Equipe', email: 'equipe@ong.org', password: hashedPassword },
+    data: { name: 'Pedro Equipe', email: 'equipe@soloflow.com.br', password: hashedPassword },
   });
 
   // Associar Usuários à Empresa e Setores
   await prisma.userCompany.createMany({
     data: [
-      { userId: admin.id, companyId: ong.id, role: UserRole.ADMIN },
-      { userId: diretor.id, companyId: ong.id, role: UserRole.ADMIN, sectorId: diretoria.id },
-      { userId: gestorFinanceiro.id, companyId: ong.id, role: UserRole.USER, sectorId: financeiro.id },
-      { userId: advogado.id, companyId: ong.id, role: UserRole.USER, sectorId: juridico.id },
-      { userId: comprador.id, companyId: ong.id, role: UserRole.USER, sectorId: compras.id },
-      { userId: membroEquipe.id, companyId: ong.id, role: UserRole.USER, sectorId: equipe.id },
+      { userId: admin.id, companyId: soloflow.id, role: UserRole.ADMIN },
+      { userId: diretor.id, companyId: soloflow.id, role: UserRole.ADMIN, sectorId: diretoria.id },
+      { userId: gestorFinanceiro.id, companyId: soloflow.id, role: UserRole.USER, sectorId: financeiro.id },
+      { userId: advogado.id, companyId: soloflow.id, role: UserRole.USER, sectorId: juridico.id },
+      { userId: comprador.id, companyId: soloflow.id, role: UserRole.USER, sectorId: compras.id },
+      { userId: membroEquipe.id, companyId: soloflow.id, role: UserRole.USER, sectorId: equipe.id },
     ],
   });
   
@@ -98,7 +105,7 @@ async function main() {
     data: {
       name: 'Pagamento de Fornecedor',
       description: 'Fluxo para solicitar, aprovar e realizar pagamentos de notas fiscais de fornecedores e terceiros.',
-      companyId: ong.id,
+      companyId: soloflow.id,
       versions: {
         create: {
           version: 1,
@@ -165,7 +172,7 @@ async function main() {
       data: {
           name: 'Contratação de Novo Serviço',
           description: 'Fluxo para requisitar, cotar, aprovar e formalizar a contratação de novos serviços.',
-          companyId: ong.id,
+          companyId: soloflow.id,
           versions: {
               create: {
                   version: 1,
@@ -200,7 +207,7 @@ async function main() {
       data: {
           name: 'Distrato de Contrato',
           description: 'Fluxo para solicitar e formalizar o encerramento de um contrato de serviço existente.',
-          companyId: ong.id,
+          companyId: soloflow.id,
           versions: {
               create: {
                   version: 1,
@@ -250,7 +257,7 @@ async function main() {
               },
               processTypeVersionId: pagamentosVersion.id,
               createdById: membroEquipe.id,
-              companyId: ong.id,
+              companyId: soloflow.id,
           }
       });
 
@@ -291,9 +298,9 @@ async function main() {
   console.log('Seed completed successfully!');
   console.log('---');
   console.log('Login details:');
-  console.log(`- Admin: admin@ong.org / 123456`);
-  console.log(`- Diretor: diretor@ong.org / 123456`);
-  console.log(`- Financeiro: financeiro@ong.org / 123456`);
+  console.log(`- Admin: admin@soloflow.com.br / 123456`);
+  console.log(`- Diretor: diretor@soloflow.com.br / 123456`);
+  console.log(`- Financeiro: financeiro@soloflow.com.br / 123456`);
   console.log('---');
 }
 
