@@ -4,7 +4,7 @@
       <div>
         <h1 class="text-h4 font-weight-bold">Meus Processos</h1>
         <p class="text-subtitle-1 text-medium-emphasis">
-          Processos que vocÍ criou ou nos quais est· participando.
+          Processos que voc√™ criou ou nos quais est√° participando.
         </p>
       </div>
       <v-btn color="primary" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="loadData">
@@ -59,8 +59,10 @@
           <v-col cols="12">
             <v-switch
               v-model="filters.onlyPending"
-              label="Mostrar apenas processos com aÁ„o pendente"
+              label="Mostrar apenas processos com a√ß√£o pendente"
+              color="primary"
               hide-details
+              class="mt-2"
             />
           </v-col>
         </v-row>
@@ -74,7 +76,8 @@
       item-key="id"
       class="elevation-2"
       :items-per-page="10"
-      :no-data-text="filtersActive ? 'Nenhum processo encontrado com os filtros selecionados.' : 'Nenhum processo disponÌvel.'"
+      density="comfortable"
+      :no-data-text="filtersActive ? 'Nenhum processo encontrado com os filtros selecionados.' : 'Nenhum processo dispon√≠vel.'"
     >
       <template #item.status="{ value }">
         <v-chip size="small" :color="getStatusColor(value)" variant="tonal">
@@ -108,7 +111,7 @@
             <v-icon start size="14">{{ task.requiresSignature ? 'mdi-draw-pen' : 'mdi-play' }}</v-icon>
             {{ task.name }}
           </v-chip>
-          <span v-if="value.length === 0" class="text-caption text-medium-emphasis">Nenhuma aÁ„o pendente</span>
+          <span v-if="value.length === 0" class="text-caption text-medium-emphasis">Nenhuma a√ß√£o pendente</span>
         </div>
       </template>
 
@@ -116,20 +119,10 @@
       <template #item.lastActivityAt="{ value }">{{ formatDate(value) }}</template>
 
       <template #item.actions="{ item }">
-        <div class="d-flex align-center gap-2">
-          <v-btn size="small" variant="text" @click="viewProcess(item)">
+        <div class="d-flex align-center justify-center">
+          <v-btn size="small" variant="outlined" color="primary" @click="viewProcess(item)">
             <v-icon start size="16">mdi-eye</v-icon>
             Detalhes
-          </v-btn>
-          <v-btn
-            v-if="item.pendingTasks.length > 0 && item.involvement.includes('Executor')"
-            size="small"
-            color="primary"
-            variant="tonal"
-            @click="continueProcess(item)"
-          >
-            <v-icon start size="16">mdi-play</v-icon>
-            Continuar
           </v-btn>
         </div>
       </template>
@@ -168,7 +161,7 @@ const filters = ref({
 
 const statusOptions = [
   { title: 'Em andamento', value: 'IN_PROGRESS' },
-  { title: 'ConcluÌdo', value: 'COMPLETED' },
+  { title: 'Conclu√≠do', value: 'COMPLETED' },
   { title: 'Rejeitado', value: 'REJECTED' },
   { title: 'Cancelado', value: 'CANCELLED' },
 ]
@@ -179,15 +172,15 @@ const roleOptions = [
 ]
 
 const headers = [
-  { title: 'CÛdigo', key: 'code', width: '120px' },
-  { title: 'TÌtulo', key: 'title', minWidth: '220px' },
-  { title: 'Tipo', key: 'processType', minWidth: '160px' },
-  { title: 'Status', key: 'status', width: '140px', align: 'center' },
-  { title: 'Meu Papel', key: 'involvement', minWidth: '160px', sortable: false },
-  { title: 'AÁıes Pendentes', key: 'pendingTasks', minWidth: '180px', sortable: false },
-  { title: 'Iniciado em', key: 'createdAt', width: '160px' },
-  { title: '⁄ltima Atividade', key: 'lastActivityAt', width: '170px' },
-  { title: 'AÁıes', key: 'actions', width: '160px', sortable: false },
+  { title: 'C√≥digo', key: 'code', width: '120px', align: 'start' },
+  { title: 'T√≠tulo', key: 'title', width: '280px', align: 'start' },
+  { title: 'Tipo', key: 'processType', width: '220px', align: 'start' },
+  { title: 'Status', key: 'status', width: '150px', align: 'center' },
+  { title: 'Meu Papel', key: 'involvement', width: '140px', align: 'center', sortable: false },
+  { title: 'A√ß√µes Pendentes', key: 'pendingTasks', width: '200px', align: 'start', sortable: false },
+  { title: 'Iniciado em', key: 'createdAt', width: '150px', align: 'center' },
+  { title: '√öltima Atividade', key: 'lastActivityAt', width: '150px', align: 'center' },
+  { title: 'A√ß√µes', key: 'actions', width: '220px', align: 'center', sortable: false },
 ]
 
 const filtersActive = computed(() => {
@@ -249,17 +242,17 @@ const summaryCards = computed(() => {
       color: 'warning',
     },
     {
-      title: 'ConcluÌdos',
+      title: 'Conclu√≠dos',
       value: totalCompleted,
       icon: 'mdi-check-circle',
       color: 'success',
-      subtitle: totalCompleted > 0 ? 'Bom trabalho!' : 'Nenhum processo concluÌdo ainda',
+      subtitle: totalCompleted > 0 ? 'Bom trabalho!' : 'Nenhum processo conclu√≠do ainda',
     },
   ]
 })
 
 function formatDate(date) {
-  return date ? dayjs(date).format('DD/MM/YYYY HH:mm') : 'ó'
+  return date ? dayjs(date).format('DD/MM/YYYY HH:mm') : '-'
 }
 
 function getStatusColor(status) {
@@ -274,7 +267,7 @@ function getStatusColor(status) {
 function getStatusLabel(status) {
   return {
     IN_PROGRESS: 'Em andamento',
-    COMPLETED: 'ConcluÌdo',
+    COMPLETED: 'Conclu√≠do',
     REJECTED: 'Rejeitado',
     CANCELLED: 'Cancelado',
   }[status] || status
@@ -304,11 +297,11 @@ function normalizeProcesses() {
 
       map.set(process.id, {
         id: process.id,
-        code: process.code || 'ó',
+        code: process.code || '-',
         title: process.title || processTypeName,
         processType: processTypeName,
         status: process.status || 'IN_PROGRESS',
-        createdBy: process.createdBy?.name || 'N„o informado',
+        createdBy: process.createdBy?.name || 'N√£o informado',
         createdAt: process.createdAt || null,
         lastActivityAt: process.updatedAt || process.completedAt || process.createdAt || null,
         involvement: new Set(),
@@ -356,7 +349,7 @@ async function loadData() {
       processStore.fetchMyCreatedProcesses(),
     ])
   } catch (error) {
-    console.error('Erro ao carregar processos do usu·rio:', error)
+    console.error('Erro ao carregar processos do usu√°rio:', error)
   } finally {
     normalizeProcesses()
     loading.value = false
@@ -395,5 +388,35 @@ watch(
 
 .gap-2 {
   gap: 8px;
+}
+
+/* Melhorias na tabela */
+:deep(.v-data-table) {
+  border-radius: 8px;
+}
+
+:deep(.v-data-table th) {
+  font-weight: 600 !important;
+  background-color: rgb(var(--v-theme-surface-light)) !important;
+  white-space: nowrap;
+}
+
+:deep(.v-data-table td) {
+  padding: 12px 16px !important;
+  vertical-align: middle !important;
+}
+
+:deep(.v-data-table .v-data-table__tr:hover) {
+  background-color: rgba(var(--v-theme-primary), 0.04) !important;
+}
+
+
+:deep(.v-chip) {
+  font-weight: 500;
+}
+
+
+:deep(.v-switch .v-selection-control__wrapper) {
+  height: 24px;
 }
 </style>

@@ -561,7 +561,7 @@ function goToSignatures() {
 }
 
 function goToMyProcesses() {
-  router.push('/processes/my')
+  router.push({ name: 'MyProcesses' })
 }
 
 function openTask(task) {

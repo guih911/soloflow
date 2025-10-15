@@ -256,6 +256,23 @@
             </template>
           </v-tooltip>
 
+          <!-- Meus Processos -->
+          <v-tooltip :disabled="drawer" location="right" text="Meus Processos" content-class="nav-tooltip" open-delay="120">
+            <template #activator="{ props }">
+              <v-list-item 
+                v-bind="props"
+                :to="{ name: 'MyProcesses' }"
+                class="nav-item"
+                rounded="xl"
+              >
+                <template v-slot:prepend>
+                  <v-icon size="20">mdi-folder-account</v-icon>
+                </template>
+                <v-list-item-title>Meus Processos</v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-tooltip>
+
           <!-- Assinaturas Pendentes -->
           <v-tooltip :disabled="drawer" location="right" text="Assinaturas" content-class="nav-tooltip" open-delay="120">
             <template #activator="{ props }">
