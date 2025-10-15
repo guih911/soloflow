@@ -31,6 +31,7 @@ import CreateProcess from '@/views/processes/CreateProcess.vue' // ✅ ADICIONAD
 import ProcessDetail from '@/views/processes/ProcessDetail.vue'
 import StepExecution from '@/views/processes/StepExecution.vue'
 import ManageProcesses from '@/views/processes/ManageProcesses.vue'
+import MyProcesses from '@/views/processes/MyProcesses.vue'
 
 // Views - Tasks
 import MyTasks from '@/views/tasks/MyTasks.vue'
@@ -184,6 +185,17 @@ const routes = [
           title: 'Gerenciar Processos',
           description: 'Acompanhar todos os processos da empresa'
         },
+      },
+
+      // MEUS PROCESSOS
+      {
+        path: '/my-processes',
+        name: 'MyProcesses',
+        component: MyProcesses,
+        meta: {
+          title: 'Meus Processos',
+          description: 'Processos que você criou ou participa'
+        }
       },
 
       // MINHAS TAREFAS
