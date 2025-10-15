@@ -582,46 +582,38 @@ async function refreshTasks() {
   }
 }
 
+function extractProcessesFromTasks() {
+  if (!myTasks.value?.length || !user.value?.id) {
+    return []
+  }
+
+  const seen = new Set()
+  return myTasks.value
+    .map(task => task.processInstance)
+    .filter(process => {
+      if (!process?.id || process.createdBy?.id !== user.value.id) {
+        return false
+      }
+      if (seen.has(process.id)) {
+        return false
+      }
+      seen.add(process.id)
+      return true
+    })
+}
+
 async function loadMyProcesses() {
   loadingMyProcesses.value = true
   try {
-    // ✅ USANDO ENDPOINT CORRETO DO SEU BACKEND
-    const response = await fetch('/api/processes/my/created', {
-      headers: {
-        'Authorization': `Bearer ${authStore.token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      myRecentProcesses.value = data
-    } else {
-      // ✅ FALLBACK: Extrair processos únicos das tarefas do usuário
-      if (myTasks.value && myTasks.value.length > 0) {
-        const processesFromTasks = myTasks.value.map(task => task.processInstance)
-        const uniqueProcesses = processesFromTasks.filter((process, index, self) => 
-          self.findIndex(p => p.id === process.id) === index
-        ).filter(process => process.createdBy?.id === user.value?.id)
-        
-        myRecentProcesses.value = uniqueProcesses
-      } else {
-        myRecentProcesses.value = []
-      }
-    }
+    const data = await processStore.fetchMyCreatedProcesses()
+    myRecentProcesses.value = Array.isArray(data) ? data : []
   } catch (error) {
-    // Fallback: extrair de tarefas existentes
-    if (myTasks.value && myTasks.value.length > 0) {
-      const processesFromTasks = myTasks.value.map(task => task.processInstance)
-      const uniqueProcesses = processesFromTasks.filter((process, index, self) => 
-        self.findIndex(p => p.id === process.id) === index
-      ).filter(process => process.createdBy?.id === user.value?.id)
-      
-      myRecentProcesses.value = uniqueProcesses
-    } else {
-      myRecentProcesses.value = []
-    }
+    console.error('Failed to load processes created by user for dashboard', error)
+    myRecentProcesses.value = extractProcessesFromTasks()
   } finally {
+    if (!myRecentProcesses.value.length) {
+      myRecentProcesses.value = extractProcessesFromTasks()
+    }
     loadingMyProcesses.value = false
   }
 }
@@ -638,6 +630,15 @@ async function loadDashboardData() {
 onMounted(() => {
   loadDashboardData()
 })
+
+watch(
+  () => activeCompany.value?.companyId,
+  (newCompanyId, oldCompanyId) => {
+    if (newCompanyId && newCompanyId !== oldCompanyId) {
+      loadDashboardData()
+    }
+  }
+)
 </script>
 
 <style scoped>
