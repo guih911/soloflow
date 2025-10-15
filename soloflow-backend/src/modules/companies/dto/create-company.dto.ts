@@ -6,8 +6,8 @@ export class CreateCompanyDto {
   name: string;
 
   @IsString()
-  @Matches(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/, {
-    message: 'CNPJ deve estar no formato XX.XXX.XXX/XXXX-XX',
+  @Matches(/^(?:\d{14}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})$/, {
+    message: 'CNPJ deve conter 14 dígitos (com ou sem formatação)',
   })
   cnpj: string;
 
@@ -17,8 +17,8 @@ export class CreateCompanyDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\(\d{2}\) \d{4,5}-\d{4}$/, {
-    message: 'Telefone deve estar no formato (XX) XXXXX-XXXX',
+  @Matches(/^(?:\d{10,11}|\(\d{2}\) \d{4,5}-\d{4})$/, {
+    message: 'Telefone deve conter 10 ou 11 dígitos (com ou sem formatação)',
   })
   phone?: string;
 }

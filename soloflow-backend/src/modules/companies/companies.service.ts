@@ -8,17 +8,28 @@ import { Company } from '@prisma/client';
 export class CompaniesService {
   constructor(private prisma: PrismaService) {}
 
+  private sanitizeDigits(value?: string | null): string | null {
+    if (!value) return null;
+    const digits = value.replace(/\D/g, '');
+    return digits.length ? digits : null;
+  }
+
   async create(createCompanyDto: CreateCompanyDto): Promise<Company> {
-    // Verificar se já existe empresa com mesmo CNPJ
+    const sanitizedCnpj = this.sanitizeDigits(createCompanyDto.cnpj);
+    const sanitizedPhone = this.sanitizeDigits(createCompanyDto.phone);
+
+    if (!sanitizedCnpj || sanitizedCnpj.length !== 14) {
+      throw new ConflictException('CNPJ deve conter 14 dígitos válidos');
+    }
+
     const existingCompany = await this.prisma.company.findUnique({
-      where: { cnpj: createCompanyDto.cnpj },
+      where: { cnpj: sanitizedCnpj },
     });
 
     if (existingCompany) {
       throw new ConflictException('Empresa com este CNPJ já existe');
     }
 
-    // Verificar se já existe empresa com mesmo nome
     const existingName = await this.prisma.company.findUnique({
       where: { name: createCompanyDto.name },
     });
@@ -28,7 +39,11 @@ export class CompaniesService {
     }
 
     return this.prisma.company.create({
-      data: createCompanyDto,
+      data: {
+        ...createCompanyDto,
+        cnpj: sanitizedCnpj,
+        phone: sanitizedPhone,
+      },
     });
   }
 
@@ -40,46 +55,51 @@ export class CompaniesService {
   }
 
   async findOne(id: string): Promise<Company & { users: any[] }> {
-  const company = await this.prisma.company.findUnique({
-    where: { id },
-    include: {
-      userCompanies: {
-        where: { user: { isActive: true } },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
+    const company = await this.prisma.company.findUnique({
+      where: { id },
+      include: {
+        userCompanies: {
+          where: { user: { isActive: true } },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  if (!company) {
-    throw new NotFoundException('Empresa não encontrada');
+    if (!company) {
+      throw new NotFoundException('Empresa não encontrada');
+    }
+
+    const users = company.userCompanies.map((uc) => uc.user);
+
+    return {
+      ...company,
+      users,
+    };
   }
 
-  // Para manter a compatibilidade e retornar users diretamente
-  const users = company.userCompanies.map(uc => uc.user);
-
-  return {
-    ...company,
-    users,
-  };
-}
-
   async update(id: string, updateCompanyDto: UpdateCompanyDto): Promise<Company> {
-    await this.findOne(id); // Verifica se existe
+    await this.findOne(id);
 
-    // Se está atualizando CNPJ, verificar duplicidade
-    if (updateCompanyDto.cnpj) {
+    const sanitizedCnpj = this.sanitizeDigits(updateCompanyDto.cnpj);
+    const sanitizedPhone = this.sanitizeDigits(updateCompanyDto.phone);
+
+    if (sanitizedCnpj && sanitizedCnpj.length !== 14) {
+      throw new ConflictException('CNPJ deve conter 14 dígitos válidos');
+    }
+
+    if (sanitizedCnpj) {
       const existing = await this.prisma.company.findFirst({
         where: {
-          cnpj: updateCompanyDto.cnpj,
+          cnpj: sanitizedCnpj,
           NOT: { id },
         },
       });
@@ -89,7 +109,6 @@ export class CompaniesService {
       }
     }
 
-    // Se está atualizando nome, verificar duplicidade
     if (updateCompanyDto.name) {
       const existing = await this.prisma.company.findFirst({
         where: {
@@ -105,14 +124,17 @@ export class CompaniesService {
 
     return this.prisma.company.update({
       where: { id },
-      data: updateCompanyDto,
+      data: {
+        ...updateCompanyDto,
+        ...(sanitizedCnpj ? { cnpj: sanitizedCnpj } : {}),
+        ...(updateCompanyDto.phone !== undefined ? { phone: sanitizedPhone } : {}),
+      },
     });
   }
 
   async remove(id: string): Promise<Company> {
     await this.findOne(id);
 
-    // Soft delete - apenas marca como inativo
     return this.prisma.company.update({
       where: { id },
       data: { isActive: false },
