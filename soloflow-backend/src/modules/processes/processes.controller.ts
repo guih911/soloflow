@@ -20,6 +20,7 @@ import { UploadResponse } from './processes.service';
 import { CreateProcessInstanceDto } from './dto/create-process-instance.dto';
 import { ExecuteStepDto } from './dto/execute-step.dto';
 import { UploadAttachmentDto, ProcessFileUploadDto } from './dto/upload-attachment.dto';
+import { CancelProcessDto } from './dto/cancel-process.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { multerConfig } from '../../config/multer.config';
 
@@ -138,6 +139,15 @@ export class ProcessesController {
   @Get(':id')
   findOne(@Param('id') id: string, @Request() req) {
     return this.processesService.findOne(id, req.user.id);
+  }
+
+  @Post(':id/cancel')
+  async cancelProcess(
+    @Param('id') id: string,
+    @Body() cancelDto: CancelProcessDto,
+    @Request() req,
+  ) {
+    return this.processesService.cancelProcess(id, req.user, cancelDto.reason);
   }
 
   // Buscar tarefas do usuário logado

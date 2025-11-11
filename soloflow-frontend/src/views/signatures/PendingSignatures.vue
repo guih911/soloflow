@@ -343,6 +343,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
+import { useAuthStore } from '@/stores/auth'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/pt-br'
@@ -361,6 +362,7 @@ const signatureDialog = ref(false)
 const selectedTask = ref(null)
 const password = ref('')
 const signing = ref(false)
+const authStore = useAuthStore()
 const signingTasks = ref([])
 
 // Estado de paginação
@@ -373,9 +375,14 @@ const loading = computed(() => processStore.loading)
 const pendingTasks = computed(() => processStore.myTasks)
 
 const filteredTasks = computed(() => {
-  let tasks = pendingTasks.value.filter(task => 
-    task.step.requiresSignature && task.status === 'IN_PROGRESS'
-  )
+  // Filtrar tarefas que tenham anexos PDF não assinados
+  // Não depende do flag requiresSignature ou status - se veio em myTasks, é porque tem requisito pendente
+  let tasks = pendingTasks.value.filter(task => {
+    const hasPdfAttachments = task.attachments && task.attachments.some(att =>
+      att.mimeType === 'application/pdf' && !att.isSigned
+    )
+    return hasPdfAttachments
+  })
 
   // Filtro de busca
   if (search.value) {
@@ -527,6 +534,12 @@ async function refreshData() {
 }
 
 function openSignatureDialog(task) {
+  console.log('📋 Opening signature dialog for task:', task)
+  console.log('   Full task object keys:', Object.keys(task))
+  console.log('   Task ID:', task.id)
+  console.log('   StepExecutionId?:', task.stepExecutionId)
+  console.log('   ExecutionId?:', task.executionId)
+  console.log('   Step:', task.step)
   selectedTask.value = task
   password.value = ''
   signatureDialog.value = true
@@ -541,9 +554,80 @@ function closeSignatureDialog() {
 async function proceedToFullSignature() {
   if (!selectedTask.value || !password.value) return
 
-  // Ir para a página de execução da etapa onde pode assinar
-  router.push(`/processes/${selectedTask.value.processInstance.id}/execute/${selectedTask.value.id}`)
-  closeSignatureDialog()
+  signing.value = true
+
+  try {
+    const documentsToSign = getDocumentsToSign(selectedTask.value)
+
+    if (documentsToSign.length === 0) {
+      window.showSnackbar?.('Nenhum documento para assinar', 'warning')
+      return
+    }
+
+    console.log('Assinando documentos:', documentsToSign)
+
+    // Importar o store de assinaturas
+    const { useSignaturesStore } = await import('@/stores/signatures')
+    const signaturesStore = useSignaturesStore()
+
+    // Garantir que o usuário atual está configurado como assinante desta etapa
+    try {
+      const stepVersionId = selectedTask.value.step?.id || selectedTask.value.stepVersion?.id
+      if (!stepVersionId) {
+        console.warn('Step version ID não encontrado no task para checagem de requisitos de assinatura')
+      } else {
+        const requirements = await signaturesStore.fetchSignatureRequirements(stepVersionId)
+        const myRequirements = Array.isArray(requirements)
+          ? requirements.filter(r => r.userId === authStore.user?.id)
+          : []
+
+        if (myRequirements.length === 0) {
+          window.showSnackbar?.('Você não está configurado como assinante para estes documentos.', 'warning')
+          return
+        }
+      }
+    } catch (e) {
+      console.warn('Não foi possível validar requisitos de assinatura antes de prosseguir:', e)
+      // Prossegue mesmo assim; backend ainda validará permissões
+    }
+
+    // Assinar cada documento
+    for (const doc of documentsToSign) {
+      try {
+        const signatureData = {
+          attachmentId: doc.id,
+          stepExecutionId: selectedTask.value.stepExecutionId || selectedTask.value.id,
+          userPassword: password.value,
+          reason: 'Assinatura via Assinaturas Pendentes',
+          location: 'Sistema SoloFlow',
+          contactInfo: null,
+        }
+
+        console.log('Signing document:', doc.originalName, signatureData)
+
+        await signaturesStore.signDocument(signatureData)
+
+        window.showSnackbar?.(`Documento "${doc.originalName}" assinado com sucesso!`, 'success')
+      } catch (error) {
+        console.error('Error signing document:', doc.originalName, error)
+        throw error
+      }
+    }
+
+    // Atualizar lista de tarefas
+    await refreshData()
+    closeSignatureDialog()
+
+    window.showSnackbar?.('Todos os documentos foram assinados!', 'success')
+  } catch (error) {
+    console.error('Erro ao assinar documentos:', error)
+    window.showSnackbar?.(
+      error.response?.data?.message || error.message || 'Erro ao assinar documentos. Verifique sua senha.',
+      'error'
+    )
+  } finally {
+    signing.value = false
+  }
 }
 
 function viewProcess(task) {

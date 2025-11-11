@@ -178,6 +178,26 @@
                 </v-col>
               </v-row>
 
+              <v-row>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model="formData.cpf"
+                    label="CPF (Necessário para assinatura digital)"
+                    hint="Digite o CPF sem pontos e traços"
+                    persistent-hint
+                    v-mask="'###.###.###-##'"
+                    prepend-icon="mdi-card-account-details"
+                    clearable
+                  >
+                    <template v-slot:append-inner>
+                      <v-icon v-if="formData.cpf && formData.cpf.length === 14" color="success">
+                        mdi-check-circle
+                      </v-icon>
+                    </template>
+                  </v-text-field>
+                </v-col>
+              </v-row>
+
               <v-row v-if="!editingItem?.id">
                 <v-col cols="12" md="6">
                   <v-text-field
@@ -294,14 +314,30 @@
                         <v-select
                           v-model="company.role"
                           :items="getAvailableRoles()"
-                          label="Perfil *"
-                          :rules="[v => !!v || 'Perfil é obrigatório']"
+                          label="Papel do sistema *"
+                          :rules="[v => !!v || 'Papel do sistema é obrigatório']"
                           required
-                          prepend-icon="mdi-shield-account"
+                          prepend-icon="mdi-account-lock-outline"
                           variant="outlined"
                           density="comfortable"
                         />
+                        <v-select
+                          class="mt-4"
+                          v-model="company.profileId"
+                          :items="getProfilesForCompany(company.companyId)"
+                          item-title="name"
+                          item-value="id"
+                          label="Perfil de acesso *"
+                          :rules="[v => !!v || 'Perfil de acesso é obrigatório']"
+                          :disabled="!company.companyId || !getProfilesForCompany(company.companyId).length"
+                          prepend-icon="mdi-badge-account"
+                          variant="outlined"
+                          density="comfortable"
+                          :hint="!company.companyId ? 'Selecione uma empresa primeiro' : (!getProfilesForCompany(company.companyId).length ? 'Cadastre um perfil antes de continuar' : '')"
+                          persistent-hint
+                        />
                       </v-col>
+
 
                       <v-col cols="12" md="6">
                         <v-select
@@ -343,16 +379,34 @@
                       class="mt-3"
                     >
                       <div class="text-caption">
-                        <strong>{{ getCompanyName(company.companyId) }}</strong>
-                        • {{ getRoleText(company.role) }}
-                        <span v-if="company.sectorId">
-                          • {{ getSectorName(company.sectorId) }}
-                        </span>
-                        <span v-if="company.isDefault" class="text-warning">
-                          • Empresa Padrão
-                        </span>
+                        <div>
+                          <strong>{{ getCompanyName(company.companyId) }}</strong>
+                          • {{ getRoleText(company.role) }}
+                          <span v-if="company.sectorId">
+                            • {{ getSectorName(company.sectorId) }}
+                          </span>
+                          <span v-if="company.isDefault" class="text-warning">
+                            • Empresa padrão
+                          </span>
+                        </div>
+                        <div v-if="company.profileId" class="mt-1">
+                          <span class="font-weight-medium">Perfil de acesso:</span>
+                          {{ getProfileName(company.profileId) }}
+                        </div>
+                        <ul
+                          v-if="company.profileId"
+                          class="mt-2 mb-0 ps-4 text-caption"
+                        >
+                          <li
+                            v-for="summary in getProfileCapabilitySummary(company.profileId)"
+                            :key="summary"
+                          >
+                            {{ summary }}
+                          </li>
+                        </ul>
                       </div>
                     </v-alert>
+
                   </v-card-text>
                 </v-card>
               </div>
@@ -460,16 +514,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/users'
 import { useCompanyStore } from '@/stores/company'
 import { useSectorStore } from '@/stores/sectors'
+import { useProfileStore } from '@/stores/profiles'
 
 const authStore = useAuthStore()
 const userStore = useUserStore()
 const companyStore = useCompanyStore()
 const sectorStore = useSectorStore()
+const profileStore = useProfileStore()
 
 // Estado
 const dialog = ref(false)
@@ -486,6 +542,7 @@ const formData = ref({
   name: '',
   email: '',
   password: '',
+  cpf: '',
   companies: [],
   isActive: true
 })
@@ -493,6 +550,16 @@ const formData = ref({
 // Computed
 const loading = computed(() => userStore.loading)
 const users = computed(() => userStore.users)
+const profiles = computed(() => profileStore.profiles || [])
+const profileMap = computed(() => {
+  const map = new Map()
+  ;(profiles.value || []).forEach((profile) => {
+    if (profile?.id) {
+      map.set(profile.id, profile)
+    }
+  })
+  return map
+})
 const availableCompanies = computed(() => {
   if (authStore.isAdmin) {
     return companyStore.companies || []
@@ -510,7 +577,7 @@ const canAddMoreCompanies = computed(() => {
 const canSave = computed(() => {
   return valid.value && 
          formData.value.companies.length > 0 && 
-         formData.value.companies.every(c => c.companyId && c.role) &&
+         formData.value.companies.every(c => c.companyId && c.role && c.profileId) &&
          formData.value.companies.some(c => c.isDefault)
 })
 
@@ -605,6 +672,67 @@ function getAvailableRoles() {
   return roles
 }
 
+function getProfilesForCompany(companyId) {
+  if (!companyId) return []
+  return (profiles.value || []).filter(profile => !profile.companyId || profile.companyId === companyId)
+}
+
+function getProfileName(profileId) {
+  if (!profileId) return ''
+  const profile = profileMap.value.get(profileId)
+  return profile?.name || ''
+}
+
+function findDefaultProfileForCompany(companyId) {
+  if (!companyId) return null
+  const available = getProfilesForCompany(companyId)
+  if (!available.length) return null
+
+  return (
+    available.find((profile) => profile.companyId === companyId && profile.isDefault) ||
+    available.find((profile) => !profile.companyId && profile.isDefault) ||
+    null
+  )
+}
+
+function applyDefaultProfileForCompany(index, { overwrite = false } = {}) {
+  const company = formData.value.companies[index]
+  if (!company || !company.companyId) return
+  if (company.profileId && !overwrite) return
+
+  const defaultProfile = findDefaultProfileForCompany(company.companyId)
+  if (defaultProfile) {
+    company.profileId = defaultProfile.id
+  }
+}
+
+function getProfileCapabilitySummary(profileId) {
+  const profile = profileMap.value.get(profileId)
+  if (!profile) return []
+
+  const permissions = Array.isArray(profile.processTypePermissions)
+    ? profile.processTypePermissions
+    : []
+
+  if (!permissions.length) {
+    return ['Sem regras específicas para tipos de processo']
+  }
+
+  return permissions.map((permission) => {
+    const label =
+      permission.processTypeId === '*'
+        ? 'Todos os tipos'
+        : permission.processType?.name || permission.processTypeId
+
+    const capabilities = []
+    if (permission.canView) capabilities.push('Ver')
+    if (permission.canCreate) capabilities.push('Criar')
+    if (permission.canExecute) capabilities.push('Executar')
+
+    return `${label}: ${capabilities.join(', ') || 'Sem ações'}`
+  })
+}
+
 // Métodos de gerenciamento de empresas
 function addCompany() {
   const assignedCompanyIds = formData.value.companies.map(c => c.companyId).filter(Boolean)
@@ -617,10 +745,12 @@ function addCompany() {
       companyId: availableCompanyIds[0], // Selecionar automaticamente a primeira disponível
       role: 'USER',
       sectorId: null,
+      profileId: null,
       isDefault: formData.value.companies.length === 0
     }
     
     formData.value.companies.push(newCompany)
+    applyDefaultProfileForCompany(formData.value.companies.length - 1)
   } else {
     window.showSnackbar?.('Todas as empresas disponíveis já foram adicionadas', 'warning')
   }
@@ -657,8 +787,18 @@ function onCompanyChange(index, newCompanyId) {
   // Limpar setor ao trocar empresa
   if (formData.value.companies[index]) {
     formData.value.companies[index].sectorId = null
+    formData.value.companies[index].profileId = null
   }
+  applyDefaultProfileForCompany(index, { overwrite: true })
 }
+
+watch(
+  profiles,
+  () => {
+    formData.value.companies.forEach((_, index) => applyDefaultProfileForCompany(index))
+  },
+  { deep: true },
+)
 
 // Métodos principais
 function openDialog(item = null) {
@@ -670,17 +810,20 @@ function openDialog(item = null) {
       name: item.name || '',
       email: item.email || '',
       password: '',
-      companies: item.companies && item.companies.length > 0 
+      cpf: item.cpf || '',
+      companies: item.companies && item.companies.length > 0
         ? item.companies.map(company => ({
             companyId: company.companyId,
             role: company.role,
             sectorId: company.sectorId || null,
+            profileId: company.profileId || null,
             isDefault: company.isDefault || false
           }))
         : [{
             companyId: authStore.user?.companyId || (availableCompanies.value[0]?.id || ''),
             role: item.role || 'USER',
             sectorId: item.sector?.id || null,
+            profileId: null,
             isDefault: true
           }],
       isActive: item.isActive ?? true
@@ -691,6 +834,7 @@ function openDialog(item = null) {
       name: '',
       email: '',
       password: '',
+      cpf: '',
       companies: [],
       isActive: true
     }
@@ -701,6 +845,7 @@ function openDialog(item = null) {
         companyId: availableCompanies.value[0].id,
         role: 'USER',
         sectorId: null,
+        profileId: null,
         isDefault: true
       })
     }
@@ -719,6 +864,7 @@ function closeDialog() {
     name: '',
     email: '',
     password: '',
+    cpf: '',
     companies: [],
     isActive: true
   }
@@ -737,7 +883,7 @@ async function save() {
   }
 
   // Validar se todas as empresas têm dados obrigatórios
-  const invalidCompanies = formData.value.companies.filter(c => !c.companyId || !c.role)
+  const invalidCompanies = formData.value.companies.filter(c => !c.companyId || !c.role || !c.profileId)
   if (invalidCompanies.length > 0) {
     window.showSnackbar?.('Todas as empresas devem ter empresa e perfil selecionados', 'error')
     return
@@ -751,13 +897,18 @@ async function save() {
 
   saving.value = true
   try {
+    // Limpar máscara do CPF (remover pontos e traços)
+    const cleanCpf = formData.value.cpf ? formData.value.cpf.replace(/[.-]/g, '') : null
+
     const data = {
       name: formData.value.name,
       email: formData.value.email,
+      cpf: cleanCpf, // CPF limpo, sem pontos e traços
       companies: formData.value.companies.map(company => ({
         companyId: company.companyId,
         role: company.role,
         sectorId: company.sectorId || null,
+        profileId: company.profileId,
         isDefault: company.isDefault || false
       })),
       isActive: formData.value.isActive
@@ -774,6 +925,7 @@ async function save() {
       // Atualizar usuário e empresas separadamente
       await userStore.updateUser(editingItem.value.id, {
         name: data.name,
+        cpf: data.cpf,
         isActive: data.isActive
       })
       
@@ -825,7 +977,8 @@ onMounted(async () => {
     await Promise.all([
       userStore.fetchUsers(),
       companyStore.fetchCompanies(),
-      sectorStore.fetchSectors()
+      sectorStore.fetchSectors(),
+      profileStore.fetchProfiles()
     ])
   } catch (error) {
     console.error('Error loading data:', error)

@@ -48,7 +48,7 @@ export class UsersController {
       createUserDto.companyId = req.user.companyId;
     }
 
-    return this.usersService.create(createUserDto);
+    return this.usersService.create(createUserDto, req.user.sub);
   }
 
   @Get()
@@ -98,7 +98,7 @@ export class UsersController {
       );
     }
 
-    return this.usersService.updateUserCompanies(id, updateDto);
+    return this.usersService.updateUserCompanies(id, updateDto, req.user.sub);
   }
 
   @Delete(':id')

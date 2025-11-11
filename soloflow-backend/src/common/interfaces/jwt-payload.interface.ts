@@ -3,4 +3,6 @@ export interface JwtPayload {
   email: string;
   companyId: string;
   role: string;
+  profiles?: string[];
 }
+

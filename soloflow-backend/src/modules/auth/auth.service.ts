@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
+﻿import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -6,12 +6,14 @@ import { RegisterDto } from './dto/register.dto';
 import { SwitchCompanyDto } from './dto/switch-company.dto';
 import * as bcrypt from 'bcrypt';
 import { UserRole } from '@prisma/client';
+import { ProfilesService } from '../profiles/profiles.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private profilesService: ProfilesService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -90,11 +92,18 @@ export class AuthService {
       }
     });
 
+    const resolvedPermissions = await this.profilesService.resolveUserPermissions(
+      user.id,
+      defaultCompany.companyId,
+      defaultCompany.role,
+    );
+
     const payload = {
       sub: user.id,
       email: user.email,
       companyId: defaultCompany.companyId,
       role: defaultCompany.role,
+      profiles: resolvedPermissions.profileIds,
     };
 
     return {
@@ -110,6 +119,7 @@ export class AuthService {
           role: defaultCompany.role,
           sector: defaultCompany.sector,
           isDefault: defaultCompany.isDefault,
+          profileIds: resolvedPermissions.profileIds,
         },
         companies: userWithCompanies.userCompanies.map(uc => ({
           id: uc.id,
@@ -121,6 +131,9 @@ export class AuthService {
           isDefault: uc.isDefault,
           lastAccessedAt: uc.lastAccessedAt,
         })),
+        permissions: resolvedPermissions.permissions,
+        processTypePermissions: resolvedPermissions.processTypes,
+        profileIds: resolvedPermissions.profileIds,
       },
     };
   }
@@ -181,11 +194,18 @@ export class AuthService {
       return { user: newUser, userCompany };
     });
 
+    const resolvedPermissions = await this.profilesService.resolveUserPermissions(
+      result.user.id,
+      registerDto.companyId,
+      UserRole.USER,
+    );
+
     const payload = {
       sub: result.user.id,
       email: result.user.email,
       companyId: registerDto.companyId,
       role: UserRole.USER,
+      profiles: resolvedPermissions.profileIds,
     };
 
     return {
@@ -201,6 +221,7 @@ export class AuthService {
           role: result.userCompany.role,
           sector: result.userCompany.sector,
           isDefault: true,
+          profileIds: resolvedPermissions.profileIds,
         },
         companies: [{
           id: result.userCompany.id,
@@ -212,18 +233,20 @@ export class AuthService {
           isDefault: true,
           lastAccessedAt: new Date(),
         }],
+        permissions: resolvedPermissions.permissions,
+        processTypePermissions: resolvedPermissions.processTypes,
+        profileIds: resolvedPermissions.profileIds,
       },
     };
   }
 
-  //    Switch de empresa com validações robustas
+  //    Switch de empresa com validacoes robustas
   async switchCompany(userId: string, switchDto: SwitchCompanyDto) {
-    //    Verificar se usuário tem acesso válido à empresa
     const userCompany = await this.prisma.userCompany.findFirst({
       where: {
         userId,
         companyId: switchDto.companyId,
-        company: { isActive: true }, //  CRÍTICO: Empresa deve estar ativa
+        company: { isActive: true },
       },
       include: {
         company: { select: { id: true, name: true, cnpj: true, isActive: true } },
@@ -233,16 +256,14 @@ export class AuthService {
     });
 
     if (!userCompany) {
-      throw new ForbiddenException('Acesso negado: usuário não tem permissão para esta empresa ou empresa inativa');
+      throw new ForbiddenException('Usuario nao tem acesso valido a esta empresa');
     }
 
     if (!userCompany.user.isActive) {
-      throw new ForbiddenException('Usuário inativo');
+      throw new ForbiddenException('Usuario inativo');
     }
 
-    //    Transação para atualizar acessos
     const [updatedUserCompany, allUserCompanies] = await this.prisma.$transaction(async (tx) => {
-      //  Atualizar último acesso
       const updated = await tx.userCompany.update({
         where: { id: userCompany.id },
         data: { lastAccessedAt: new Date() },
@@ -252,9 +273,8 @@ export class AuthService {
         },
       });
 
-      //  Buscar todas as empresas do usuário (ativas)
       const all = await tx.userCompany.findMany({
-        where: { 
+        where: {
           userId,
           company: { isActive: true },
         },
@@ -271,11 +291,18 @@ export class AuthService {
       return [updated, all];
     });
 
+    const resolvedPermissions = await this.profilesService.resolveUserPermissions(
+      userId,
+      switchDto.companyId,
+      userCompany.role,
+    );
+
     const payload = {
       sub: userId,
       email: userCompany.user.email,
       companyId: switchDto.companyId,
       role: userCompany.role,
+      profiles: resolvedPermissions.profileIds,
     };
 
     return {
@@ -291,8 +318,9 @@ export class AuthService {
           role: updatedUserCompany.role,
           sector: updatedUserCompany.sector,
           isDefault: updatedUserCompany.isDefault,
+          profileIds: resolvedPermissions.profileIds,
         },
-        companies: allUserCompanies.map(uc => ({
+        companies: allUserCompanies.map((uc) => ({
           id: uc.id,
           companyId: uc.company.id,
           name: uc.company.name,
@@ -302,6 +330,9 @@ export class AuthService {
           isDefault: uc.isDefault,
           lastAccessedAt: uc.lastAccessedAt,
         })),
+        permissions: resolvedPermissions.permissions,
+        processTypePermissions: resolvedPermissions.processTypes,
+        profileIds: resolvedPermissions.profileIds,
       },
     };
   }
@@ -309,7 +340,7 @@ export class AuthService {
   //    Refresh token melhorado
   async refreshToken(userId: string) {
     const userWithCompanies = await this.prisma.user.findUnique({
-      where: { id: userId, isActive: true }, //  Verificar se usuário está ativo
+      where: { id: userId, isActive: true },
       include: {
         userCompanies: {
           where: { company: { isActive: true } },
@@ -323,16 +354,23 @@ export class AuthService {
     });
 
     if (!userWithCompanies?.userCompanies?.length) {
-      throw new UnauthorizedException('Usuário não tem empresas ativas válidas');
+      throw new UnauthorizedException('Usuario nao tem empresas ativas validas');
     }
 
     const activeCompany = userWithCompanies.userCompanies[0];
+
+    const resolvedPermissions = await this.profilesService.resolveUserPermissions(
+      userId,
+      activeCompany.companyId,
+      activeCompany.role,
+    );
 
     const payload = {
       sub: userId,
       email: userWithCompanies.email,
       companyId: activeCompany.companyId,
       role: activeCompany.role,
+      profiles: resolvedPermissions.profileIds,
     };
 
     return {
@@ -348,8 +386,9 @@ export class AuthService {
           role: activeCompany.role,
           sector: activeCompany.sector,
           isDefault: activeCompany.isDefault,
+          profileIds: resolvedPermissions.profileIds,
         },
-        companies: userWithCompanies.userCompanies.map(uc => ({
+        companies: userWithCompanies.userCompanies.map((uc) => ({
           id: uc.id,
           companyId: uc.company.id,
           name: uc.company.name,
@@ -359,15 +398,18 @@ export class AuthService {
           isDefault: uc.isDefault,
           lastAccessedAt: uc.lastAccessedAt,
         })),
+        permissions: resolvedPermissions.permissions,
+        processTypePermissions: resolvedPermissions.processTypes,
+        profileIds: resolvedPermissions.profileIds,
       },
     };
   }
 
-  //    Verificar permissões com validação de empresa ativa
+  //    Verificar permissoes com validacao de empresa ativa
   async checkUserPermissions(userId: string, companyId: string) {
     const userCompany = await this.prisma.userCompany.findFirst({
-      where: { 
-        userId, 
+      where: {
+        userId,
         companyId,
         company: { isActive: true },
         user: { isActive: true },
@@ -379,47 +421,23 @@ export class AuthService {
     });
 
     if (!userCompany) {
-      throw new ForbiddenException('Usuário não tem acesso válido a esta empresa');
+      throw new ForbiddenException('Usuario nao tem acesso valido a esta empresa');
     }
+
+    const resolvedPermissions = await this.profilesService.resolveUserPermissions(
+      userId,
+      companyId,
+      userCompany.role,
+    );
 
     return {
       role: userCompany.role,
       company: userCompany.company,
       sector: userCompany.sector,
-      permissions: this.getRolePermissions(userCompany.role),
+      permissions: resolvedPermissions.permissions,
+      processTypePermissions: resolvedPermissions.processTypes,
+      profileIds: resolvedPermissions.profileIds,
     };
-  }
-
-  //  MELHORADO: Permissões mais granulares
-  private getRolePermissions(role: UserRole) {
-    const permissions = {
-      ADMIN: [
-        'manage_companies',
-        'manage_users',
-        'manage_sectors', 
-        'manage_process_types',
-        'manage_processes',
-        'view_all_processes',
-        'execute_any_step',
-        'system_settings',
-        'view_reports',
-      ],
-      MANAGER: [
-        'manage_users',
-        'manage_sectors',
-        'manage_process_types', 
-        'view_company_processes',
-        'execute_assigned_steps',
-        'view_reports',
-      ],
-      USER: [
-        'create_processes',
-        'view_own_processes',
-        'execute_assigned_steps',
-      ],
-    };
-
-    return permissions[role] || [];
   }
 
   //    Validar contexto de empresa em requests
@@ -436,3 +454,18 @@ export class AuthService {
     return !!userCompany;
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,12 +1,17 @@
-import { ExtractJwt, Strategy } from 'passport-jwt';
+﻿import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { JwtPayload } from '../../../common/interfaces/jwt-payload.interface';
+import { ProfilesService } from '../../profiles/profiles.service';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private prisma: PrismaService,
+    private profilesService: ProfilesService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -15,13 +20,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    //   CRÍTICO: Validar se usuário e empresa ainda estão ativos
     const userCompany = await this.prisma.userCompany.findFirst({
       where: {
         userId: payload.sub,
         companyId: payload.companyId,
-        user: { isActive: true },      //   Usuário deve estar ativo
-        company: { isActive: true },   //   Empresa deve estar ativa
+        user: { isActive: true },
+        company: { isActive: true },
       },
       include: {
         user: {
@@ -52,7 +56,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Token inválido: usuário ou empresa inativos/inexistentes');
     }
 
-    //   MELHORADO: Retornar informações completas do contexto
+    const resolvedPermissions = await this.profilesService.resolveUserPermissions(
+      userCompany.userId,
+      payload.companyId,
+      payload.role as UserRole,
+    );
+
     return {
       id: userCompany.user.id,
       email: userCompany.user.email,
@@ -62,6 +71,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       sectorId: userCompany.sectorId,
       company: userCompany.company,
       sector: userCompany.sector,
+      permissions: resolvedPermissions.permissions,
+      profileIds: resolvedPermissions.profileIds,
+      processTypePermissions: resolvedPermissions.processTypes,
     };
   }
 }

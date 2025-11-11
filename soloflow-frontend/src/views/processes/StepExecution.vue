@@ -1,4 +1,10 @@
 <template>
+  <!-- Modal de visualização de anexos -->
+  <AttachmentPreviewModal
+    v-model="showPreview"
+    :attachment="selectedAttachment"
+  />
+
   <div v-if="stepExecution && process" class="step-execution-container">
     <div class="execution-header mb-8">
       <div class="d-flex align-center">
@@ -62,137 +68,9 @@
                 Prazo final: {{ slaStatus.deadline }}
               </div>
             </div>
-            
-            <v-card v-if="reuseDataFields.length > 0" class="reuse-data-card mb-6 border-none" variant="outlined">
-              <v-card-title class="d-flex align-center">
-                <v-icon color="secondary" class="mr-2">mdi-refresh</v-icon>
-                Informações de Etapas Anteriores
-              </v-card-title>
-              <v-divider />
-              <v-card-text>
-                <v-expansion-panels variant="accordion">
-                  <v-expansion-panel
-                    v-for="(group, groupIndex) in groupReuseDataByStep(reuseDataFields)"
-                    :key="groupIndex"
-                  >
-                    <v-expansion-panel-title>
-                      <div class="d-flex align-center">
-                        <v-chip size="small" color="primary" class="mr-2">
-                          Etapa {{ group.stepOrder }}
-                        </v-chip>
-                        <span>{{ group.stepName }}</span>
-                      </div>
-                    </v-expansion-panel-title>
-                    <v-expansion-panel-text>
-                      <v-list density="compact">
-                        <v-list-item
-                          v-for="(field, index) in group.fields"
-                          :key="index"
-                        >
-                          <template v-if="field.type === 'field'">
-                            <v-list-item-title>{{ field.fieldLabel }}</v-list-item-title>
-                            <v-list-item-subtitle>
-                              <template v-if="isFileField(field)">
-                                <v-chip 
-                                  size="small" 
-                                  color="primary" 
-                                  variant="outlined"
-                                  @click="viewFileField(field)"
-                                  class="mt-1"
-                                >
-                                  <v-icon start size="12">{{ getFileIcon(getFileTypeFromName(field.value)) }}</v-icon>
-                                  {{ field.value }}
-                                </v-chip>
-                              </template>
-                              <template v-else>
-                                {{ field.value }}
-                              </template>
-                            </v-list-item-subtitle>
-                          </template>
-                          <template v-else-if="field.type === 'attachments'">
-                            <v-list-item-title>Anexos ({{ field.attachments.length }})</v-list-item-title>
-                            <v-list-item-subtitle>
-                              <div v-for="attachment in field.attachments" :key="attachment.id" class="mt-1">
-                                <v-chip 
-                                  size="x-small" 
-                                  color="primary" 
-                                  variant="outlined"
-                                  @click="viewAttachment(attachment)"
-                                  class="cursor-pointer"
-                                >
-                                  <v-icon start size="12">{{ getFileIcon(attachment.mimeType) }}</v-icon>
-                                  {{ attachment.originalName }}
-                                </v-chip>
-                              </div>
-                            </v-list-item-subtitle>
-                          </template>
-                        </v-list-item>
-                      </v-list>
-                    </v-expansion-panel-text>
-                  </v-expansion-panel>
-                </v-expansion-panels>
-              </v-card-text>
-            </v-card>
-
-            <v-card v-if="approvalContextData" class="approval-context-card mb-6" >
-              <v-card-title class="d-flex align-center">
-                <v-icon color="info" class="mr-2">mdi-information</v-icon>
-                Contexto da Etapa Anterior
-              </v-card-title>
-              <v-divider />
-              <v-card-text>
-                <div class="context-header mb-4">
-                  <p class="text-body-2">
-                    <strong>Etapa:</strong> {{ approvalContextData.stepName }}<br>
-                    <strong>Executado por:</strong> {{ approvalContextData.executor }}<br>
-                    <strong>Data:</strong> {{ formatDate(approvalContextData.completedAt) }}
-                    <span v-if="approvalContextData.action">
-                      <br><strong>Ação:</strong> {{ approvalContextData.action }}
-                    </span>
-                  </p>
-                  <p v-if="approvalContextData.comment" class="text-body-2 mt-2">
-                    <strong>Comentário:</strong> {{ approvalContextData.comment }}
-                  </p>
-                </div>
-                
-                <v-divider v-if="Object.keys(approvalContextData.data).length > 0" class="my-3" />
-                
-                <div v-if="Object.keys(approvalContextData.data).length > 0">
-                  <h4 class="text-subtitle-2 mb-2">Dados Informados:</h4>
-                  <v-list density="compact">
-                    <v-list-item v-for="(value, key) in approvalContextData.data" :key="key">
-                      <v-list-item-title>{{ key }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ value || 'Não informado' }}</v-list-item-subtitle>
-                    </v-list-item>
-                  </v-list>
-                </div>
-                
-                <div v-if="approvalContextData.attachments?.length > 0" class="mt-4">
-                  <h4 class="text-subtitle-2 mb-2">Anexos:</h4>
-                  <div class="d-flex flex-wrap gap-2">
-                    <v-chip
-                      v-for="attachment in approvalContextData.attachments"
-                      :key="attachment.id"
-                      size="small"
-                      color="primary"
-                      variant="outlined"
-                      @click="viewAttachment(attachment)"
-                      class="cursor-pointer"
-                    >
-                      <v-icon start size="16">{{ getFileIcon(attachment.mimeType) }}</v-icon>
-                      {{ attachment.originalName }}
-                    </v-chip>
-                  </div>
-                </div>
-              </v-card-text>
-            </v-card>
 
             <v-form ref="form" v-model="valid" class="execution-form">
               <div v-if="stepExecution.step.type === 'INPUT'" class="form-section mb-2">
-                <div class="section-header mb-4">
-                  <h3 class="text-h6 font-weight-bold d-flex align-center"><v-icon color="blue" class="mr-2">mdi-form-textbox</v-icon>Informações Específicas desta Etapa</h3>
-                  <p class="text-body-2 text-medium-emphasis">Complete os campos abaixo com as informações solicitadas.</p>
-                </div>
                 <v-row v-if="stepFormFields.length > 0">
                   <v-col v-for="field in stepFormFields" :key="field.name" :cols="getFieldCols(field)">
                     <!-- Campo especial para arquivo -->
@@ -263,9 +141,6 @@
                     </template>
                   </v-col>
                 </v-row>
-                <div v-else class="text-center py-6 text-medium-emphasis">
-                  Nenhum campo específico para esta etapa.
-                </div>
               </div>
 
               <div v-if="stepExecution.step.type === 'APPROVAL'" class="form-section mb-6">
@@ -318,7 +193,13 @@
                   <v-card-text class="pa-6 text-center">
                     <v-btn size="large" color="primary" variant="tonal" @click="$refs.fileInput.click()" class="upload-button"><v-icon start size="24">mdi-cloud-upload</v-icon>Selecionar Arquivos</v-btn>
                     <input ref="fileInput" type="file" style="display: none" multiple @change="handleFileSelect" :accept="allowedFileTypes" />
-                    <div class="upload-help mt-4"><p class="text-body-2 text-medium-emphasis">Arraste arquivos aqui ou clique para selecionar</p><p class="text-caption text-medium-emphasis">Formatos aceitos: PDF, Imagens, Word, Excel (máx. 10MB cada)</p></div>
+                    <div class="upload-help mt-4">
+                      <p class="text-body-2 text-medium-emphasis">Arraste arquivos aqui ou clique para selecionar</p>
+                      <p class="text-caption text-medium-emphasis">
+                        Formatos aceitos: PDF, Imagens (JPG, PNG, GIF, BMP, WebP), Office (Word, Excel, PowerPoint), Texto (TXT, CSV), Compactados (ZIP, RAR, 7Z)
+                      </p>
+                      <p class="text-caption text-medium-emphasis mt-1">Tamanho máximo: 10MB por arquivo</p>
+                    </div>
                   </v-card-text>
                 </v-card>
                 <div v-if="attachments.length > 0" class="attachments-list">
@@ -326,21 +207,256 @@
                     <v-card-title class="text-subtitle-1 pa-4"><v-icon class="mr-2">mdi-attachment</v-icon>Arquivos Anexados ({{ attachments.length }})</v-card-title>
                     <v-divider />
                     <v-list class="pa-0">
-                      <v-list-item v-for="(file, index) in attachments" :key="index" class="attachment-item">
-                        <template v-slot:prepend><v-avatar :color="getFileTypeColor(file.type)" size="40"><v-icon size="20" color="white">{{ getFileIcon(file.type) }}</v-icon></v-avatar></template>
-                        <v-list-item-title class="font-weight-medium">{{ file.name }}</v-list-item-title>
-                        <v-list-item-subtitle><div class="d-flex align-center"><span>{{ formatFileSize(file.size) }}</span><v-chip v-if="file.signed" size="x-small" color="success" class="ml-2"><v-icon start size="12">mdi-check-decagram</v-icon>Assinado</v-chip></div></v-list-item-subtitle>
-                        <template v-slot:append>
-                          <div class="attachment-actions">
-                            <v-btn v-if="stepExecution.step.requiresSignature && file.type === 'application/pdf' && !file.signed" icon="mdi-draw-pen" size="small" variant="tonal" color="primary" @click="openSignatureDialog(file, index)" class="mr-2"><v-tooltip activator="parent">Assinar Documento</v-tooltip></v-btn>
-                            <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="removeFile(index)"><v-tooltip activator="parent">Remover Arquivo</v-tooltip></v-btn>
+                      <div v-for="(file, index) in attachments" :key="index">
+                        <v-list-item class="attachment-item" :class="{ 'needs-signature-config': file.type === 'application/pdf' && (!file.signers || file.signers.length === 0) }">
+                          <template v-slot:prepend>
+                            <v-badge
+                              v-if="file.type === 'application/pdf' && (!file.signers || file.signers.length === 0)"
+                              dot
+                              color="warning"
+                              overlap
+                              offset-x="8"
+                              offset-y="8"
+                            >
+                              <v-avatar :color="getFileTypeColor(file.type)" size="40">
+                                <v-icon size="20" color="white">{{ getFileIcon(file.type) }}</v-icon>
+                              </v-avatar>
+                            </v-badge>
+                            <v-avatar v-else :color="getFileTypeColor(file.type)" size="40">
+                              <v-icon size="20" color="white">{{ getFileIcon(file.type) }}</v-icon>
+                            </v-avatar>
+                          </template>
+                          <v-list-item-title class="font-weight-medium">
+                            {{ file.name }}
+                            <v-chip
+                              v-if="file.type === 'application/pdf' && (!file.signers || file.signers.length === 0)"
+                              size="x-small"
+                              color="warning"
+                              variant="tonal"
+                              class="ml-2"
+                            >
+                              <v-icon start size="12">mdi-alert</v-icon>
+                              Configurar assinatura
+                            </v-chip>
+                          </v-list-item-title>
+                          <v-list-item-subtitle>
+                            <div class="d-flex align-center">
+                              <span>{{ formatFileSize(file.size) }}</span>
+                              <v-chip v-if="file.signers && file.signers.length > 0" size="x-small" color="success" variant="tonal" class="ml-2">
+                                <v-icon start size="12">mdi-check-circle</v-icon>
+                                {{ file.signers.length }} assinante{{ file.signers.length > 1 ? 's' : '' }} configurado{{ file.signers.length > 1 ? 's' : '' }}
+                              </v-chip>
+                            </div>
+                          </v-list-item-subtitle>
+                          <template v-slot:append>
+                            <div class="attachment-actions d-flex align-center gap-2">
+                              <!-- Botão de configurar assinantes - Disponível para QUALQUER tipo de etapa com PDF -->
+                              <v-btn
+                                v-if="file.type === 'application/pdf'"
+                                @click="toggleSignatureConfig(index)"
+                                :variant="file.showSignatureConfig ? 'elevated' : 'tonal'"
+                                :color="file.signers && file.signers.length > 0 ? 'success' : 'primary'"
+                                size="small"
+                                class="signature-config-btn"
+                                :class="{ 'signature-configured': file.signers && file.signers.length > 0 }"
+                              >
+                                <v-icon start size="18">
+                                  {{ file.signers && file.signers.length > 0 ? 'mdi-check-circle' : 'mdi-draw-pen' }}
+                                </v-icon>
+                                <span class="text-caption font-weight-bold">
+                                  {{ file.signers && file.signers.length > 0
+                                    ? `${file.signers.length} Assinante${file.signers.length > 1 ? 's' : ''}`
+                                    : 'Configurar Assinatura'
+                                  }}
+                                </span>
+                                <v-tooltip activator="parent" location="top">
+                                  {{ file.signers && file.signers.length > 0
+                                    ? 'Clique para editar assinantes'
+                                    : 'Clique para configurar quem irá assinar este documento'
+                                  }}
+                                </v-tooltip>
+                              </v-btn>
+
+                              <!-- Botão de remover -->
+                              <v-btn
+                                icon="mdi-delete"
+                                size="small"
+                                variant="text"
+                                color="error"
+                                @click="removeFile(index)"
+                              >
+                                <v-tooltip activator="parent" location="top">Remover Arquivo</v-tooltip>
+                              </v-btn>
+                            </div>
+                          </template>
+                        </v-list-item>
+
+                        <!-- Lista de assinantes configurados (sempre visível quando há assinantes) -->
+                        <div
+                          v-if="file.signers && file.signers.length > 0 && !file.showSignatureConfig"
+                          class="signers-summary pa-3"
+                          style="background: #f9fafb; border-left: 3px solid #4caf50;"
+                        >
+                          <div class="d-flex align-center mb-2">
+                            <v-icon size="18" color="success" class="mr-2">mdi-account-check</v-icon>
+                            <span class="text-body-2 font-weight-medium text-success">
+                              Assinantes Configurados ({{ file.signatureType === 'SEQUENTIAL' ? 'Sequencial' : 'Paralelo' }})
+                            </span>
                           </div>
-                        </template>
-                      </v-list-item>
+                          <v-chip-group column>
+                            <v-chip
+                              v-for="(signerId, signerIndex) in file.signers"
+                              :key="signerId"
+                              size="small"
+                              :prepend-icon="file.signatureType === 'SEQUENTIAL' ? `mdi-numeric-${signerIndex + 1}-circle` : 'mdi-account'"
+                              color="success"
+                              variant="tonal"
+                            >
+                              {{ getSignerName(signerId) }}
+                            </v-chip>
+                          </v-chip-group>
+                        </div>
+
+                        <!-- Painel de configuração de assinantes (aparece quando expandido) -->
+                        <v-expand-transition>
+                          <div v-if="file.showSignatureConfig" class="signature-config-panel pa-4" style="background: #f5f5f5; border-top: 1px solid #e0e0e0;">
+                            <div class="d-flex align-center mb-3">
+                              <v-icon color="primary" class="mr-2">mdi-draw-pen</v-icon>
+                              <h4 class="text-subtitle-1 font-weight-bold">Configurar Assinatura Digital</h4>
+                              <v-chip size="x-small" :color="stepExecution.step.requiresSignature ? 'error' : 'info'" class="ml-2">
+                                {{ stepExecution.step.requiresSignature ? 'Obrigatório' : 'Opcional' }}
+                              </v-chip>
+                            </div>
+
+                            <!-- Tipo de assinatura -->
+                            <v-radio-group v-model="file.signatureType" label="Tipo de Assinatura" density="compact" class="mb-3">
+                              <v-radio value="SEQUENTIAL">
+                                <template v-slot:label>
+                                  <div>
+                                    <div class="text-body-2 font-weight-medium">Sequencial</div>
+                                    <div class="text-caption text-medium-emphasis">Assinaturas em ordem específica</div>
+                                  </div>
+                                </template>
+                              </v-radio>
+                              <v-radio value="PARALLEL">
+                                <template v-slot:label>
+                                  <div>
+                                    <div class="text-body-2 font-weight-medium">Paralelo</div>
+                                    <div class="text-caption text-medium-emphasis">Qualquer ordem</div>
+                                  </div>
+                                </template>
+                              </v-radio>
+                            </v-radio-group>
+
+                            <!-- Autocomplete de assinantes -->
+                            <v-autocomplete
+                              v-model="file.signers"
+                              :items="availableSigners"
+                              item-title="name"
+                              item-value="id"
+                              label="Selecionar Assinantes"
+                              placeholder="Digite para buscar pelo nome..."
+                              multiple
+                              chips
+                              closable-chips
+                              variant="outlined"
+                              density="comfortable"
+                              @update:model-value="onSignersChanged(index)"
+                              prepend-inner-icon="mdi-account-search"
+                              clearable
+                              :hint="stepExecution.step.requiresSignature ? 'Obrigatório selecionar pelo menos 1 assinante' : 'Opcional - deixe vazio se não precisar'"
+                              persistent-hint
+                            >
+                              <template v-slot:chip="{ props, item }">
+                                <v-chip v-bind="props" size="small" color="primary">
+                                  <v-avatar start>
+                                    <v-icon size="16">mdi-account</v-icon>
+                                  </v-avatar>
+                                  {{ item.raw.name }}
+                                </v-chip>
+                              </template>
+                              <template v-slot:item="{ props, item }">
+                                <v-list-item v-bind="props" :title="item.raw.name" :subtitle="item.raw.email">
+                                  <template v-slot:prepend>
+                                    <v-avatar color="primary" size="32">
+                                      <v-icon size="18" color="white">mdi-account</v-icon>
+                                    </v-avatar>
+                                  </template>
+                                </v-list-item>
+                              </template>
+                            </v-autocomplete>
+
+                            <!-- Lista ordenável (modo sequencial) -->
+                            <div v-if="file.signatureType === 'SEQUENTIAL' && file.signers && file.signers.length > 0" class="mt-3">
+                              <div class="d-flex align-center mb-2">
+                                <v-icon size="18" class="mr-1">mdi-order-numeric-ascending</v-icon>
+                                <span class="text-body-2 font-weight-medium">Ordem de Assinatura</span>
+                              </div>
+                              <v-list density="compact" class="signature-order-list-compact">
+                                <v-list-item v-for="(signerId, signerIndex) in file.signers" :key="signerId" class="pa-2">
+                                  <template v-slot:prepend>
+                                    <v-avatar color="primary" size="28" class="mr-2">
+                                      <span class="text-caption font-weight-bold">{{ signerIndex + 1 }}</span>
+                                    </v-avatar>
+                                  </template>
+                                  <v-list-item-title class="text-body-2">{{ getSignerName(signerId) }}</v-list-item-title>
+                                  <v-list-item-subtitle class="text-caption">{{ getSignerEmail(signerId) }}</v-list-item-subtitle>
+                                  <template v-slot:append>
+                                    <v-btn-group density="compact" variant="text">
+                                      <v-btn v-if="signerIndex > 0" icon="mdi-arrow-up" size="x-small" @click="moveSignerUpInFile(index, signerIndex)" />
+                                      <v-btn v-if="signerIndex < file.signers.length - 1" icon="mdi-arrow-down" size="x-small" @click="moveSignerDownInFile(index, signerIndex)" />
+                                    </v-btn-group>
+                                  </template>
+                                </v-list-item>
+                              </v-list>
+                            </div>
+
+                            <!-- Resumo (modo paralelo) -->
+                            <div v-else-if="file.signatureType === 'PARALLEL' && file.signers && file.signers.length > 0" class="mt-3">
+                              <v-alert type="info" density="compact" variant="tonal">
+                                <v-icon start size="18">mdi-information</v-icon>
+                                <span class="text-body-2">{{ file.signers.length }} pessoa(s) poderá(ão) assinar em qualquer ordem</span>
+                              </v-alert>
+                            </div>
+                          </div>
+                        </v-expand-transition>
+
+                        <v-divider v-if="index < attachments.length - 1" />
+                      </div>
                     </v-list>
                   </v-card>
                 </div>
                 <v-alert v-if="stepExecution.step.requiresSignature" type="warning" variant="tonal" class="mt-4" rounded="lg"><v-icon start>mdi-draw-pen</v-icon><div class="ml-2"><div class="font-weight-medium">Assinatura Digital Obrigatória</div><div class="mt-1">Todos os documentos PDF devem ser assinados digitalmente.</div></div></v-alert>
+              </div>
+
+              <div v-if="showReviewField" class="form-section mb-6">
+                <div class="section-header mb-4">
+                  <h3 class="text-h6 font-weight-bold d-flex align-center">
+                    <v-icon color="teal" class="mr-2">mdi-note-text</v-icon>
+                    {{ reviewFieldLabel }}
+                    <v-chip
+                      v-if="reviewSettings.required"
+                      size="x-small"
+                      color="error"
+                      class="ml-2"
+                    >
+                      Obrigatório
+                    </v-chip>
+                  </h3>
+                  <p v-if="reviewFieldHint" class="text-body-2 text-medium-emphasis">
+                    {{ reviewFieldHint }}
+                  </p>
+                </div>
+                <v-textarea
+                  v-model="reviewFieldValue"
+                  :label="reviewFieldLabel"
+                  :rules="reviewFieldRules"
+                  :hint="reviewFieldHint || undefined"
+                  :persistent-hint="!!reviewFieldHint"
+                  rows="4"
+                  counter="1000"
+                  variant="outlined"
+                />
               </div>
 
               <!-- Seção de Comentário -->
@@ -357,8 +473,11 @@
           <v-divider />
           
           <div class="form-card-actions pa-6">
-            <div class="d-flex align-center justify-end">
-              <v-btn variant="text" size="large" @click="goBack" class="mr-3"><v-icon start>mdi-arrow-left</v-icon>Cancelar</v-btn>
+            <div class="d-flex align-center justify-space-between">
+              <v-btn variant="text" size="large" @click="goBack">
+                <v-icon start>mdi-arrow-left</v-icon>
+                Cancelar
+              </v-btn>
               <v-btn color="primary" variant="elevated" size="large" :loading="saving" :disabled="!canSubmit" @click="executeStep" class="execute-btn">
                 <v-icon class="mr-2">mdi-check-circle</v-icon>
                 Concluir Etapa
@@ -418,9 +537,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
+import { useUserStore } from '@/stores/users'
+import { useAuthStore } from '@/stores/auth'
+import { useSignaturesStore } from '@/stores/signatures'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import duration from 'dayjs/plugin/duration'
@@ -428,6 +550,7 @@ import 'dayjs/locale/pt-br'
 
 import ProcessHistory from '@/components/ProcessHistory.vue'
 import PreviousStepsInfo from '@/components/PreviousStepsInfo.vue'
+import AttachmentPreviewModal from '@/components/AttachmentPreviewModal.vue'
 import { VTextField, VTextarea, VSelect, VCheckbox, VSwitch } from 'vuetify/components'
 
 dayjs.extend(relativeTime)
@@ -437,6 +560,9 @@ dayjs.locale('pt-br')
 const router = useRouter()
 const route = useRoute()
 const processStore = useProcessStore()
+const userStore = useUserStore()
+const authStore = useAuthStore()
+const signaturesStore = useSignaturesStore()
 
 const valid = ref(false)
 const saving = ref(false)
@@ -448,13 +574,49 @@ const instructionsExpanded = ref(false)
 const form = ref(null)
 const fileInput = ref(null)
 const now = ref(dayjs())
+const showPreview = ref(false)
+const selectedAttachment = ref(null)
 let timer = null
+
+// Nota: Configuração de assinantes agora é por arquivo (dentro de attachments)
 
 const formData = ref({
   action: null,
   comment: '',
   metadata: {}
 })
+
+const DEFAULT_REVIEW_SETTINGS = {
+  enabled: false,
+  fieldName: 'reviewNotes',
+  fieldLabel: 'Notas da Revisão',
+  required: false,
+  hint: ''
+}
+
+function normalizeReviewSettings(settings) {
+  if (!settings) return { ...DEFAULT_REVIEW_SETTINGS }
+  let parsed = settings
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed)
+    } catch {
+      parsed = null
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return { ...DEFAULT_REVIEW_SETTINGS }
+  }
+  return {
+    enabled: parsed.enabled ?? true,
+    fieldName: (parsed.fieldName || 'reviewNotes').toString(),
+    fieldLabel: parsed.fieldLabel || 'Notas da Revisão',
+    required: Boolean(parsed.required),
+    hint: parsed.hint || ''
+  }
+}
+
+const DEFAULT_FILE_TYPES = '.pdf,.jpg,.jpeg,.png,.gif,.bmp,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z'
 
 const loading = computed(() => processStore.loading)
 const process = computed(() => processStore.currentProcess)
@@ -478,6 +640,75 @@ const availableActions = computed(() => {
     const actions = typeof stepExecution.value.step.actions === 'string' ? JSON.parse(stepExecution.value.step.actions) : stepExecution.value.step.actions
     return Array.isArray(actions) ? actions : []
   } catch { return [] }
+})
+
+const stepExecutionMetadata = computed(() => {
+  const metadata = stepExecution.value?.metadata
+  if (!metadata) return {}
+  if (typeof metadata === 'string') {
+    try {
+      return JSON.parse(metadata) || {}
+    } catch {
+      return {}
+    }
+  }
+  return { ...metadata }
+})
+
+const reviewSettings = computed(() => {
+  const step = stepExecution.value?.step
+  if (!step || step.type !== 'REVIEW') return { ...DEFAULT_REVIEW_SETTINGS }
+  return normalizeReviewSettings(step.reviewSettings)
+})
+
+const showReviewField = computed(() => stepExecution.value?.step.type === 'REVIEW' && reviewSettings.value.enabled)
+const reviewFieldName = computed(() => reviewSettings.value.fieldName || 'reviewNotes')
+const reviewFieldLabel = computed(() => reviewSettings.value.fieldLabel || 'Notas da Revisão')
+const reviewFieldHint = computed(() => reviewSettings.value.hint || '')
+const reviewFieldRules = computed(() => reviewSettings.value.required
+  ? [
+      v => !!(v && v.toString().trim()) || `${reviewFieldLabel.value} é obrigatório`
+    ]
+  : []
+)
+
+const reviewFieldValue = computed({
+  get() {
+    if (!showReviewField.value) return ''
+    const key = reviewFieldName.value
+    const value = formData.value.metadata[key]
+    return value ?? ''
+  },
+  set(value) {
+    const key = reviewFieldName.value
+    formData.value.metadata[key] = value
+  }
+})
+
+watch(stepExecutionMetadata, (metadata) => {
+  Object.entries(metadata).forEach(([key, value]) => {
+    formData.value.metadata[key] = value
+  })
+}, { immediate: true })
+
+watch(showReviewField, (visible) => {
+  const key = reviewFieldName.value
+  if (!visible) {
+    delete formData.value.metadata[key]
+  } else {
+    const metadata = stepExecutionMetadata.value
+    if (metadata[key] !== undefined) {
+      formData.value.metadata[key] = metadata[key]
+    }
+  }
+})
+
+watch(reviewFieldName, (newName, oldName) => {
+  if (!showReviewField.value) return
+  if (oldName && oldName !== newName && formData.value.metadata[oldName] !== undefined) {
+    formData.value.metadata[newName] = formData.value.metadata[oldName]
+    delete formData.value.metadata[oldName]
+  }
 })
 
 const slaStatus = computed(() => {
@@ -675,11 +906,33 @@ const isCommentRequired = computed(() => {
 
 const allowedFileTypes = computed(() => {
   const types = stepExecution.value?.step.allowedFileTypes
-  if (!types || types.length === 0) return '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx'
+  if (!types || (Array.isArray(types) && types.length === 0) || types === '[]') {
+    return DEFAULT_FILE_TYPES
+  }
   try {
-    const parsed = typeof types === 'string' ? JSON.parse(types) : types
-    return Array.isArray(parsed) ? parsed.join(',') : types
-  } catch { return types }
+    if (typeof types === 'string') {
+      const parsed = JSON.parse(types)
+      if (Array.isArray(parsed)) {
+        return parsed.length > 0 ? parsed.join(',') : DEFAULT_FILE_TYPES
+      }
+      return types
+    }
+    return Array.isArray(types) ? (types.length > 0 ? types.join(',') : DEFAULT_FILE_TYPES) : DEFAULT_FILE_TYPES
+  } catch {
+    return DEFAULT_FILE_TYPES
+  }
+})
+
+const availableSigners = computed(() => {
+  // Retorna a lista de usuários da empresa para seleção como assinantes
+  const users = userStore.users || []
+  console.log('📋 availableSigners computed:', {
+    totalUsers: users.length,
+    activeUsers: users.filter(u => u.isActive !== false).length,
+    allUsers: users,
+  })
+  // Filtrar apenas usuários ativos (ou sem propriedade isActive definida)
+  return users.filter(u => u.isActive !== false)
 })
 
 const canSubmit = computed(() => {
@@ -691,9 +944,18 @@ const canSubmit = computed(() => {
     return false
   }
   if (stepExecution.value?.step.requireAttachment && attachments.value.length === 0) return false
-  if (stepExecution.value?.step.requiresSignature) {
+  if (showReviewField.value && reviewSettings.value.required) {
+    const value = reviewFieldValue.value
+    if (!value || !value.toString().trim()) return false
+  }
+  // Validar assinantes por arquivo PDF APENAS se assinatura for obrigatória
+  if (stepExecution.value?.step.requiresSignature === true) {
     const pdfs = attachments.value.filter(f => f.type === 'application/pdf')
-    if (pdfs.length > 0 && !pdfs.every(f => f.signed)) return false
+    // Verificar se todos os PDFs têm pelo menos 1 assinante configurado
+    if (pdfs.length > 0 && !pdfs.every(f => f.signers && f.signers.length > 0)) {
+      console.warn('❌ Assinatura obrigatória: todos os PDFs precisam ter assinantes configurados')
+      return false
+    }
   }
   return true
 })
@@ -865,18 +1127,44 @@ function getResponsibleName(execution) {
 }
 
 function getFileIcon(type) {
-  if (type?.includes('pdf')) return 'mdi-file-pdf-box'
-  if (type?.includes('image')) return 'mdi-file-image'
-  if (type?.includes('word')) return 'mdi-file-word'
-  if (type?.includes('excel')) return 'mdi-file-excel'
-  return 'mdi-file'
+  if (!type) return 'mdi-file-document'
+  const typeStr = type.toLowerCase()
+
+  // PDFs
+  if (typeStr.includes('pdf')) return 'mdi-file-pdf-box'
+
+  // Imagens
+  if (typeStr.includes('image') || typeStr.includes('jpg') || typeStr.includes('jpeg') ||
+      typeStr.includes('png') || typeStr.includes('gif') || typeStr.includes('bmp') ||
+      typeStr.includes('webp')) return 'mdi-file-image'
+
+  // Office
+  if (typeStr.includes('word') || typeStr.includes('msword') || typeStr.includes('document')) return 'mdi-file-word'
+  if (typeStr.includes('excel') || typeStr.includes('spreadsheet') || typeStr.includes('sheet')) return 'mdi-file-excel'
+  if (typeStr.includes('powerpoint') || typeStr.includes('presentation')) return 'mdi-file-powerpoint'
+
+  // Texto
+  if (typeStr.includes('text') || typeStr.includes('txt') || typeStr.includes('csv')) return 'mdi-file-document-outline'
+
+  // Compactados
+  if (typeStr.includes('zip') || typeStr.includes('rar') || typeStr.includes('7z') ||
+      typeStr.includes('compressed')) return 'mdi-folder-zip'
+
+  return 'mdi-file-document'
 }
 
 function getFileTypeColor(type) {
-  if (type?.includes('pdf')) return 'red'
-  if (type?.includes('image')) return 'blue'
-  if (type?.includes('word')) return 'indigo'
-  if (type?.includes('excel')) return 'green'
+  if (!type) return 'grey'
+  const typeStr = type.toLowerCase()
+
+  if (typeStr.includes('pdf')) return 'red'
+  if (typeStr.includes('image') || typeStr.includes('jpg') || typeStr.includes('png')) return 'blue'
+  if (typeStr.includes('word') || typeStr.includes('document')) return 'indigo'
+  if (typeStr.includes('excel') || typeStr.includes('spreadsheet')) return 'green'
+  if (typeStr.includes('powerpoint') || typeStr.includes('presentation')) return 'orange'
+  if (typeStr.includes('text') || typeStr.includes('txt')) return 'purple'
+  if (typeStr.includes('zip') || typeStr.includes('rar') || typeStr.includes('compressed')) return 'amber'
+
   return 'grey'
 }
 
@@ -911,15 +1199,19 @@ function getFileFieldDisplayValue(fieldName) {
 }
 
 function getFieldFileTypes(field) {
-  if (field.allowedFileTypes) {
+  if (field.allowedFileTypes && field.allowedFileTypes !== '[]') {
     try {
       const types = typeof field.allowedFileTypes === 'string' ? JSON.parse(field.allowedFileTypes) : field.allowedFileTypes
-      return Array.isArray(types) ? types.join(',') : field.allowedFileTypes
-    } catch {
+      if (Array.isArray(types)) {
+        return types.length > 0 ? types.join(',') : DEFAULT_FILE_TYPES
+      }
       return field.allowedFileTypes
+    } catch {
+      return DEFAULT_FILE_TYPES
     }
   }
-  return '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx'
+  // Tipos padrão expandidos para campos FILE
+  return DEFAULT_FILE_TYPES
 }
 
 function triggerFileInput(fieldName) {
@@ -1070,15 +1362,65 @@ function getFileTypeFromName(fileName) {
 }
 
 function viewFileField(field) {
-  // Para campos de arquivo de etapas anteriores, tentar abrir o arquivo
   try {
-    // Assumindo que o valor contém o nome do arquivo ou path
-    const fileName = field.value
-    window.showSnackbar?.(`Tentando abrir arquivo: ${fileName}`, 'info')
-    // Aqui você pode implementar a lógica específica para abrir arquivos de campos
-    // Por exemplo, construir uma URL baseada no nome do arquivo
-    // const url = `/api/files/${fileName}`
-    // window.open(url, '_blank')
+    console.log('=== viewFileField DEBUG ===')
+    console.log('Field received:', field)
+    console.log('Field value:', field.value)
+    console.log('Field value type:', typeof field.value)
+    console.log('Field stepOrder:', field.stepOrder)
+    console.log('Field fieldName:', field.fieldName)
+
+    // O field.value pode ser um objeto AttachmentMeta ou um ID de arquivo
+    let attachmentId = null
+
+    // Se o valor é um objeto com attachmentId
+    if (typeof field.value === 'object' && field.value.attachmentId) {
+      console.log('Case 1: Object with attachmentId')
+      attachmentId = field.value.attachmentId
+    }
+    // Se é um array (múltiplos arquivos), pegar o primeiro
+    else if (Array.isArray(field.value) && field.value[0]?.attachmentId) {
+      console.log('Case 2: Array with attachmentId')
+      attachmentId = field.value[0].attachmentId
+    }
+    // Se é uma string simples (ID ou nome de arquivo)
+    else if (typeof field.value === 'string') {
+      console.log('Case 3: String value - searching in metadata')
+      // Tentar encontrar o attachment nos dados da etapa
+      const sourceStep = process.value?.stepExecutions.find(
+        exec => exec.step.order === field.stepOrder
+      )
+      console.log('Source step found:', sourceStep)
+
+      if (sourceStep?.metadata) {
+        const metadata = typeof sourceStep.metadata === 'string'
+          ? JSON.parse(sourceStep.metadata)
+          : sourceStep.metadata
+
+        console.log('Metadata:', metadata)
+
+        // Procurar por field.fieldName_files que contém os IDs dos arquivos
+        const fileIds = metadata[field.fieldName + '_files']
+        console.log(`Looking for ${field.fieldName}_files:`, fileIds)
+
+        if (fileIds && fileIds.length > 0) {
+          attachmentId = Array.isArray(fileIds) ? fileIds[0] : fileIds
+          console.log('Found attachmentId from metadata:', attachmentId)
+        }
+      }
+    }
+
+    console.log('Final attachmentId:', attachmentId)
+
+    if (attachmentId) {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+      const url = `${baseUrl}/processes/attachment/${attachmentId}/view`
+      console.log('Opening URL:', url)
+      window.open(url, '_blank')
+    } else {
+      console.warn('Could not find attachment ID for field:', field)
+      window.showSnackbar?.('ID do arquivo não encontrado. Verifique o console para detalhes.', 'warning')
+    }
   } catch (error) {
     console.error('Error viewing file field:', error)
     window.showSnackbar?.('Erro ao visualizar arquivo', 'error')
@@ -1100,7 +1442,19 @@ async function handleFileSelect(event) {
         continue
       }
     }
-    attachments.value.push({ file, name: file.name, size: file.size, type: file.type, signed: false, id: Date.now() + Math.random() })
+
+    // Adicionar arquivo com configurações de assinatura
+    attachments.value.push({
+      file,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      id: Date.now() + Math.random(),
+      // Configurações de assinatura
+      showSignatureConfig: false,
+      signatureType: 'SEQUENTIAL',
+      signers: []
+    })
   }
   event.target.value = ''
   if (files.length > 0) {
@@ -1114,8 +1468,54 @@ function removeFile(index) {
   window.showSnackbar?.(`Arquivo "${fileName}" removido`, 'info')
 }
 
-function openSignatureDialog(file, index) { 
-  console.log('Opening signature dialog for:', file.name) 
+function openSignatureDialog(file, index) {
+  console.log('Opening signature dialog for:', file.name)
+}
+
+// Funções para gerenciar assinantes
+function getSignerName(signerId) {
+  const signer = availableSigners.value.find(u => u.id === signerId)
+  return signer?.name || 'Usuário não encontrado'
+}
+
+function getSignerEmail(signerId) {
+  const signer = availableSigners.value.find(u => u.id === signerId)
+  return signer?.email || ''
+}
+
+function toggleSignatureConfig(fileIndex) {
+  attachments.value[fileIndex].showSignatureConfig = !attachments.value[fileIndex].showSignatureConfig
+}
+
+function onSignersChanged(fileIndex) {
+  const file = attachments.value[fileIndex]
+
+  // Fechar automaticamente a configuração após selecionar pelo menos 1 assinante
+  if (file.signers && file.signers.length > 0) {
+    // Dar um pequeno delay para o usuário ver a seleção
+    setTimeout(() => {
+      file.showSignatureConfig = false
+      window.showSnackbar?.(`${file.signers.length} assinante${file.signers.length > 1 ? 's' : ''} configurado${file.signers.length > 1 ? 's' : ''} para ${file.name}`, 'success')
+    }, 800)
+  }
+}
+
+function moveSignerUpInFile(fileIndex, signerIndex) {
+  if (signerIndex > 0) {
+    const signers = attachments.value[fileIndex].signers
+    const temp = signers[signerIndex]
+    signers[signerIndex] = signers[signerIndex - 1]
+    signers[signerIndex - 1] = temp
+  }
+}
+
+function moveSignerDownInFile(fileIndex, signerIndex) {
+  const signers = attachments.value[fileIndex].signers
+  if (signerIndex < signers.length - 1) {
+    const temp = signers[signerIndex]
+    signers[signerIndex] = signers[signerIndex + 1]
+    signers[signerIndex + 1] = temp
+  }
 }
 
 // Função para agrupar dados reutilizados por etapa
@@ -1140,8 +1540,10 @@ function groupReuseDataByStep(fields) {
 // Função para visualizar anexo
 async function viewAttachment(attachment) {
   try {
-    const url = `/api/processes/attachment/${attachment.id}/view`
-    window.open(url, '_blank')
+    console.log('=== viewAttachment DEBUG ===')
+    console.log('Attachment received:', attachment)
+    selectedAttachment.value = attachment
+    showPreview.value = true
   } catch (error) {
     console.error('Error viewing attachment:', error)
     window.showSnackbar?.('Erro ao visualizar anexo', 'error')
@@ -1194,9 +1596,7 @@ async function executeStep() {
         try {
           const uploaded = await processStore.uploadAttachment(attachment.file, stepExecution.value.id)
           uploadedAttachments.value.push(uploaded)
-          if (attachment.signed && attachment.signatureData) {
-            await processStore.signAttachment(uploaded.id, attachment.signatureData)
-          }
+          console.log('Attachment uploaded:', uploaded.id, uploaded.originalName)
         } catch (uploadError) {
           console.error('Error uploading attachment:', uploadError)
           window.showSnackbar?.(`Erro ao enviar arquivo ${attachment.name}`, 'warning')
@@ -1241,9 +1641,92 @@ async function executeStep() {
       comment: formData.value.comment?.trim() || null,
       metadata: formData.value.metadata && Object.keys(formData.value.metadata).length > 0 ? formData.value.metadata : {}
     }
+
     if (!executeData.stepExecutionId) throw new Error('stepExecutionId é obrigatório')
     if (stepExecution.value?.step.type === 'APPROVAL' && !executeData.action) throw new Error('Ação é obrigatória para etapas de aprovação')
+
+    // Executar a etapa
     await processStore.executeStep(executeData)
+
+    // Criar requisitos de assinatura baseado nas configurações de cada arquivo
+    // Funciona para qualquer tipo de etapa que tenha anexos com assinantes configurados
+    if (uploadedAttachments.value.length > 0) {
+      try {
+        console.log('🔍 Checking for signature requirements in uploaded attachments...')
+        console.log('📎 Uploaded attachments:', uploadedAttachments.value.map(a => ({ id: a.id, name: a.originalName })))
+        console.log('📋 Original attachments with configs:', attachments.value.map(a => ({ name: a.name, signers: a.signers?.length || 0 })))
+
+        const requirements = []
+        let totalSigners = 0
+
+        // Mapear os anexos enviados com os arquivos originais para pegar as configurações
+        for (const uploadedAttachment of uploadedAttachments.value) {
+          console.log(`\n🔎 Processing uploaded file: ${uploadedAttachment.originalName} (ID: ${uploadedAttachment.id})`)
+          console.log(`   📎 Available original files:`, attachments.value.map(f => ({
+            name: f.name,
+            fileName: f.file?.name,
+            hasSigners: !!f.signers?.length,
+            signersCount: f.signers?.length || 0
+          })))
+
+          // Encontrar o arquivo original pelos dados do arquivo
+          const originalFile = attachments.value.find(f => {
+            const nameMatch = f.name === uploadedAttachment.originalName || f.file?.name === uploadedAttachment.originalName
+            console.log(`   Comparing: "${f.name}" vs "${uploadedAttachment.originalName}" - Match: ${nameMatch}`)
+            return nameMatch
+          })
+
+          if (!originalFile) {
+            console.log(`   ❌ No matching original file found for ${uploadedAttachment.originalName}`)
+            continue
+          }
+
+          console.log(`   ✅ Found original file: ${originalFile.name}`)
+          console.log(`   👥 Signers configured: ${originalFile.signers?.length || 0}`)
+
+          if (originalFile.signers && originalFile.signers.length > 0) {
+            console.log(`   📝 Creating requirements for ${uploadedAttachment.originalName}:`, {
+              signers: originalFile.signers.length,
+              type: originalFile.signatureType,
+              uploadedId: uploadedAttachment.id
+            })
+
+            // Criar um requisito para cada assinante deste arquivo
+            for (let i = 0; i < originalFile.signers.length; i++) {
+              const requirement = {
+                stepVersionId: stepExecution.value.step.id,
+                attachmentId: uploadedAttachment.id,
+                userId: originalFile.signers[i],
+                order: i + 1,
+                type: originalFile.signatureType || 'SEQUENTIAL',
+                isRequired: stepExecution.value?.step.requiresSignature || false,
+                description: `Assinatura de ${uploadedAttachment.originalName || uploadedAttachment.filename}`
+              }
+
+              console.log(`      ${i + 1}. User: ${originalFile.signers[i]} - Attachment: ${uploadedAttachment.id}`)
+              requirements.push(requirement)
+            }
+
+            totalSigners += originalFile.signers.length
+          } else {
+            console.log(`   ⚠️  No signers configured for this file`)
+          }
+        }
+
+        if (requirements.length > 0) {
+          console.log('\n✨ Creating signature requirements:', requirements)
+          const result = await signaturesStore.createMultipleSignatureRequirements(requirements)
+          console.log('✅ Signature requirements created:', result)
+          window.showSnackbar?.(`Requisitos de assinatura criados: ${requirements.length} assinatura(s) para ${totalSigners} pessoa(s)`, 'success')
+        } else {
+          console.log('\n⚠️  No signature requirements to create')
+        }
+      } catch (signatureError) {
+        console.error('❌ Error creating signature requirements:', signatureError)
+        window.showSnackbar?.('Etapa concluída, mas houve erro ao configurar as assinaturas', 'warning')
+      }
+    }
+
     let successMessage = 'Etapa concluída com sucesso!'
     if (stepExecution.value?.step.type === 'APPROVAL') {
       if (formData.value.action === 'aprovar') successMessage = 'Processo aprovado com sucesso!'
@@ -1275,6 +1758,35 @@ onMounted(async () => {
   try {
     processStore.loading = true
     await processStore.fetchProcess(route.params.id)
+
+    // Debug: Verificar configuração da etapa
+    console.log('=== Step Execution Debug ===')
+    console.log('Step type:', stepExecution.value?.step.type)
+    console.log('Allow attachment:', stepExecution.value?.step.allowAttachment)
+    console.log('Requires signature:', stepExecution.value?.step.requiresSignature)
+    console.log('Should show signature config:', stepExecution.value?.step.allowAttachment && stepExecution.value?.step.requiresSignature)
+
+    // Carregar usuários da empresa para seleção de assinantes
+    const companyId = authStore.activeCompany?.companyId || authStore.currentCompany?.id
+    console.log('🔍 Loading users for company:', companyId)
+    console.log('Auth store state:', {
+      activeCompany: authStore.activeCompany,
+      currentCompany: authStore.currentCompany,
+    })
+
+    if (companyId) {
+      try {
+        await userStore.fetchUsers(companyId)
+        console.log('✅ Available signers loaded:', userStore.users.length, 'users')
+        console.log('Users:', userStore.users)
+      } catch (error) {
+        console.error('❌ Error loading users:', error)
+        window.showSnackbar?.('Erro ao carregar lista de usuários para assinatura', 'warning')
+      }
+    } else {
+      console.error('❌ No company ID found to load users')
+    }
+
     if (stepFormFields.value.length > 0) {
       stepFormFields.value.forEach(field => {
         if (field.defaultValue) { formData.value.metadata[field.name] = field.defaultValue }
@@ -1509,22 +2021,178 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-@media (max-width: 768px) { 
-  .step-execution-container { 
-    padding: 0 12px; 
-  } 
-  .execution-header { 
-    padding: 20px; 
-  } 
-  .approval-options { 
-    grid-template-columns: 1fr; 
-    gap: 16px; 
-  } 
-  .approval-option { 
-    min-height: 120px; 
-  } 
-  .actions-grid { 
-    grid-template-columns: 1fr; 
-  } 
+.bg-secondary-lighten-5 {
+  background-color: rgba(var(--v-theme-secondary), 0.05) !important;
+}
+
+.reuse-data-card {
+  border: 2px solid rgba(var(--v-theme-secondary), 0.2);
+}
+
+.reuse-panels {
+  background: transparent;
+}
+
+.reuse-panel-content {
+  background-color: #fafafa;
+  padding: 16px !important;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.field-item {
+  background: white;
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: all 0.2s;
+}
+
+.field-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: rgba(var(--v-theme-secondary), 0.3);
+}
+
+.field-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+}
+
+.field-value {
+  font-size: 0.95rem;
+  color: rgba(0, 0, 0, 0.87);
+  word-break: break-word;
+}
+
+/* Estilos para configuração de assinatura por arquivo */
+.signature-config-panel {
+  border-left: 3px solid rgba(25, 118, 210, 0.3);
+}
+
+/* Botão de configurar assinantes - DESTAQUE */
+.signature-config-btn {
+  text-transform: none !important;
+  letter-spacing: 0.5px;
+  padding: 6px 16px !important;
+  min-width: 160px !important;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.25) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-radius: 8px !important;
+}
+
+.signature-config-btn:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4) !important;
+}
+
+.signature-config-btn:active {
+  transform: translateY(0) !important;
+}
+
+/* Botão quando já configurado (verde) */
+.signature-config-btn.signature-configured {
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.25) !important;
+  animation: pulse-success 2s infinite;
+}
+
+.signature-config-btn.signature-configured:hover {
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4) !important;
+}
+
+/* Animação de pulso sutil para indicar que está configurado */
+@keyframes pulse-success {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.25);
+  }
+  50% {
+    box-shadow: 0 2px 12px rgba(76, 175, 80, 0.35);
+  }
+}
+
+.signature-order-list-compact {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.signature-order-list-compact .v-list-item {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  transition: background-color 0.2s;
+}
+
+.signature-order-list-compact .v-list-item:last-child {
+  border-bottom: none;
+}
+
+.signature-order-list-compact .v-list-item:hover {
+  background-color: rgba(25, 118, 210, 0.04);
+}
+
+.attachment-item {
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.attachment-item:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* Indicador visual para arquivos que precisam de configuração */
+.attachment-item.needs-signature-config {
+  background: linear-gradient(90deg, rgba(255, 193, 7, 0.05) 0%, transparent 100%);
+  border-left: 3px solid #FFC107;
+  animation: pulse-warning 3s ease-in-out infinite;
+}
+
+.attachment-item.needs-signature-config:hover {
+  background: linear-gradient(90deg, rgba(255, 193, 7, 0.1) 0%, transparent 100%);
+}
+
+/* Animação de pulso sutil para arquivos sem assinantes */
+@keyframes pulse-warning {
+  0%, 100% {
+    border-left-color: #FFC107;
+  }
+  50% {
+    border-left-color: #FFB300;
+  }
+}
+
+.attachment-actions {
+  gap: 8px;
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .step-execution-container {
+    padding: 0 12px;
+  }
+  .execution-header {
+    padding: 20px;
+  }
+  .approval-options {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .approval-option {
+    min-height: 120px;
+  }
+  .actions-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

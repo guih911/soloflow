@@ -89,6 +89,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useAttachment } from '@/composables/useAttachment'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -96,6 +97,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
+
+const { getPreviewUrl, downloadAttachment } = useAttachment()
 
 const loading = ref(false)
 const downloading = ref(false)
@@ -128,12 +131,10 @@ function formatFileSize(bytes) {
 
 async function loadPreview() {
   if (!props.attachment?.id) return
-  
+
   loading.value = true
   try {
-    const response = await fetch(`/api/processes/attachment/${props.attachment.id}/view`)
-    const blob = await response.blob()
-    previewUrl.value = URL.createObjectURL(blob)
+    previewUrl.value = await getPreviewUrl(props.attachment.id)
   } catch (error) {
     console.error('Error loading preview:', error)
     window.showSnackbar?.('Erro ao carregar visualização', 'error')
@@ -144,21 +145,13 @@ async function loadPreview() {
 
 async function downloadFile() {
   if (!props.attachment?.id) return
-  
+
   downloading.value = true
   try {
-    const response = await fetch(`/api/processes/attachment/${props.attachment.id}/download`)
-    const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
-    
-    const a = document.createElement('a')
-    a.href = url
-    a.download = props.attachment.originalName || 'arquivo'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    window.URL.revokeObjectURL(url)
-    
+    await downloadAttachment(
+      props.attachment.id,
+      props.attachment.originalName || 'arquivo'
+    )
     window.showSnackbar?.('Download iniciado', 'success')
   } catch (error) {
     console.error('Error downloading:', error)
@@ -170,13 +163,11 @@ async function downloadFile() {
 
 async function openInNewTab() {
   if (!props.attachment?.id) return
-  
+
   try {
-    const response = await fetch(`/api/processes/attachment/${props.attachment.id}/view`)
-    const blob = await response.blob()
-    const url = URL.createObjectURL(blob)
+    const url = await getPreviewUrl(props.attachment.id)
     window.open(url, '_blank')
-    
+
     setTimeout(() => {
       URL.revokeObjectURL(url)
     }, 60000)

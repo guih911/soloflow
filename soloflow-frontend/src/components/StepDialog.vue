@@ -13,9 +13,15 @@
             <v-tab value="basic">Informações Básicas</v-tab>
             <v-tab value="instructions">Instruções e Prazo</v-tab>
             <v-tab value="attachment">Anexos</v-tab>
-            <v-tab value="flow">Fluxo e Condições</v-tab>
-            <v-tab v-if="localStepData.type === 'INPUT'" value="input-config">
-              Formulário da Etapa
+          <v-tab value="flow">Fluxo e Condições</v-tab>
+          <v-tab v-if="localStepData.type === 'REVIEW'" value="review-config">
+            Revisão de Anexos
+          </v-tab>
+          <v-tab v-if="localStepData.type === 'INPUT'" value="input-config">
+            Formulário da Etapa
+          </v-tab>
+          <v-tab v-if="localStepData.requiresSignature || localStepData.type === 'SIGNATURE'" value="signature-config">
+            Assinaturas Digitais
             </v-tab>
           </v-tabs>
 
@@ -104,7 +110,14 @@
             <v-window-item value="attachment">
               <v-row>
                 <v-col cols="12">
-                  <v-switch v-model="localStepData.allowAttachment" label="Permitir anexos" color="primary" />
+                  <v-switch
+                    v-model="localStepData.allowAttachment"
+                    label="Permitir anexos"
+                    color="primary"
+                    :disabled="localStepData.type === 'UPLOAD'"
+                    hint="Etapas de Upload habilitam anexos automaticamente"
+                    persistent-hint
+                  />
                 </v-col>
 
                 <template v-if="localStepData.allowAttachment">
@@ -128,54 +141,210 @@
                       label="Tipos de arquivo permitidos" multiple chips closable-chips
                       hint="Deixe vazio para permitir todos os tipos" persistent-hint />
                   </v-col>
+
+                  <template v-if="localStepData.type === 'UPLOAD'">
+                    <v-divider class="my-4" />
+                    <v-col cols="12">
+                      <h4 class="text-subtitle-1 font-weight-medium mb-2">
+                        Assinaturas dos documentos enviados
+                      </h4>
+                      <p class="text-body-2 text-medium-emphasis mb-3">
+                        Defina se os arquivos anexados nesta etapa precisarão de assinatura digital e quem deverá assinar.
+                      </p>
+                      <v-switch
+                        v-model="localStepData.requiresSignature"
+                        label="Requer assinatura digital dos anexos"
+                        color="primary"
+                      />
+                    </v-col>
+
+                    <v-col cols="12" v-if="localStepData.requiresSignature">
+                      <v-alert
+                        v-if="signatureConfig.value.requirements.length === 0"
+                        type="info"
+                        variant="tonal"
+                        class="mb-3"
+                      >
+                        Nenhum assinante configurado ainda. Clique em "Configurar assinantes" para definir a ordem, usuário ou setor responsável pela assinatura.
+                      </v-alert>
+
+                      <v-chip-group
+                        v-else
+                        multiple
+                        class="mb-3 d-flex flex-wrap gap-2"
+                      >
+                        <v-chip
+                          v-for="req in signatureConfig.value.requirements"
+                          :key="req.tempId || `${req.order}-${req.userId || req.sectorId || 'all'}`"
+                          size="small"
+                          color="primary"
+                          variant="tonal"
+                        >
+                          <v-icon start size="16">mdi-order-numeric-descending</v-icon>
+                          {{ req.order }}. {{ getSignerDisplayName(req) }}
+                        </v-chip>
+                      </v-chip-group>
+
+                      <div class="d-flex flex-wrap gap-2">
+                        <v-btn
+                          color="primary"
+                          variant="elevated"
+                          size="small"
+                          @click="openSignatureRequirementsDialog"
+                          prepend-icon="mdi-account-edit"
+                        >
+                          Configurar assinantes
+                        </v-btn>
+                        <v-btn
+                          variant="text"
+                          color="secondary"
+                          size="small"
+                          @click="signatureConfig.value.requirements = []"
+                          prepend-icon="mdi-broom"
+                          v-if="signatureConfig.value.requirements.length > 0"
+                        >
+                          Limpar lista
+                        </v-btn>
+                      </div>
+                    </v-col>
+                  </template>
                 </template>
               </v-row>
             </v-window-item>
 
-            <v-window-item value="flow">
-              <v-row>
-                <v-col cols="12">
-                  <v-combobox v-model="localStepData.actions" label="Ações disponíveis" multiple chips closable-chips
-                    hint="Digite e pressione Enter para adicionar (ex: aprovar, rejeitar, devolver)" persistent-hint
-                    class="mb-4" />
-                </v-col>
+        <v-window-item value="flow">
+          <v-row>
+            <v-col cols="12">
+              <v-card variant="outlined" class="mb-4">
+                <v-card-title class="text-subtitle-1">
+                  Ações disponíveis
+                </v-card-title>
+                <v-card-text>
+                  <v-combobox
+                    v-model="localStepData.actions"
+                    label="Ações disponíveis"
+                    multiple
+                    chips
+                    closable-chips
+                    hint="Digite e pressione Enter para adicionar (ex: aprovar, rejeitar, devolver)"
+                    persistent-hint
+                  />
+                </v-card-text>
+              </v-card>
+            </v-col>
 
-                <v-col cols="12">
-                  <v-card variant="outlined" v-if="localStepData.actions.length > 0">
-                    <v-card-title class="text-subtitle-1">
-                      Condições de Fluxo
-                    </v-card-title>
-                    <v-card-text>
-                      <p class="text-body-2 text-grey mb-4">
-                        Configure o que acontece após cada ação
-                      </p>
+            <v-col cols="12">
+              <StepTransitionEditor
+                v-model="localStepData.flowConditions"
+                :source-step-order="currentStepOrder"
+                :available-steps="availableStepsForTransitions"
+                :available-fields="availableFieldsForConditions"
+                :step-type="localStepData.type"
+                :sectors="sectors"
+              />
+            </v-col>
+          </v-row>
+        </v-window-item>
 
-                      <div v-for="action in localStepData.actions" :key="action" class="mb-4">
-                        <v-row align="center">
-                          <v-col cols="12" md="4">
-                            <v-chip color="primary" label>
-                              {{ action }}
-                            </v-chip>
-                          </v-col>
-                          <v-col cols="12" md="8">
-                            <v-select v-model="localStepData.conditions[action]" :items="getFlowOptions()"
-                              label="Vai para..." density="compact">
-                              <template v-slot:item="{ item, props }">
-                                <v-list-item v-bind="props">
-                                  <template v-slot:prepend>
-                                    <v-icon>{{ item.icon }}</v-icon>
-                                  </template>
-                                </v-list-item>
-                              </template>
-                            </v-select>
-                          </v-col>
-                        </v-row>
-                      </div>
-                    </v-card-text>
-                  </v-card>
-                </v-col>
-              </v-row>
-            </v-window-item>
+        <v-window-item value="review-config">
+          <v-row>
+            <v-col cols="12">
+              <v-card variant="outlined" class="mb-4">
+                <v-card-title class="d-flex align-center">
+                  <v-icon start color="primary">mdi-note-text</v-icon>
+                  Registro da Revisão
+                </v-card-title>
+                <v-divider />
+                <v-card-text>
+                  <v-switch
+                    v-model="localStepData.reviewSettings.enabled"
+                    label="Capturar resumo da revisão nesta etapa"
+                    color="primary"
+                    hint="Ao habilitar, será exibido um campo para que o revisor registre o resultado desta etapa."
+                    persistent-hint
+                  />
+
+                  <v-expand-transition>
+                    <div v-if="localStepData.reviewSettings.enabled">
+                      <v-row class="mt-2">
+                        <v-col cols="12" md="6">
+                          <v-text-field
+                            v-model="localStepData.reviewSettings.fieldLabel"
+                            label="Rótulo exibido para o revisor"
+                            :rules="[v => !!v?.trim() || 'Informe um rótulo']"
+                            maxlength="80"
+                          />
+                        </v-col>
+                        <v-col cols="12" md="6">
+                          <v-text-field
+                            v-model="localStepData.reviewSettings.fieldName"
+                            label="Identificador interno"
+                            hint="Usado para salvar o dado no processo (sem espaços ou acentos)"
+                            persistent-hint
+                          />
+                        </v-col>
+                        <v-col cols="12" md="6">
+                          <v-switch
+                            v-model="localStepData.reviewSettings.required"
+                            label="Campo obrigatório"
+                            color="primary"
+                          />
+                        </v-col>
+                        <v-col cols="12">
+                          <v-textarea
+                            v-model="localStepData.reviewSettings.hint"
+                            label="Dica/Orientação ao revisor (opcional)"
+                            rows="2"
+                            counter="200"
+                          />
+                        </v-col>
+                      </v-row>
+                    </div>
+                  </v-expand-transition>
+                </v-card-text>
+              </v-card>
+            </v-col>
+
+            <v-col cols="12">
+              <v-card>
+                <v-card-title class="d-flex align-center">
+                  <v-icon start color="primary">mdi-file-search</v-icon>
+                  Reutilização de Anexos
+                </v-card-title>
+                <v-divider />
+                <v-card-text>
+                  <p class="text-body-2 text-medium-emphasis mb-4">
+                    Escolha de quais etapas anteriores os anexos serão reaproveitados durante esta revisão.
+                    Apenas etapas anteriores que coletam arquivos podem ser selecionadas.
+                  </p>
+
+                  <v-alert
+                    v-if="reviewAttachmentOptions.length === 0"
+                    type="info"
+                    variant="tonal"
+                    class="mb-4"
+                  >
+                    Nenhuma etapa anterior com anexos disponível. Adicione uma etapa de upload antes desta etapa de revisão.
+                  </v-alert>
+
+                  <v-select
+                    v-else
+                    v-model="reviewAttachmentSelection"
+                    :items="reviewAttachmentOptions"
+                    item-title="title"
+                    item-value="value"
+                    label="Etapas com anexos"
+                    multiple
+                    chips
+                    closable-chips
+                    hint="Os anexos selecionados serão exibidos automaticamente durante a revisão."
+                    persistent-hint
+                  />
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
+        </v-window-item>
 
             <v-window-item value="input-config">
               <v-row>
@@ -196,7 +365,7 @@
                         Adicionar Campo
                       </v-btn>
                     </v-card-title>
-                    
+
                     <v-card-text v-if="inputConfig.fields.length === 0" class="text-center py-6">
                       <v-icon size="48" color="grey-lighten-1">mdi-form-select</v-icon>
                       <p class="text-body-1 text-grey mt-2">Nenhum campo específico</p>
@@ -232,6 +401,77 @@
                           </template>
                         </v-list-item>
                         <v-divider v-if="index < inputConfig.fields.length - 1" />
+                      </template>
+                    </v-list>
+                  </v-card>
+                </v-col>
+              </v-row>
+            </v-window-item>
+
+            <v-window-item value="signature-config">
+              <v-row>
+                <v-col cols="12">
+                  <h3 class="text-h6 mb-4 d-flex align-center">
+                    <v-icon color="primary" class="mr-2">mdi-draw-pen</v-icon>
+                    Configuração de Assinaturas Digitais
+                  </h3>
+                  <p class="text-body-2 text-medium-emphasis mb-4">
+                    Configure quem deve assinar os documentos desta etapa e em qual ordem.
+                    As assinaturas serão feitas com certificados digitais ICP-Brasil tipo A1.
+                  </p>
+
+                  <v-card variant="outlined" class="mb-4">
+                    <v-card-title class="text-subtitle-1 d-flex align-center justify-space-between">
+                      <span>
+                        <v-icon start color="primary">mdi-account-group</v-icon>
+                        Assinantes Configurados ({{ signatureConfig.requirements.length }})
+                      </span>
+                      <v-btn
+                        color="primary"
+                        size="small"
+                        @click="openSignatureRequirementsDialog"
+                        prepend-icon="mdi-plus"
+                      >
+                        Gerenciar Assinantes
+                      </v-btn>
+                    </v-card-title>
+
+                    <v-card-text v-if="signatureConfig.requirements.length === 0" class="text-center py-6">
+                      <v-icon size="48" color="grey-lighten-1">mdi-file-sign</v-icon>
+                      <p class="text-body-1 text-grey mt-2">Nenhum assinante configurado</p>
+                      <p class="text-body-2 text-grey">
+                        Clique em "Gerenciar Assinantes" para adicionar assinantes
+                      </p>
+                    </v-card-text>
+
+                    <v-list v-else lines="two" class="py-0">
+                      <template v-for="(req, index) in sortedSignatureRequirements" :key="req.tempId || index">
+                        <v-list-item>
+                          <template #prepend>
+                            <v-avatar :color="req.type === 'SEQUENTIAL' ? 'primary' : 'secondary'" size="36">
+                              <span class="text-h6">{{ req.order }}</span>
+                            </v-avatar>
+                          </template>
+
+                          <v-list-item-title class="font-weight-medium">
+                            {{ getSignerDisplayName(req) }}
+                            <v-chip
+                              size="x-small"
+                              :color="req.type === 'SEQUENTIAL' ? 'primary' : 'secondary'"
+                              class="ml-2"
+                            >
+                              {{ req.type === 'SEQUENTIAL' ? 'Sequencial' : 'Paralelo' }}
+                            </v-chip>
+                            <v-chip v-if="req.isRequired" size="x-small" color="error" class="ml-1">
+                              Obrigatório
+                            </v-chip>
+                          </v-list-item-title>
+
+                          <v-list-item-subtitle>
+                            {{ req.description || 'Assinatura digital do documento' }}
+                          </v-list-item-subtitle>
+                        </v-list-item>
+                        <v-divider v-if="index < signatureConfig.requirements.length - 1" />
                       </template>
                     </v-list>
                   </v-card>
@@ -322,11 +562,22 @@
         </v-form>
       </v-card>
     </v-dialog>
+
+    <!-- Dialog de Configuração de Assinantes -->
+    <SignatureRequirementsDialog
+      v-model="signatureRequirementsDialog"
+      :initial-requirements="signatureConfig.requirements"
+      :users="users"
+      :sectors="sectors"
+      @save="saveSignatureRequirements"
+    />
   </v-dialog>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import SignatureRequirementsDialog from './SignatureRequirementsDialog.vue'
+import StepTransitionEditor from './StepTransitionEditor.vue'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -349,28 +600,55 @@ const tab = ref('basic')
 const responsibleType = ref('sector')
 const fieldDialog = ref(false)
 const editingFieldIndex = ref(null)
+const signatureRequirementsDialog = ref(false)
 
-const localStepData = ref({
-  name: '',
-  description: '',
-  type: 'INPUT',
-  instructions: '',
-  slaDays: null,
-  allowAttachment: false,
-  requiresSignature: false,
-  requireAttachment: false,
-  minAttachments: null,
-  maxAttachments: null,
-  allowedFileTypes: [],
-  actions: [],
-  assignedToUserId: null,
-  assignedToSectorId: null,
-  conditions: {}
-})
+const localStepData = ref(getEmptyStepData())
 
 const inputConfig = ref({
   fields: []
 })
+
+const signatureConfig = ref({
+  requirements: []
+})
+
+function getDefaultReviewSettings() {
+  return {
+    enabled: true,
+    fieldName: 'reviewNotes',
+    fieldLabel: 'Notas da Revisão',
+    required: false,
+    hint: ''
+  }
+}
+
+function cloneReviewSettings(settings) {
+  if (!settings) return getDefaultReviewSettings()
+  const parsed = typeof settings === 'string'
+    ? (() => { try { return JSON.parse(settings) } catch { return {} } })()
+    : settings
+  return {
+    enabled: parsed.enabled ?? true,
+    fieldName: parsed.fieldName || 'reviewNotes',
+    fieldLabel: parsed.fieldLabel || 'Notas da Revisão',
+    required: Boolean(parsed.required),
+    hint: parsed.hint || ''
+  }
+}
+
+function sanitizeFieldIdentifier(value, fallback = 'reviewNotes') {
+  if (!value) return fallback
+  return value
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '') || fallback
+}
+
+const reviewAttachmentSelection = ref([])
 
 const fieldData = ref({
   name: '',
@@ -392,8 +670,144 @@ const fieldTypes = [
   { title: 'Telefone', value: 'PHONE' },
   { title: 'Lista Suspensa', value: 'DROPDOWN' },
   { title: 'Área de Texto', value: 'TEXTAREA' },
-  { title: 'Moeda', value: 'CURRENCY' }
+  { title: 'Moeda', value: 'CURRENCY' },
+  { title: 'Arquivo', value: 'FILE' }
 ]
+
+function resolveStepOrder(step, index) {
+  if (step?.order) return step.order
+  return index + 1
+}
+
+function toArray(value, fallback = []) {
+  if (value === null || value === undefined) return [...fallback]
+  if (Array.isArray(value)) return [...value]
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed : [...fallback]
+    } catch {
+      return [...fallback]
+    }
+  }
+  return [...fallback]
+}
+
+function toObject(value, fallback = {}) {
+  if (!value) return { ...fallback }
+  if (typeof value === 'object') return { ...fallback, ...value }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return typeof parsed === 'object' && parsed !== null ? { ...fallback, ...parsed } : { ...fallback }
+    } catch {
+      return { ...fallback }
+    }
+  }
+  return { ...fallback }
+}
+
+function getEmptyStepData() {
+  return {
+    name: '',
+    description: '',
+    type: 'INPUT',
+    instructions: '',
+    slaDays: null,
+    allowAttachment: false,
+    requiresSignature: false,
+    requireAttachment: false,
+    minAttachments: null,
+    maxAttachments: null,
+    allowedFileTypes: [],
+    actions: [],
+    assignedToUserId: null,
+    assignedToSectorId: null,
+    assignedToCreator: false,
+    assignmentConditions: null,
+    conditions: {},
+    flowConditions: [],
+    reuseData: [],
+    reviewSettings: getDefaultReviewSettings()
+  }
+}
+
+const orderedSteps = computed(() =>
+  (props.steps || []).map((step, index) => ({
+    id: step.id ?? step.tempId ?? index,
+    name: step.name || `Etapa ${index + 1}`,
+    type: step.type || 'INPUT',
+    order: resolveStepOrder(step, index),
+    allowAttachment: Boolean(step.allowAttachment),
+    actions: toArray(step.actions),
+    conditions: step.conditions ?? {},
+    reuseData: toArray(step.reuseData),
+    flowConditions: toArray(step.flowConditions)
+  }))
+)
+
+const currentStepOrder = computed(() => {
+  if (props.stepData?.order) return props.stepData.order
+  if (props.editingIndex !== undefined && props.editingIndex !== null) {
+    const step = orderedSteps.value[props.editingIndex]
+    if (step) return step.order
+  }
+  return orderedSteps.value.length + 1
+})
+
+const availableStepsForTransitions = computed(() => orderedSteps.value)
+
+function extractFieldsFromConditions(rawConditions, stepLabel) {
+  const parsed = toObject(rawConditions, {})
+  if (!Array.isArray(parsed.fields)) return []
+  return parsed.fields.map(field => ({
+    name: field.name,
+    label: field.label || field.name,
+    type: field.type || 'TEXT',
+    source: stepLabel
+  }))
+}
+
+const availableFieldsForConditions = computed(() => {
+  const fields = []
+
+  if (Array.isArray(props.formFields)) {
+    props.formFields.forEach(field => {
+      fields.push({
+        name: field.name,
+        label: field.label || field.name,
+        type: field.type || 'TEXT',
+        source: 'Formulário principal'
+      })
+    })
+  }
+
+  orderedSteps.value.forEach(step => {
+    extractFieldsFromConditions(step.conditions, `${step.order}. ${step.name}`).forEach(f => fields.push(f))
+  })
+
+  if (localStepData.value.type === 'INPUT' && Array.isArray(inputConfig.value.fields)) {
+    inputConfig.value.fields.forEach(field => {
+      fields.push({
+        name: field.name,
+        label: field.label || field.name,
+        type: field.type || 'TEXT',
+        source: 'Campos desta etapa'
+      })
+    })
+  }
+
+  return fields
+})
+
+const reviewAttachmentOptions = computed(() => {
+  return orderedSteps.value
+    .filter(step => step.order < currentStepOrder.value && (step.allowAttachment || step.type === 'UPLOAD'))
+    .map(step => ({
+      title: `${step.order}. ${step.name}`,
+      value: step.order
+    }))
+})
 
 const fileTypes = [
   { title: 'PDF', value: 'application/pdf' },
@@ -483,24 +897,31 @@ function onResponsibleTypeChange() {
   localStepData.value.assignedToSectorId = null
 }
 
-function getFlowOptions() {
-  const options = [
-    { title: 'Próxima etapa', value: null, icon: 'mdi-arrow-right' },
-    { title: 'Finalizar processo', value: 'END', icon: 'mdi-flag-checkered' },
-    { title: 'Voltar para etapa anterior', value: 'PREVIOUS', icon: 'mdi-arrow-left' }
-  ]
+// Funções para assinaturas
+const sortedSignatureRequirements = computed(() => {
+  return [...signatureConfig.value.requirements].sort((a, b) => a.order - b.order)
+})
 
-  props.steps.forEach((step, index) => {
-    if (props.editingIndex === null || index !== props.editingIndex) {
-      options.push({
-        title: `Ir para: ${step.name}`,
-        value: index + 1,
-        icon: 'mdi-debug-step-into'
-      })
-    }
-  })
+function openSignatureRequirementsDialog() {
+  signatureRequirementsDialog.value = true
+}
 
-  return options
+function saveSignatureRequirements(requirements) {
+  signatureConfig.value.requirements = requirements
+}
+
+function getSignerDisplayName(req) {
+  if (req.userName) return req.userName
+  if (req.sectorName) return `Setor: ${req.sectorName}`
+  if (req.userId) {
+    const user = props.users.find(u => u.id === req.userId)
+    return user?.name || 'Usuário'
+  }
+  if (req.sectorId) {
+    const sector = props.sectors.find(s => s.id === req.sectorId)
+    return `Setor: ${sector?.name || 'Setor'}`
+  }
+  return 'Não definido'
 }
 
 function addInputField() {
@@ -586,61 +1007,115 @@ function save() {
     stepToSave.conditions = {
       requireJustification: true
     }
+  } else {
+    stepToSave.conditions = null
+  }
+
+  if (!Array.isArray(stepToSave.flowConditions)) {
+    stepToSave.flowConditions = []
+  }
+
+  if (stepToSave.type === 'REVIEW') {
+    stepToSave.reuseData = Array.isArray(localStepData.value.reuseData)
+      ? [...localStepData.value.reuseData]
+      : reviewAttachmentSelection.value.map(order => ({
+          type: 'attachment',
+          sourceStep: order
+        }))
+  } else if (!Array.isArray(stepToSave.reuseData)) {
+    stepToSave.reuseData = []
+  }
+
+  if (stepToSave.type === 'REVIEW') {
+    const reviewSettings = cloneReviewSettings(localStepData.value.reviewSettings)
+    if (reviewSettings.enabled) {
+      const fieldName = sanitizeFieldIdentifier(reviewSettings.fieldName, 'reviewNotes')
+      stepToSave.reviewSettings = {
+        enabled: true,
+        fieldName,
+        fieldLabel: reviewSettings.fieldLabel?.trim() || 'Notas da Revisão',
+        required: Boolean(reviewSettings.required),
+        hint: reviewSettings.hint?.trim() || ''
+      }
+      localStepData.value.reviewSettings = { ...stepToSave.reviewSettings }
+    } else {
+      stepToSave.reviewSettings = null
+    }
+  } else {
+    stepToSave.reviewSettings = null
+  }
+
+  // Adicionar configurações de assinatura
+  if (stepToSave.requiresSignature || stepToSave.type === 'SIGNATURE') {
+    stepToSave.signatureRequirements = signatureConfig.value.requirements
+  } else if (stepToSave.type !== 'SIGNATURE') {
+    stepToSave.signatureRequirements = []
   }
 
   emit('save', stepToSave)
 }
 
-watch(() => props.modelValue, (newVal) => {
-  if (newVal) {
-    if (props.stepData) {
-      localStepData.value = { ...props.stepData }
-      
-      if (props.stepData.slaHours) {
-        localStepData.value.slaDays = Math.ceil(props.stepData.slaHours / 24)
-      }
-      
-      responsibleType.value = props.stepData.assignedToUserId ? 'user' : 'sector'
+watch(() => props.modelValue, (isOpen) => {
+  if (!isOpen) return
 
-      if (props.stepData.type === 'INPUT' && props.stepData.conditions) {
-        try {
-          const conditions = typeof props.stepData.conditions === 'string'
-            ? JSON.parse(props.stepData.conditions)
-            : props.stepData.conditions
+  if (props.stepData) {
+    const normalizedConditions = toObject(props.stepData.conditions, {})
+    const normalizedActions = toArray(props.stepData.actions)
+    const normalizedAllowedFiles = toArray(props.stepData.allowedFileTypes)
+    const normalizedFlow = toArray(props.stepData.flowConditions)
+    const normalizedReuse = toArray(props.stepData.reuseData)
+    const normalizedSignatures = toArray(props.stepData.signatureRequirements)
 
-          inputConfig.value = {
-            fields: conditions.fields || []
-          }
-        } catch (e) {
-          console.error('Error loading INPUT conditions:', e)
-          inputConfig.value = { fields: [] }
-        }
-      } else {
-        inputConfig.value = { fields: [] }
+    localStepData.value = {
+      ...getEmptyStepData(),
+      ...props.stepData,
+      actions: normalizedActions,
+      allowedFileTypes: normalizedAllowedFiles,
+      conditions: normalizedConditions,
+      flowConditions: normalizedFlow,
+      reuseData: normalizedReuse,
+      reviewSettings: cloneReviewSettings(props.stepData.reviewSettings)
+    }
+
+    if (props.stepData.slaHours) {
+      localStepData.value.slaDays = Math.ceil(props.stepData.slaHours / 24)
+    }
+
+    responsibleType.value = props.stepData.assignedToUserId ? 'user' : 'sector'
+
+    if (localStepData.value.type === 'INPUT') {
+      inputConfig.value = {
+        fields: Array.isArray(normalizedConditions.fields) ? [...normalizedConditions.fields] : []
       }
     } else {
-      localStepData.value = {
-        name: '',
-        description: '',
-        type: 'INPUT',
-        instructions: '',
-        slaDays: null,
-        allowAttachment: false,
-        requiresSignature: false,
-        requireAttachment: false,
-        minAttachments: null,
-        maxAttachments: null,
-        allowedFileTypes: [],
-        actions: [],
-        assignedToUserId: null,
-        assignedToSectorId: null,
-        conditions: {}
-      }
-      responsibleType.value = 'sector'
       inputConfig.value = { fields: [] }
     }
-    tab.value = 'basic'
+
+    signatureConfig.value = {
+      requirements: normalizedSignatures
+    }
+
+    reviewAttachmentSelection.value = normalizedReuse
+      .filter(item => item && item.type === 'attachment' && item.sourceStep)
+      .map(item => item.sourceStep)
+  } else {
+    localStepData.value = getEmptyStepData()
+    responsibleType.value = 'sector'
+    inputConfig.value = { fields: [] }
+    signatureConfig.value = { requirements: [] }
+    reviewAttachmentSelection.value = []
   }
+
+  if (localStepData.value.type === 'UPLOAD') {
+    localStepData.value.allowAttachment = true
+  }
+
+  if (localStepData.value.type !== 'REVIEW') {
+    reviewAttachmentSelection.value = []
+    localStepData.value.reuseData = []
+  }
+
+  tab.value = localStepData.value.type === 'REVIEW' ? 'review-config' : 'basic'
 })
 
 watch(() => localStepData.value.allowAttachment, (newValue) => {
@@ -649,9 +1124,78 @@ watch(() => localStepData.value.allowAttachment, (newValue) => {
   }
 })
 
+watch(() => localStepData.value.requiresSignature, (newValue) => {
+  if (!newValue && localStepData.value.type !== 'SIGNATURE') {
+    signatureConfig.value.requirements = []
+  }
+})
+
 watch(() => localStepData.value.type, (newType) => {
   if (newType !== 'INPUT') {
     inputConfig.value.fields = []
+  }
+
+  if (newType === 'UPLOAD') {
+    localStepData.value.allowAttachment = true
+  }
+
+  if (newType !== 'REVIEW') {
+    reviewAttachmentSelection.value = []
+    localStepData.value.reuseData = []
+    if (tab.value === 'review-config') {
+      tab.value = 'basic'
+    }
+  } else {
+    if (!localStepData.value.reviewSettings) {
+      localStepData.value.reviewSettings = getDefaultReviewSettings()
+    }
+    localStepData.value.reviewSettings.fieldName = sanitizeFieldIdentifier(
+      localStepData.value.reviewSettings.fieldName,
+      'reviewNotes'
+    )
+    tab.value = 'review-config'
+  }
+})
+
+watch(
+  () => localStepData.value.reviewSettings?.fieldName,
+  (value) => {
+    if (!localStepData.value.reviewSettings) return
+    const sanitized = sanitizeFieldIdentifier(value, 'reviewNotes')
+    if (sanitized !== value) {
+      localStepData.value.reviewSettings.fieldName = sanitized
+    }
+  }
+)
+
+watch(
+  () => localStepData.value.reviewSettings?.fieldLabel,
+  (value) => {
+    if (!localStepData.value.reviewSettings) return
+    if (!value || !value.trim()) {
+      localStepData.value.reviewSettings.fieldLabel = 'Notas da Revisão'
+    }
+  }
+)
+
+watch(reviewAttachmentSelection, (selected) => {
+  if (localStepData.value.type !== 'REVIEW') return
+  const existing = Array.isArray(localStepData.value.reuseData)
+    ? localStepData.value.reuseData.filter(item => item?.type !== 'attachment')
+    : []
+  const attachments = selected.map(order => ({
+    type: 'attachment',
+    sourceStep: order
+  }))
+  localStepData.value.reuseData = [...existing, ...attachments]
+})
+
+watch(reviewAttachmentOptions, (options) => {
+  if (localStepData.value.type !== 'REVIEW') return
+  const allowed = new Set(options.map(option => option.value))
+  const filtered = reviewAttachmentSelection.value.filter(value => allowed.has(value))
+  if (filtered.length !== reviewAttachmentSelection.value.length) {
+    reviewAttachmentSelection.value = filtered
   }
 })
 </script>

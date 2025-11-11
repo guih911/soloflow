@@ -367,6 +367,14 @@
             </div>
           </div>
         </v-card>
+
+        <!-- Histórico do Processo -->
+        <ProcessHistory
+          v-if="process"
+          :history="process.stepExecutions"
+          :process-form-fields="process.processType?.formFields || []"
+          class="mt-6"
+        />
       </v-col>
     </v-row>
 
@@ -375,6 +383,38 @@
       :file-data="selectedFieldFile"
       :field-info="selectedField"
     />
+
+    <!-- Botão Flutuante para Abrir Documentos -->
+    <v-btn
+      v-if="totalDocuments > 0"
+      class="documents-fab"
+      color="primary"
+      size="x-large"
+      icon
+      elevation="8"
+      @click="documentsDrawer = true"
+    >
+      <v-badge
+        :content="totalDocuments"
+        color="error"
+        overlap
+        offset-x="-2"
+        offset-y="-2"
+      >
+        <v-icon size="28">mdi-file-document-multiple</v-icon>
+      </v-badge>
+    </v-btn>
+
+    <!-- Drawer Lateral de Documentos -->
+    <v-navigation-drawer
+      v-model="documentsDrawer"
+      location="right"
+      temporary
+      width="520"
+      class="documents-drawer"
+    >
+      <DocumentViewer v-if="process" :process="process" :drawer="true" @refresh="refreshProcess" />
+    </v-navigation-drawer>
   </div>
 
   <div v-else-if="loading" class="text-center py-12">
@@ -402,8 +442,10 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/pt-br'
 
-// Importar componente de modal de arquivo de campo
+// Importar componentes
 import FieldFileModal from '@/components/FieldFileModal.vue'
+import ProcessHistory from '@/components/ProcessHistory.vue'
+import DocumentViewer from '@/components/DocumentViewer.vue'
 
 dayjs.extend(relativeTime)
 dayjs.locale('pt-br')
@@ -417,6 +459,7 @@ const processStore = useProcessStore()
 const fieldFileModal = ref(false)
 const selectedFieldFile = ref(null)
 const selectedField = ref(null)
+const documentsDrawer = ref(false)
 
 // Computed
 const loading = computed(() => processStore.loading)
@@ -488,6 +531,20 @@ const formattedFormData = computed(() => {
   })
 
   return formatted
+})
+
+// Computed para total de documentos
+const totalDocuments = computed(() => {
+  if (!process.value?.stepExecutions) return 0
+
+  let count = 0
+  process.value.stepExecutions.forEach(execution => {
+    if (execution.attachments && execution.attachments.length > 0) {
+      count += execution.attachments.length
+    }
+  })
+
+  return count
 })
 
 // Métodos auxiliares de status
@@ -632,20 +689,70 @@ function getProgressColor() {
 }
 
 function canExecuteStep(execution) {
-  if (execution.status !== 'IN_PROGRESS') return false
+  console.warn('⚡ canExecuteStep called for execution:', execution.id, 'status:', execution.status)
+
+  // Permitir executar etapas PENDING ou IN_PROGRESS
+  // Bloquear apenas etapas já concluídas/rejeitadas/puladas
+  if (execution.status === 'COMPLETED' || execution.status === 'REJECTED' || execution.status === 'SKIPPED') {
+    console.warn('❌ Execution already completed/rejected/skipped:', execution.status)
+    return false
+  }
+
+  // Verificar se é a primeira etapa não concluída (pode executar)
+  const allExecutions = process.value?.stepExecutions || []
+  const sortedExecutions = [...allExecutions].sort((a, b) =>
+    (a.step?.order || 0) - (b.step?.order || 0)
+  )
+
+  const firstPending = sortedExecutions.find(se =>
+    se.status !== 'COMPLETED' && se.status !== 'SKIPPED' && se.status !== 'REJECTED'
+  )
+
+  if (firstPending?.id !== execution.id) {
+    console.warn('❌ Esta não é a próxima etapa a ser executada. Próxima:', firstPending?.step?.name)
+    return false
+  }
 
   const user = authStore.user
   const step = execution.step
 
+  // Extrair o ID do setor (pode vir como objeto ou string)
+  const stepSectorId = step.assignedToSector?.id || step.assignedToSectorId
+  const stepUserId = step.assignedToUser?.id || step.assignedToUserId
+
+  console.warn('🔍 VERIFICANDO PERMISSÃO PARA EXECUTAR ETAPA:')
+  console.table({
+    'Nome da Etapa': step.name,
+    'ID Setor da Etapa': stepSectorId,
+    'ID Usuário da Etapa': stepUserId,
+    'ID Usuário Logado': user?.id,
+    'ID Setor do Usuário': authStore.activeSectorId,
+    'É Admin?': authStore.isAdmin,
+  })
+
   // Verificar se é responsável direto
-  if (step.assignedToUserId === user.id) return true
+  if (stepUserId && stepUserId === user?.id) {
+    console.warn('✅ PODE EXECUTAR: Usuário é responsável direto pela etapa')
+    return true
+  }
 
   // Verificar se pertence ao setor responsável
-  if (step.assignedToSectorId && authStore.activeSectorId === step.assignedToSectorId) return true
+  if (stepSectorId && authStore.activeSectorId && stepSectorId === authStore.activeSectorId) {
+    console.warn('✅ PODE EXECUTAR: Usuário pertence ao setor responsável pela etapa')
+    return true
+  }
 
   // Admin pode executar qualquer etapa
-  if (authStore.isAdmin) return true
+  if (authStore.isAdmin) {
+    console.warn('✅ PODE EXECUTAR: Usuário é admin')
+    return true
+  }
 
+  console.warn('❌ NÃO PODE EXECUTAR esta etapa')
+  console.warn('Motivos:')
+  console.warn('- Não é responsável direto:', stepUserId, '!==', user?.id)
+  console.warn('- Não é do setor responsável:', stepSectorId, '!==', authStore.activeSectorId)
+  console.warn('- Não é admin:', authStore.isAdmin)
   return false
 }
 
@@ -1227,5 +1334,40 @@ onMounted(async () => {
 
 .workflow-container::-webkit-scrollbar-thumb:hover {
   background: rgba(25, 118, 210, 0.5);
+}
+
+/* Botão Flutuante de Documentos */
+.documents-fab {
+  position: fixed !important;
+  bottom: 32px;
+  right: 32px;
+  z-index: 999;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.documents-fab:hover {
+  transform: scale(1.1) translateY(-4px);
+  box-shadow: 0 12px 32px rgba(25, 118, 210, 0.4) !important;
+}
+
+.documents-fab:active {
+  transform: scale(0.95);
+}
+
+/* Drawer de Documentos */
+.documents-drawer {
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.15) !important;
+}
+
+@media (max-width: 768px) {
+  .documents-fab {
+    bottom: 24px;
+    right: 24px;
+  }
+
+  .documents-drawer {
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
 }
 </style>

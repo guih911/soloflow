@@ -49,31 +49,114 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     }
 
     let allowedFileTypes = [];
-    if (step.allowedFileTypes) {
-      try {
-        if (typeof step.allowedFileTypes === 'string') {
-          allowedFileTypes = JSON.parse(step.allowedFileTypes);
-        } else if (Array.isArray(step.allowedFileTypes)) {
-          allowedFileTypes = step.allowedFileTypes;
-        }
-      } catch (e) {
-        console.warn('Erro ao processar step.allowedFileTypes:', e);
-        allowedFileTypes = [];
+  if (step.allowedFileTypes) {
+    try {
+      if (typeof step.allowedFileTypes === 'string') {
+        allowedFileTypes = JSON.parse(step.allowedFileTypes);
+      } else if (Array.isArray(step.allowedFileTypes)) {
+        allowedFileTypes = step.allowedFileTypes;
       }
+    } catch (e) {
+      console.warn('Erro ao processar step.allowedFileTypes:', e);
+      allowedFileTypes = [];
     }
+  }
+
+  let flowConditions = [];
+  if (step.flowConditions) {
+    try {
+      if (typeof step.flowConditions === 'string') {
+        flowConditions = JSON.parse(step.flowConditions);
+      } else if (Array.isArray(step.flowConditions)) {
+        flowConditions = step.flowConditions;
+      }
+    } catch (e) {
+      console.warn('Erro ao processar step.flowConditions:', e);
+      flowConditions = [];
+    }
+  }
+
+  let reuseData = [];
+  if (step.reuseData) {
+    try {
+      if (typeof step.reuseData === 'string') {
+        reuseData = JSON.parse(step.reuseData);
+      } else if (Array.isArray(step.reuseData)) {
+        reuseData = step.reuseData;
+      }
+    } catch (e) {
+      console.warn('Erro ao processar step.reuseData:', e);
+      reuseData = [];
+    }
+  }
+
+  let signatureRequirements = [];
+  if (step.signatureRequirements) {
+    try {
+      if (typeof step.signatureRequirements === 'string') {
+        signatureRequirements = JSON.parse(step.signatureRequirements);
+      } else if (Array.isArray(step.signatureRequirements)) {
+        signatureRequirements = step.signatureRequirements;
+      }
+    } catch (e) {
+      console.warn('Erro ao processar step.signatureRequirements:', e);
+      signatureRequirements = [];
+    }
+  }
+
+  let assignmentConditions = null;
+  if (step.assignmentConditions) {
+    try {
+      if (typeof step.assignmentConditions === 'string') {
+        assignmentConditions = JSON.parse(step.assignmentConditions);
+      } else if (typeof step.assignmentConditions === 'object') {
+        assignmentConditions = step.assignmentConditions;
+      }
+    } catch (e) {
+      console.warn('Erro ao processar step.assignmentConditions:', e);
+      assignmentConditions = null;
+    }
+  }
+
+  if (assignmentConditions && typeof assignmentConditions === 'object') {
+    assignmentConditions = { ...assignmentConditions }
+  }
+
+  const reviewSettings = step.type === 'REVIEW'
+    ? normalizeReviewSettings(step.reviewSettings)
+    : null
+
+  flowConditions = Array.isArray(flowConditions)
+    ? flowConditions.map(condition => ({ ...condition }))
+    : []
+
+  reuseData = Array.isArray(reuseData)
+    ? reuseData.map(item => ({ ...item }))
+    : []
+
+  signatureRequirements = Array.isArray(signatureRequirements)
+    ? signatureRequirements.map(req => ({ ...req }))
+    : []
+
+  conditions = typeof conditions === 'object' && conditions !== null ? { ...conditions } : {}
 
     return {
       ...step,
-      actions: actions,
+      actions: Array.isArray(actions) ? [...actions] : [],
       conditions: conditions,
-      allowedFileTypes: allowedFileTypes,
+      allowedFileTypes: Array.isArray(allowedFileTypes) ? [...allowedFileTypes] : [],
+      flowConditions: flowConditions,
+      reuseData: reuseData,
+      signatureRequirements: signatureRequirements,
+      assignmentConditions: assignmentConditions,
+      reviewSettings: reviewSettings,
       name: step.name || '',
       type: step.type || 'INPUT',
       order: step.order || 1,
       allowAttachment: Boolean(step.allowAttachment),
       requiresSignature: Boolean(step.requiresSignature),
       requireAttachment: Boolean(step.requireAttachment),
-    };
+    }
   }
 
   function normalizeFormField(field) {
@@ -86,6 +169,51 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       type: field.type || 'TEXT',
       order: field.order || 1,
       required: Boolean(field.required),
+    }
+  }
+
+  function sanitizeFieldIdentifier(value, fallback = 'reviewNotes') {
+    if (!value) return fallback
+    return value
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_+|_+$/g, '') || fallback
+  }
+
+  function normalizeReviewSettings(settings) {
+    if (!settings) return null
+    let parsed = settings
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed)
+      } catch {
+        parsed = null
+      }
+    }
+    if (!parsed || typeof parsed !== 'object') return null
+    return {
+      enabled: parsed.enabled ?? true,
+      fieldName: sanitizeFieldIdentifier(parsed.fieldName, 'reviewNotes'),
+      fieldLabel: parsed.fieldLabel || 'Notas da Revisão',
+      required: Boolean(parsed.required),
+      hint: parsed.hint || ''
+    }
+  }
+
+  function prepareReviewSettingsForSave(step) {
+    if (step.type !== 'REVIEW') return null
+    const normalized = normalizeReviewSettings(step.reviewSettings)
+    if (!normalized) return null
+    return {
+      enabled: Boolean(normalized.enabled),
+      fieldName: sanitizeFieldIdentifier(normalized.fieldName, 'reviewNotes'),
+      fieldLabel: normalized.fieldLabel || 'Notas da Revisão',
+      required: Boolean(normalized.required),
+      hint: normalized.hint || ''
     }
   }
 
@@ -215,11 +343,23 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
           maxAttachments: step.maxAttachments || null,
           assignedToUserId: step.assignedToUserId || null,
           assignedToSectorId: step.assignedToSectorId || null,
+          assignedToCreator: Boolean(step.assignedToCreator),
+          assignmentConditions: step.assignmentConditions || null,
           instructions: step.instructions?.trim() || null,
           slaHours: step.slaHours || null,
           actions: Array.isArray(step.actions) ? step.actions : [],
           conditions: step.conditions || null,
           allowedFileTypes: Array.isArray(step.allowedFileTypes) ? step.allowedFileTypes : [],
+          flowConditions: Array.isArray(step.flowConditions)
+            ? step.flowConditions.map(condition => ({ ...condition }))
+            : [],
+          reuseData: Array.isArray(step.reuseData)
+            ? step.reuseData.map(item => ({ ...item }))
+            : [],
+          signatureRequirements: Array.isArray(step.signatureRequirements)
+            ? step.signatureRequirements.map(req => ({ ...req }))
+            : [],
+          reviewSettings: prepareReviewSettingsForSave(step)
         })),
         
         formFields: (data.formFields || []).map((field, index) => ({
@@ -296,8 +436,56 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         name: data.name?.trim(),
         description: data.description?.trim() || null,
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : undefined,
-        steps: data.steps,
-        formFields: data.formFields,
+      }
+
+      if (Array.isArray(data.steps)) {
+        cleanData.steps = data.steps.map((step, index) => ({
+          id: step.id,
+          name: step.name?.trim(),
+          description: step.description?.trim() || null,
+          type: step.type || 'INPUT',
+          order: step.order || index + 1,
+          allowAttachment: Boolean(step.allowAttachment),
+          requiresSignature: Boolean(step.requiresSignature),
+          requireAttachment: Boolean(step.requireAttachment),
+          minAttachments: step.minAttachments || null,
+          maxAttachments: step.maxAttachments || null,
+          assignedToUserId: step.assignedToUserId || null,
+          assignedToSectorId: step.assignedToSectorId || null,
+          assignedToCreator: Boolean(step.assignedToCreator),
+          assignmentConditions: step.assignmentConditions || null,
+          instructions: step.instructions?.trim() || null,
+          slaHours: step.slaHours || null,
+          actions: Array.isArray(step.actions) ? step.actions : [],
+          conditions: step.conditions || null,
+          allowedFileTypes: Array.isArray(step.allowedFileTypes) ? step.allowedFileTypes : [],
+          flowConditions: Array.isArray(step.flowConditions)
+            ? step.flowConditions.map(condition => ({ ...condition }))
+            : [],
+          reuseData: Array.isArray(step.reuseData)
+            ? step.reuseData.map(item => ({ ...item }))
+            : [],
+          signatureRequirements: Array.isArray(step.signatureRequirements)
+            ? step.signatureRequirements.map(req => ({ ...req }))
+            : [],
+          reviewSettings: prepareReviewSettingsForSave(step)
+        }))
+      }
+
+      if (Array.isArray(data.formFields)) {
+        cleanData.formFields = data.formFields.map((field, index) => ({
+          id: field.id,
+          name: field.name?.trim(),
+          label: field.label?.trim(),
+          type: field.type || 'TEXT',
+          order: field.order || index + 1,
+          required: Boolean(field.required),
+          placeholder: field.placeholder?.trim() || null,
+          defaultValue: field.defaultValue?.trim() || null,
+          helpText: field.helpText?.trim() || null,
+          options: Array.isArray(field.options) ? field.options : [],
+          validations: typeof field.validations === 'object' ? field.validations : {}
+        }))
       }
       
       Object.keys(cleanData).forEach(key => {
@@ -351,13 +539,25 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         slaHours: Number(stepData.slaHours) || null,
         assignedToUserId: stepData.assignedToUserId || null,
         assignedToSectorId: stepData.assignedToSectorId || null,
+        assignedToCreator: Boolean(stepData.assignedToCreator),
+        assignmentConditions: stepData.assignmentConditions || null,
         conditions: stepData.conditions || null,
-        actions: stepData.actions || [],
+        actions: Array.isArray(stepData.actions) ? stepData.actions : [],
         allowAttachment: !!stepData.allowAttachment,
         requireAttachment: !!stepData.requireAttachment,
         minAttachments: stepData.minAttachments ?? null,
         maxAttachments: stepData.maxAttachments ?? null,
-        allowedFileTypes: stepData.allowedFileTypes || []
+        allowedFileTypes: Array.isArray(stepData.allowedFileTypes) ? stepData.allowedFileTypes : [],
+        flowConditions: Array.isArray(stepData.flowConditions)
+          ? stepData.flowConditions.map(condition => ({ ...condition }))
+          : [],
+        reuseData: Array.isArray(stepData.reuseData)
+          ? stepData.reuseData.map(item => ({ ...item }))
+          : [],
+        signatureRequirements: Array.isArray(stepData.signatureRequirements)
+          ? stepData.signatureRequirements.map(req => ({ ...req }))
+          : [],
+        reviewSettings: prepareReviewSettingsForSave(stepData)
       }
       
       const response = await api.post(`/process-types/${processTypeId}/steps`, cleanStepData)
@@ -416,6 +616,16 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
           id: undefined,
           processTypeId: undefined,
           tempId: undefined,
+          flowConditions: Array.isArray(step.flowConditions)
+            ? step.flowConditions.map(condition => ({ ...condition }))
+            : [],
+          reuseData: Array.isArray(step.reuseData)
+            ? step.reuseData.map(item => ({ ...item }))
+            : [],
+          signatureRequirements: Array.isArray(step.signatureRequirements)
+            ? step.signatureRequirements.map(req => ({ ...req }))
+            : [],
+          reviewSettings: step.reviewSettings ? { ...step.reviewSettings } : null
         })),
         formFields: processType.formFields.map(field => ({
           ...field,

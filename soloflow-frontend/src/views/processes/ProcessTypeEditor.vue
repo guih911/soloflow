@@ -74,9 +74,18 @@
 
             <v-list v-else lines="three">
               <template v-for="(field, index) in formData.formFields" :key="field.id || field.tempId || index">
-                <v-list-item class="px-4 py-3">
+                <v-list-item
+                  class="px-4 py-3 draggable-field"
+                  :class="{ 'dragging-over': dragOverFieldIndex === index }"
+                  draggable="true"
+                  @dragstart="onFieldDragStart($event, index)"
+                  @dragend="onFieldDragEnd"
+                  @dragover="onFieldDragOver($event, index)"
+                  @dragleave="onFieldDragLeave"
+                  @drop="onFieldDrop($event, index)"
+                >
                   <template #prepend>
-                    <v-icon class="mr-3" color="grey">mdi-drag</v-icon>
+                    <v-icon class="mr-3 drag-handle" color="grey" style="cursor: grab;">mdi-drag-vertical</v-icon>
                     <v-avatar :color="getFieldTypeColor(field.type)" size="40">
                       <v-icon :icon="getFieldTypeIcon(field.type)" size="20" />
                     </v-avatar>
@@ -138,9 +147,18 @@
 
             <v-list v-else lines="three">
               <template v-for="(step, index) in formData.steps" :key="step.id || step.tempId || index">
-                <v-list-item class="px-4 py-3">
+                <v-list-item
+                  class="px-4 py-3 draggable-step"
+                  :class="{ 'dragging-over': dragOverStepIndex === index }"
+                  draggable="true"
+                  @dragstart="onStepDragStart($event, index)"
+                  @dragend="onStepDragEnd"
+                  @dragover="onStepDragOver($event, index)"
+                  @dragleave="onStepDragLeave"
+                  @drop="onStepDrop($event, index)"
+                >
                   <template #prepend>
-                    <v-icon class="mr-3" color="grey">mdi-drag</v-icon>
+                    <v-icon class="mr-3 drag-handle" color="grey" style="cursor: grab;">mdi-drag-vertical</v-icon>
                     <v-avatar :color="getStepTypeColor(step.type)" size="40">
                       <span class="text-h6">{{ index + 1 }}</span>
                     </v-avatar>
@@ -320,6 +338,12 @@ const editingStepData = ref(null)
 
 const form = ref(null)
 const fieldForm = ref(null)
+
+// Drag and drop state
+const draggedFieldIndex = ref(null)
+const dragOverFieldIndex = ref(null)
+const draggedStepIndex = ref(null)
+const dragOverStepIndex = ref(null)
 
 const formData = ref({
   id: null,
@@ -535,7 +559,21 @@ function handleStepSave(stepData) {
   const processedStep = {
     ...stepData,
     tempId: isEditingStep ? formData.value.steps[editingStepIndex.value].tempId : Date.now() + Math.random(),
-    order: isEditingStep ? formData.value.steps[editingStepIndex.value].order : (formData.value.steps.length + 1)
+    order: isEditingStep ? formData.value.steps[editingStepIndex.value].order : (formData.value.steps.length + 1),
+    actions: Array.isArray(stepData.actions) ? [...stepData.actions] : [],
+    allowedFileTypes: Array.isArray(stepData.allowedFileTypes) ? [...stepData.allowedFileTypes] : [],
+    flowConditions: Array.isArray(stepData.flowConditions)
+      ? stepData.flowConditions.map(condition => ({ ...condition }))
+      : [],
+    reuseData: Array.isArray(stepData.reuseData)
+      ? stepData.reuseData.map(item => ({ ...item }))
+      : [],
+    signatureRequirements: Array.isArray(stepData.signatureRequirements)
+      ? stepData.signatureRequirements.map(req => ({ ...req }))
+      : [],
+    reviewSettings: stepData.reviewSettings
+      ? { ...stepData.reviewSettings }
+      : null
   }
 
   if (isEditingStep) {
@@ -570,10 +608,22 @@ async function save() {
           ...stepPayload,
           order: stepPayload.order ?? (idx + 1),
           slaDays: stepPayload.slaDays || null,
-          assignedToCreator: stepPayload.assignedToCreator || false,
+          assignedToCreator: Boolean(stepPayload.assignedToCreator),
           assignmentConditions: stepPayload.assignmentConditions || null,
-          flowConditions: stepPayload.flowConditions || null,
-          reuseData: stepPayload.reuseData || null
+          actions: Array.isArray(stepPayload.actions) ? [...stepPayload.actions] : [],
+          allowedFileTypes: Array.isArray(stepPayload.allowedFileTypes) ? [...stepPayload.allowedFileTypes] : [],
+          flowConditions: Array.isArray(stepPayload.flowConditions)
+            ? stepPayload.flowConditions.map(condition => ({ ...condition }))
+            : [],
+          reuseData: Array.isArray(stepPayload.reuseData)
+            ? stepPayload.reuseData.map(item => ({ ...item }))
+            : [],
+          signatureRequirements: Array.isArray(stepPayload.signatureRequirements)
+            ? stepPayload.signatureRequirements.map(req => ({ ...req }))
+            : [],
+          reviewSettings: stepPayload.reviewSettings
+            ? { ...stepPayload.reviewSettings }
+            : null
         }
       })
     }
@@ -605,6 +655,106 @@ function goBack() {
   router.back()
 }
 
+// Drag and drop functions for fields
+function onFieldDragStart(event, index) {
+  draggedFieldIndex.value = index
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/html', event.target)
+  event.target.style.opacity = '0.4'
+}
+
+function onFieldDragEnd(event) {
+  event.target.style.opacity = '1'
+  dragOverFieldIndex.value = null
+}
+
+function onFieldDragOver(event, index) {
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'move'
+  dragOverFieldIndex.value = index
+}
+
+function onFieldDragLeave() {
+  // Opcional: pode remover o highlight
+}
+
+function onFieldDrop(event, dropIndex) {
+  event.preventDefault()
+  const dragIndex = draggedFieldIndex.value
+
+  if (dragIndex !== null && dragIndex !== dropIndex) {
+    const fields = [...formData.value.formFields]
+    const draggedItem = fields[dragIndex]
+
+    // Remove o item da posição original
+    fields.splice(dragIndex, 1)
+
+    // Insere na nova posição
+    fields.splice(dropIndex, 0, draggedItem)
+
+    // Atualiza as ordens
+    formData.value.formFields = fields.map((field, idx) => ({
+      ...field,
+      order: idx + 1
+    }))
+
+    window.showSnackbar?.('Ordem dos campos atualizada', 'success')
+  }
+
+  draggedFieldIndex.value = null
+  dragOverFieldIndex.value = null
+}
+
+// Drag and drop functions for steps
+function onStepDragStart(event, index) {
+  draggedStepIndex.value = index
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/html', event.target)
+  event.target.style.opacity = '0.4'
+}
+
+function onStepDragEnd(event) {
+  event.target.style.opacity = '1'
+  dragOverStepIndex.value = null
+}
+
+function onStepDragOver(event, index) {
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'move'
+  dragOverStepIndex.value = index
+}
+
+function onStepDragLeave() {
+  // Opcional: pode remover o highlight
+}
+
+function onStepDrop(event, dropIndex) {
+  event.preventDefault()
+  const dragIndex = draggedStepIndex.value
+
+  if (dragIndex !== null && dragIndex !== dropIndex) {
+    const steps = [...formData.value.steps]
+    const draggedItem = steps[dragIndex]
+
+    // Remove o item da posição original
+    steps.splice(dragIndex, 1)
+
+    // Insere na nova posição
+    steps.splice(dropIndex, 0, draggedItem)
+
+    // Atualiza as ordens
+    formData.value.steps = steps.map((step, idx) => ({
+      ...step,
+      order: idx + 1
+    }))
+
+    window.showSnackbar?.('Ordem das etapas atualizada', 'success')
+  }
+
+  draggedStepIndex.value = null
+  dragOverStepIndex.value = null
+}
+
 onMounted(async () => {
   try {
     await Promise.all([
@@ -631,3 +781,40 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.draggable-field,
+.draggable-step {
+  transition: all 0.3s ease;
+  cursor: move;
+}
+
+.draggable-field:hover,
+.draggable-step:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.dragging-over {
+  border-top: 3px solid #1976d2 !important;
+  background-color: rgba(25, 118, 210, 0.08) !important;
+}
+
+.drag-handle {
+  cursor: grab !important;
+}
+
+.drag-handle:active {
+  cursor: grabbing !important;
+}
+
+/* Animação de arrastar */
+.draggable-field[draggable="true"],
+.draggable-step[draggable="true"] {
+  cursor: grab;
+}
+
+.draggable-field[draggable="true"]:active,
+.draggable-step[draggable="true"]:active {
+  cursor: grabbing;
+}
+</style>

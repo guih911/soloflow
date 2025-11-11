@@ -6,10 +6,12 @@ import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { ProfilesModule } from '../profiles/profiles.module';
 
 @Module({
   imports: [
     UsersModule,
+    ProfilesModule,
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',

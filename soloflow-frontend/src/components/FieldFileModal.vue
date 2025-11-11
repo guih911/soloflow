@@ -22,7 +22,7 @@
             />
           </v-avatar>
           <div>
-            <!-- Nome do campo como tÃ­tulo principal -->
+            <!-- Nome do campo como título principal -->
             <h3 class="text-h5 font-weight-bold">{{ fieldInfo.label }}</h3>
             <div class="d-flex align-center text-body-2 text-medium-emphasis mt-1">
               <span>{{ getFileTypeName(fileData.mimeType) }} â€¢ {{ formatFileSize(fileData.size) }}</span>
@@ -34,7 +34,7 @@
                 class="ml-2"
               >
                 <v-icon start size="10">mdi-form-textbox</v-icon>
-                SolicitaÃ§Ã£o Inicial
+                Solicitação Inicial
               </v-chip>
             </div>
           </div>
@@ -95,15 +95,15 @@
           </div>
         </div>
 
-        <!-- NÃ£o suportado -->
+        <!-- Não suportado -->
         <div v-else class="preview-state-overlay">
           <div class="text-center py-12">
             <v-icon size="80" color="grey-lighten-2">
               {{ getFileIcon(fileData.mimeType) }}
             </v-icon>
-            <h3 class="text-h6 mt-4">VisualizaÃ§Ã£o nÃ£o disponÃ­vel</h3>
+            <h3 class="text-h6 mt-4">Visualização não disponível</h3>
             <p class="text-body-2 text-grey mt-2">
-              Este tipo de arquivo nÃ£o pode ser visualizado diretamente.
+              Este tipo de arquivo não pode ser visualizado diretamente.
             </p>
             <v-btn
               color="primary"
@@ -124,7 +124,7 @@
       <v-card-actions class="pa-6">
         <div class="d-flex align-center text-caption text-medium-emphasis">
           <v-icon size="16" class="mr-1">mdi-information</v-icon>
-          Arquivo do campo "{{ fieldInfo.label }}" da solicitaÃ§Ã£o inicial
+          Arquivo do campo "{{ fieldInfo.label }}" da solicitação inicial
         </div>
         
         <v-spacer />
@@ -207,7 +207,7 @@ watch(() => props.modelValue, (newVal) => {
   }
 })
 
-// MÃ©todo de carregamento usando blob
+// Método de carregamento usando blob
 async function loadPreview() {
   if (!props.fileData?.attachmentId || !canPreview.value) return
   
@@ -221,7 +221,7 @@ async function loadPreview() {
       mimeType: props.fileData.mimeType
     })
     
-    // Usar mÃ©todo blob para evitar problemas de autenticaÃ§Ã£o
+    // Usar método blob para evitar problemas de autenticação
     const response = await api.get(`/processes/attachment/${props.fileData.attachmentId}/view`, {
       responseType: 'blob'
     })
@@ -242,7 +242,7 @@ async function loadPreview() {
     
   } catch (err) {
     console.error('âŒ Error loading field file preview:', err)
-    error.value = 'Erro ao carregar visualizaÃ§Ã£o: ' + (err.response?.data?.message || err.message)
+    error.value = 'Erro ao carregar visualização: ' + (err.response?.data?.message || err.message)
   } finally {
     loading.value = false
   }
@@ -256,7 +256,7 @@ function onLoad() {
 
 function onError() {
   loading.value = false
-  error.value = 'NÃ£o foi possÃ­vel carregar o arquivo'
+  error.value = 'Não foi possível carregar o arquivo'
   console.error('âŒ Field file preview load error')
 }
 
@@ -324,7 +324,7 @@ function cleanup() {
   loading.value = false
 }
 
-// MÃ©todos auxiliares
+// Métodos auxiliares
 function getFileExtension(filename) {
   if (!filename) return '.pdf'
   const parts = filename.split('.')

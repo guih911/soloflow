@@ -332,6 +332,45 @@ async function executeStep(data) {
   }
 }
 
+  async function cancelProcess(processId, reason = '') {
+    loading.value = true
+    error.value = null
+
+    try {
+      const payload = reason && reason.trim() ? { reason: reason.trim() } : {}
+      const response = await api.post(`/processes/${processId}/cancel`, payload)
+      const updatedProcess = response.data
+
+      if (currentProcess.value?.id === processId) {
+        currentProcess.value = updatedProcess
+      }
+
+      if (Array.isArray(processes.value) && processes.value.length) {
+        processes.value = processes.value.map(proc =>
+          proc.id === processId ? updatedProcess : proc
+        )
+      }
+
+      if (Array.isArray(myCreatedProcesses.value) && myCreatedProcesses.value.length) {
+        myCreatedProcesses.value = myCreatedProcesses.value.map(proc =>
+          proc.id === processId ? updatedProcess : proc
+        )
+      }
+
+      if (Array.isArray(myTasks.value) && myTasks.value.length) {
+        myTasks.value = myTasks.value.filter(task => task.processInstance?.id !== processId)
+      }
+
+      return updatedProcess
+    } catch (err) {
+      console.error('Error cancelling process:', err)
+      error.value = err.response?.data?.message || 'Erro ao cancelar processo'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function uploadAttachment(file, stepExecutionId) {
     loading.value = true
     error.value = null
@@ -407,6 +446,7 @@ async function executeStep(data) {
     fetchMyCreatedProcesses,
     fetchDashboardStats,
     executeStep,
+    cancelProcess,
     uploadAttachment,
     signAttachment,
     

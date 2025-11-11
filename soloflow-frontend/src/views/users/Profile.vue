@@ -41,6 +41,28 @@
                     persistent-hint
                   />
                 </v-col>
+                <v-col cols="12" md="4">
+                  <v-text-field
+                    v-model="profileData.cpf"
+                    label="CPF"
+                    hint="Necessário para assinatura digital"
+                    persistent-hint
+                    v-mask="'###.###.###-##'"
+                  />
+                </v-col>
+                <v-col cols="12" md="4">
+                  <v-text-field
+                    v-model="profileData.rg"
+                    label="RG (Opcional)"
+                  />
+                </v-col>
+                <v-col cols="12" md="4">
+                  <v-text-field
+                    v-model="profileData.phone"
+                    label="Telefone (Opcional)"
+                    v-mask="'(##) #####-####'"
+                  />
+                </v-col>
               </v-row>
             </v-card-text>
 
@@ -336,7 +358,10 @@ const passwordForm = ref(null)
 
 const profileData = ref({
   name: '',
-  email: ''
+  email: '',
+  cpf: '',
+  rg: '',
+  phone: ''
 })
 
 const originalProfileData = ref({})
@@ -399,7 +424,10 @@ watch(() => authStore.user, (newUser) => {
   if (newUser) {
     profileData.value = {
       name: newUser.name,
-      email: newUser.email
+      email: newUser.email,
+      cpf: newUser.cpf || '',
+      rg: newUser.rg || '',
+      phone: newUser.phone || ''
     }
     originalProfileData.value = { ...profileData.value }
   }

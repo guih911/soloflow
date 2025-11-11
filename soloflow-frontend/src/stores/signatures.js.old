@@ -1,0 +1,247 @@
+import { defineStore } from 'pinia'
+import axios from 'axios'
+import { useAuthStore } from './auth'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+
+export const useSignaturesStore = defineStore('signatures', {
+  state: () => ({
+    certificates: [],
+    signatureRequirements: [],
+    attachmentSignatures: [],
+    loading: false,
+    error: null
+  }),
+
+  getters: {
+    activeCertificates: (state) => {
+      return state.certificates.filter(cert => !cert.isExpired)
+    },
+
+    defaultCertificate: (state) => {
+      return state.certificates.find(cert => cert.isDefault && !cert.isExpired)
+    },
+
+    expiringSoonCertificates: (state) => {
+      return state.certificates.filter(cert =>
+        !cert.isExpired && cert.daysUntilExpiration <= 30
+      )
+    }
+  },
+
+  actions: {
+    async uploadCertificate(file, data) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const authStore = useAuthStore()
+        const formData = new FormData()
+        formData.append('certificate', file)
+        formData.append('name', data.name)
+        formData.append('password', data.password)
+        if (data.isDefault) {
+          formData.append('isDefault', 'true')
+        }
+        if (data.userPassword) {
+          formData.append('userPassword', data.userPassword)
+        }
+
+        const response = await axios.post(
+          `${API_URL}/signatures/certificates/upload`,
+          formData,
+          {
+            headers: {
+              'Authorization': `Bearer ${authStore.token}`,
+              'Content-Type': 'multipart/form-data'
+            }
+          }
+        )
+
+        await this.fetchMyCertificates()
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao fazer upload do certificado'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async fetchMyCertificates() {
+      this.loading = true
+      this.error = null
+
+      try {
+        const authStore = useAuthStore()
+        const response = await axios.get(`${API_URL}/signatures/certificates/my`, {
+          headers: { 'Authorization': `Bearer ${authStore.token}` }
+        })
+
+        this.certificates = response.data
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao buscar certificados'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async deleteCertificate(certificateId) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const authStore = useAuthStore()
+        await axios.delete(`${API_URL}/signatures/certificates/${certificateId}`, {
+          headers: { 'Authorization': `Bearer ${authStore.token}` }
+        })
+
+        await this.fetchMyCertificates()
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao remover certificado'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async setDefaultCertificate(certificateId) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const authStore = useAuthStore()
+        await axios.put(
+          `${API_URL}/signatures/certificates/${certificateId}/set-default`,
+          {},
+          {
+            headers: { 'Authorization': `Bearer ${authStore.token}` }
+          }
+        )
+
+        await this.fetchMyCertificates()
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao definir certificado padrão'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async signDocument(signatureData) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const authStore = useAuthStore()
+        const response = await axios.post(
+          `${API_URL}/signatures/sign`,
+          signatureData,
+          {
+            headers: { 'Authorization': `Bearer ${authStore.token}` }
+          }
+        )
+
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao assinar documento'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async createSignatureRequirement(requirementData) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const authStore = useAuthStore()
+        const response = await axios.post(
+          `${API_URL}/signatures/requirements`,
+          requirementData,
+          {
+            headers: { 'Authorization': `Bearer ${authStore.token}` }
+          }
+        )
+
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao criar requisito de assinatura'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async fetchSignatureRequirements(stepVersionId) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const authStore = useAuthStore()
+        const response = await axios.get(
+          `${API_URL}/signatures/requirements/step/${stepVersionId}`,
+          {
+            headers: { 'Authorization': `Bearer ${authStore.token}` }
+          }
+        )
+
+        this.signatureRequirements = response.data
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao buscar requisitos de assinatura'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async fetchAttachmentSignatures(attachmentId) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const authStore = useAuthStore()
+        const response = await axios.get(
+          `${API_URL}/signatures/attachments/${attachmentId}`,
+          {
+            headers: { 'Authorization': `Bearer ${authStore.token}` }
+          }
+        )
+
+        this.attachmentSignatures = response.data
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao buscar assinaturas do anexo'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async verifySignatures(attachmentId) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const authStore = useAuthStore()
+        const response = await axios.get(
+          `${API_URL}/signatures/verify/${attachmentId}`,
+          {
+            headers: { 'Authorization': `Bearer ${authStore.token}` }
+          }
+        )
+
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao verificar assinaturas'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    }
+  }
+})

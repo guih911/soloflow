@@ -24,6 +24,7 @@ import Sectors from '@/views/sectors/Sectors.vue'
 // Views - Process Types
 import ProcessTypes from '@/views/processes/ProcessTypes.vue'
 import ProcessTypeEditor from '@/views/processes/ProcessTypeEditor.vue'
+import Profiles from '@/views/profiles/Profiles.vue'
 
 // Views - Processes
 import Processes from '@/views/processes/Processes.vue'
@@ -41,6 +42,9 @@ import Profile from '@/views/users/Profile.vue'
 
 // Views - Signatures
 import PendingSignatures from '@/views/signatures/PendingSignatures.vue'
+
+// Views - Public
+import ValidateSignature from '@/views/public/ValidateSignature.vue'
 
 // Views - Settings
 import Settings from '@/views/settings/Settings.vue'
@@ -66,6 +70,17 @@ const routes = [
     ],
   },
 
+  // ROTAS PÚBLICAS (sem autenticação)
+  {
+    path: '/validar-assinatura',
+    name: 'ValidateSignature',
+    component: ValidateSignature,
+    meta: {
+      requiresAuth: false,
+      title: 'Validar Assinatura Digital',
+      public: true
+    }
+  },
 
   // ROTAS DO DASHBOARD (todas protegidas)
   {
@@ -85,7 +100,7 @@ const routes = [
         path: '/companies',
         name: 'Companies',
         component: Companies,
-        meta: { requiresRole: ['ADMIN'] },
+        meta: { requiresPermission: { resource: 'companies', action: 'manage' } },
       },
 
       // USUÁRIOS
@@ -93,7 +108,7 @@ const routes = [
         path: '/users',
         name: 'Users',
         component: Users,
-        meta: { requiresRole: ['ADMIN', 'MANAGER'] },
+        meta: { requiresPermission: { resource: 'users', action: 'manage' } },
       },
 
       // SETORES
@@ -101,7 +116,7 @@ const routes = [
         path: '/sectors',
         name: 'Sectors',
         component: Sectors,
-        meta: { requiresRole: ['ADMIN', 'MANAGER'] },
+        meta: { requiresPermission: { resource: 'sectors', action: 'manage' } },
       },
 
       // TIPOS DE PROCESSO
@@ -109,20 +124,28 @@ const routes = [
         path: '/process-types',
         name: 'ProcessTypes',
         component: ProcessTypes,
-        meta: { requiresRole: ['ADMIN', 'MANAGER'] },
+        meta: { requiresPermission: { resource: 'processTypes', action: 'manage' } },
       },
       {
         path: '/process-types/new',
         name: 'ProcessTypeNew',
         component: ProcessTypeEditor,
-        meta: { requiresRole: ['ADMIN', 'MANAGER'] },
+        meta: { requiresPermission: { resource: 'processTypes', action: 'manage' } },
       },
       {
         path: '/process-types/:id/edit',
         name: 'ProcessTypeEdit',
         component: ProcessTypeEditor,
-        meta: { requiresRole: ['ADMIN', 'MANAGER'] },
+        meta: { requiresPermission: { resource: 'processTypes', action: 'manage' } },
         props: true,
+      },
+
+      // PERFIS
+      {
+        path: '/profiles',
+        name: 'Profiles',
+        component: Profiles,
+        meta: { requiresPermission: { resource: 'profiles', action: 'manage' } },
       },
 
       // PROCESSOS - ✅ SEÇÃO MELHORADA
@@ -180,8 +203,8 @@ const routes = [
         path: '/manage-processes',
         name: 'ManageProcesses',
         component: ManageProcesses,
-        meta: { 
-          requiresRole: ['ADMIN', 'MANAGER'],
+        meta: {
+          requiresPermission: { resource: 'processes', action: 'manage' },
           title: 'Gerenciar Processos',
           description: 'Acompanhar todos os processos da empresa'
         },
@@ -236,8 +259,8 @@ const routes = [
         path: '/settings',
         name: 'Settings',
         component: Settings,
-        meta: { 
-          requiresRole: ['ADMIN'],
+        meta: {
+          requiresPermission: { resource: 'settings', action: 'manage' },
           title: 'Configurações',
           description: 'Configurações do sistema'
         },
@@ -291,8 +314,16 @@ router.beforeEach(async (to, from, next) => {
     userRole,
     requiresAuth: to.meta.requiresAuth,
     requiresGuest: to.meta.requiresGuest,
-    requiresRole: to.meta.requiresRole
+    requiresRole: to.meta.requiresRole,
+    requiresPermission: to.meta.requiresPermission ?? to.meta.requiresPermissions,
+    isPublic: to.meta.public,
   })
+
+  // Permitir rotas públicas sem autenticação
+  if (to.meta.public === true || to.meta.requiresAuth === false) {
+    next()
+    return
+  }
 
   // Rota requer autenticação
   if (to.meta.requiresAuth && !isAuthenticated) {
@@ -310,7 +341,37 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
-  // Rota requer role específica
+  // Rota requer permissão específica
+  if ((to.meta.requiresPermission || to.meta.requiresPermissions) && isAuthenticated) {
+    const rawRequirements = to.meta.requiresPermission ?? to.meta.requiresPermissions
+    const requirements = Array.isArray(rawRequirements) ? rawRequirements : [rawRequirements]
+    const hasPermission = requirements.some((requirement) => {
+      if (!requirement) {
+        return false
+      }
+
+      if (typeof requirement === 'string') {
+        return authStore.hasPermission(requirement)
+      }
+
+      if (typeof requirement === 'object') {
+        return authStore.hasPermission(requirement.resource, requirement.action)
+      }
+
+      return false
+    })
+
+    if (!hasPermission) {
+      console.log('Access denied - missing permissions', requirements)
+      if (window.showSnackbar) {
+        window.showSnackbar('Acesso negado. Você não tem permissão para acessar esta página.', 'error')
+      }
+      next('/dashboard')
+      return
+    }
+  }
+
+  // Rota requer role específica (compatibilidade legada)
   if (to.meta.requiresRole && isAuthenticated) {
     const allowedRoles = Array.isArray(to.meta.requiresRole) 
       ? to.meta.requiresRole 
@@ -323,7 +384,7 @@ router.beforeEach(async (to, from, next) => {
       if (window.showSnackbar) {
         window.showSnackbar('Acesso negado. Você não tem permissão para acessar esta página.', 'error')
       }
-      
+
       next('/dashboard')
       return
     }

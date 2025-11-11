@@ -8,6 +8,8 @@ import { SectorsModule } from './modules/sectors/sectors.module';
 import { ProcessTypesModule } from './modules/process-types/process-types.module';
 import { ProcessesModule } from './modules/processes/processes.module';
 import { AttachmentsModule } from './modules/attachments/attachments.module';
+import { ProfilesModule } from './modules/profiles/profiles.module';
+import { SignaturesModule } from './modules/signatures/signatures.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { AttachmentsModule } from './modules/attachments/attachments.module';
     ProcessTypesModule,
     ProcessesModule,
     AttachmentsModule,
+    ProfilesModule,
+    SignaturesModule,
   ],
 })
 export class AppModule {}

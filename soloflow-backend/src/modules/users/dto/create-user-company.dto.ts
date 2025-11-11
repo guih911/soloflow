@@ -13,6 +13,10 @@ export class UserCompanyAssignmentDto {
   @IsUUID()
   sectorId?: string;
 
+
+  @IsOptional()
+  @IsUUID()
+  profileId?: string;
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
@@ -30,6 +34,9 @@ export class CreateUserCompanyDto {
   @Length(6, 50)
   password: string;
 
+  @IsOptional()
+  @IsString()
+  cpf?: string; // CPF para assinatura digital
 
   @IsOptional()
   @IsEnum(UserRole)
@@ -47,7 +54,6 @@ export class CreateUserCompanyDto {
   @IsBoolean()
   isDefault?: boolean;
 
- 
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

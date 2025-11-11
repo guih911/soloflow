@@ -16,7 +16,7 @@ app.use(vuetify)
 app.directive('mask', VueMask.VueMaskDirective)
 
 // Global error handler
-app.config.errorHandler = (err, vm, info) => {
+app.config.errorHandler = (err, _vm, info) => {
   console.error('Global error:', err, info)
 }
 

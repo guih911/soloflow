@@ -617,7 +617,11 @@ const hasFormFields = computed(() => {
 
 // ✨ Métodos auxiliares aprimorados
 function getVisibleFormFields(processType) {
-  if (!processType?.formFields) return []
+  if (!processType?.formFields) {
+    console.log('⚠️ No process type or formFields:', processType)
+    return []
+  }
+  console.log(`📋 Process type "${processType.name}" has ${processType.formFields.length} form fields:`, processType.formFields)
   // ✨ Incluir TODOS os campos, incluindo FILE
   return processType.formFields
 }

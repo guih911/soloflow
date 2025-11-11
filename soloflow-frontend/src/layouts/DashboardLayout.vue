@@ -211,12 +211,12 @@
           </v-tooltip>
 
           <!-- Gerenciar Processos -->
-          <v-tooltip 
-            v-if="canAccess(['ADMIN', 'MANAGER'])"
-            :disabled="drawer" 
-            location="right" 
-            text="Gerenciar Processos" 
-            content-class="nav-tooltip" 
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'processes', action: 'manage' } })"
+            :disabled="drawer"
+            location="right"
+            text="Gerenciar Processos"
+            content-class="nav-tooltip"
             open-delay="120"
           >
             <template #activator="{ props }">
@@ -296,25 +296,25 @@
           </v-tooltip>
 
           <!-- Divider -->
-          <v-divider 
-            v-if="drawer && canAccess(['ADMIN', 'MANAGER'])" 
-            class="my-4" 
-            style="border-color: rgba(255, 255, 255, 0.2);" 
+          <v-divider
+            v-if="drawer && hasAnyAdminPermission"
+            class="my-4"
+            style="border-color: rgba(255, 255, 255, 0.2);"
           />
 
           <!-- Configurações Header -->
-          <v-list-subheader v-if="drawer && canAccess(['ADMIN', 'MANAGER'])" class="settings-header">
+          <v-list-subheader v-if="drawer && hasAnyAdminPermission" class="settings-header">
             <v-icon start size="16">mdi-cog</v-icon>
             CONFIGURAÇÕES
           </v-list-subheader>
 
           <!-- Tipos de Processo -->
-          <v-tooltip 
-            v-if="canAccess(['ADMIN', 'MANAGER'])"
-            :disabled="drawer" 
-            location="right" 
-            text="Tipos de Processo" 
-            content-class="nav-tooltip" 
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'processTypes', action: 'manage' } })"
+            :disabled="drawer"
+            location="right"
+            text="Tipos de Processo"
+            content-class="nav-tooltip"
             open-delay="120"
           >
             <template #activator="{ props }">
@@ -333,16 +333,16 @@
           </v-tooltip>
 
           <!-- Setores -->
-          <v-tooltip 
-            v-if="canAccess(['ADMIN', 'MANAGER'])"
-            :disabled="drawer" 
-            location="right" 
-            text="Setores" 
-            content-class="nav-tooltip" 
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'sectors', action: 'manage' } })"
+            :disabled="drawer"
+            location="right"
+            text="Setores"
+            content-class="nav-tooltip"
             open-delay="120"
           >
             <template #activator="{ props }">
-              <v-list-item 
+              <v-list-item
                 v-bind="props"
                 :to="{ name: 'Sectors' }"
                 class="nav-item"
@@ -357,16 +357,16 @@
           </v-tooltip>
 
           <!-- Usuários -->
-          <v-tooltip 
-            v-if="canAccess(['ADMIN', 'MANAGER'])"
-            :disabled="drawer" 
-            location="right" 
-            text="Usuários" 
-            content-class="nav-tooltip" 
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'users', action: 'manage' } })"
+            :disabled="drawer"
+            location="right"
+            text="Usuários"
+            content-class="nav-tooltip"
             open-delay="120"
           >
             <template #activator="{ props }">
-              <v-list-item 
+              <v-list-item
                 v-bind="props"
                 :to="{ name: 'Users' }"
                 class="nav-item"
@@ -380,13 +380,37 @@
             </template>
           </v-tooltip>
 
+          <!-- Perfis -->
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'profiles', action: 'manage' } })"
+            :disabled="drawer"
+            location="right"
+            text="Perfis e Permissões"
+            content-class="nav-tooltip"
+            open-delay="120"
+          >
+            <template #activator="{ props }">
+              <v-list-item
+                v-bind="props"
+                :to="{ name: 'Profiles' }"
+                class="nav-item"
+                rounded="xl"
+              >
+                <template v-slot:prepend>
+                  <v-icon size="20">mdi-badge-account</v-icon>
+                </template>
+                <v-list-item-title>Perfis</v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-tooltip>
+
           <!-- Empresas -->
-          <v-tooltip 
-            v-if="canAccess(['ADMIN'])"
-            :disabled="drawer" 
-            location="right" 
-            text="Empresas" 
-            content-class="nav-tooltip" 
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'companies', action: 'manage' } })"
+            :disabled="drawer"
+            location="right"
+            text="Empresas"
+            content-class="nav-tooltip"
             open-delay="120"
           >
             <template #activator="{ props }">
@@ -489,6 +513,16 @@ const notificationsList = computed(() => notificationsStore.items || [])
 const unreadNotifications = computed(() => notificationsStore.unreadCount || 0)
 const isRead = (id) => notificationsStore.isRead(id)
 
+// Verificar se tem qualquer permissão administrativa
+const hasAnyAdminPermission = computed(() => {
+  return authStore.hasPermission('processTypes', 'manage') ||
+         authStore.hasPermission('profiles', 'manage') ||
+         authStore.hasPermission('sectors', 'manage') ||
+         authStore.hasPermission('users', 'manage') ||
+         authStore.hasPermission('companies', 'manage') ||
+         authStore.hasPermission('settings', 'manage')
+})
+
 // ✨ Métodos
 function toggleDrawer() {
   drawer.value = !drawer.value
@@ -559,9 +593,8 @@ function getRoleText(role) {
   return roles[role] || role
 }
 
-function canAccess(requiredRoles) {
-  const userRole = authStore.userRole
-  return requiredRoles.includes(userRole)
+function canAccess(requirement) {
+  return authStore.canAccessRoute(requirement)
 }
 
 // ✨ Carregar notificações ao montar e quando trocar empresa

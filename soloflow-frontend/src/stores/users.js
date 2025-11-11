@@ -1,4 +1,4 @@
-// src/stores/users.js - Versão melhorada
+// src/stores/users.js - Versao melhorada
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/services/api'
@@ -87,6 +87,7 @@ export const useUserStore = defineStore('users', () => {
           companyId: company.companyId,
           role: company.role || 'USER',
           sectorId: company.sectorId || null,
+          profileId: company.profileId,
           isDefault: Boolean(company.isDefault)
         }))
       }
@@ -195,6 +196,7 @@ export const useUserStore = defineStore('users', () => {
         companyId: company.companyId,
         role: company.role || 'USER',
         sectorId: company.sectorId || null,
+        profileId: company.profileId,
         isDefault: Boolean(company.isDefault)
       }))
       
@@ -295,6 +297,9 @@ export const useUserStore = defineStore('users', () => {
         }
         if (!company.role) {
           errors.push(`Empresa ${index + 1}: Perfil é obrigatório`)
+        }
+        if (!company.profileId) {
+          errors.push(`Empresa ${index + 1}: Perfil de acesso é obrigatório`)
         }
       })
       

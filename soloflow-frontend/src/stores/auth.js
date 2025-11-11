@@ -17,70 +17,138 @@ export const useAuthStore = defineStore('auth', () => {
   const activeCompany = ref(null)
   const loading = ref(false)
   const error = ref(null)
+  const profileIds = ref([])
+  const permissions = ref([])
+  const processTypePermissions = ref([])
 
   // Computed
   const isAuthenticated = computed(() => !!token.value)
   const userRole = computed(() => activeCompany.value?.role || null)
   const activeCompanyId = computed(() => activeCompany.value?.companyId || null)
   const activeSectorId = computed(() => activeCompany.value?.sector?.id || null)
-  const isAdmin = computed(() => userRole.value === 'ADMIN')
-  const isManager = computed(() => userRole.value === 'MANAGER')
-  const canManageUsers = computed(() => ['ADMIN', 'MANAGER'].includes(userRole.value))
-  const canManageProcessTypes = computed(() => ['ADMIN', 'MANAGER'].includes(userRole.value))
+  const fallbackPermissionMatrix = {
+    ADMIN: [{ resource: '*', action: '*' }],
+  MANAGER: [
+      { resource: 'dashboard', action: 'view' },
+      { resource: 'processes', action: 'manage' },
+      { resource: 'profiles', action: 'manage' },
+      { resource: 'users', action: 'manage' },
+      { resource: 'sectors', action: 'manage' },
+      { resource: 'processTypes', action: 'manage' },
+      { resource: 'reports', action: 'view' },
+    ],
+    USER: [
+      { resource: 'dashboard', action: 'view' },
+      { resource: 'processes', action: 'create' },
+      { resource: 'tasks', action: 'execute' },
+      { resource: 'processes', action: 'view' },
+    ],
+  }
 
-  // SoloFlow MELHORADO: Login com tratamento robusto de erros
- async function login(credentials) {
-  loading.value = true
-  error.value = null
-  
-  try {
-    console.log('Attempting login with:', credentials.email)
-    
-    const response = await api.post('/auth/login', credentials)
-    const { access_token, user: userData } = response.data
-    
-    console.log('Login response:', response.data)
-    
-    // SoloFlow CORRIGIDO: Validação mais rigorosa dos dados
-    if (!access_token || !userData?.id || !userData?.companies?.length) {
-      throw new Error('Resposta inválida do servidor')
-    }
-    
-    // SoloFlow Configurar dados do usuário
-    token.value = access_token
+  const isAdmin = computed(() => hasPermission('*', '*') || userRole.value === 'ADMIN')
+  const isManager = computed(() => hasPermission('users', 'manage') || userRole.value === 'MANAGER')
+  const canManageUsers = computed(() => hasPermission('users', 'manage'))
+  const canManageProcessTypes = computed(() => hasPermission('processTypes', 'manage'))
+
+  function normalizePermissions(rawPermissions = []) {
+    return rawPermissions
+      .filter(Boolean)
+      .map(permission => ({
+        resource: String(permission.resource || '*').toLowerCase(),
+        action: String(permission.action || '*').toLowerCase(),
+        scope: permission.scope ?? null,
+      }))
+  }
+
+  function normalizeProcessTypePermissions(rawPermissions = []) {
+    return rawPermissions
+      .filter(Boolean)
+      .map(permission => ({
+        processTypeId: permission.processTypeId || '*',
+        canView: permission.canView ?? true,
+        canCreate: permission.canCreate ?? false,
+        canExecute: permission.canExecute ?? false,
+      }))
+  }
+
+  function applySession(accessToken, userData) {
+    token.value = accessToken
     user.value = {
       id: userData.id,
       name: userData.name,
       email: userData.email,
     }
     companies.value = userData.companies || []
-    activeCompany.value = userData.activeCompany
-    
-    // SoloFlow CRÍTICO: Salvar no localStorage de forma consistente
-    localStorage.setItem('token', access_token)
+    activeCompany.value = userData.activeCompany || null
+    profileIds.value = userData.profileIds || []
+    permissions.value = normalizePermissions(userData.permissions || [])
+    processTypePermissions.value = normalizeProcessTypePermissions(userData.processTypePermissions || [])
+
+    localStorage.setItem('token', accessToken)
     localStorage.setItem('user', JSON.stringify(user.value))
     localStorage.setItem('companies', JSON.stringify(companies.value))
     localStorage.setItem('activeCompany', JSON.stringify(activeCompany.value))
-    
-    // SoloFlow Configurar header padrão do axios
-    api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-    
+    localStorage.setItem('profileIds', JSON.stringify(profileIds.value))
+    localStorage.setItem('permissions', JSON.stringify(permissions.value))
+    localStorage.setItem('processTypePermissions', JSON.stringify(processTypePermissions.value))
+
+    api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
+  }
+
+  function clearSession() {
+    user.value = null
+    token.value = null
+    companies.value = []
+    activeCompany.value = null
+    profileIds.value = []
+    permissions.value = []
+    processTypePermissions.value = []
+  }
+
+  function loadStoredArray(key) {
+    const raw = localStorage.getItem(key)
+    if (!raw) return []
+    try {
+      return JSON.parse(raw)
+    } catch (error) {
+      console.warn(`Failed to parse stored ${key}:`, error)
+      return []
+    }
+  }
+
+  // SoloFlow MELHORADO: Login com tratamento robusto de erros
+ async function login(credentials) {
+  loading.value = true
+  error.value = null
+
+  try {
+    console.log('Attempting login with:', credentials.email)
+
+    const response = await api.post('/auth/login', credentials)
+    const { access_token, user: userData } = response.data
+
+    console.log('Login response:', response.data)
+
+    if (!access_token || !userData?.id || !userData?.companies?.length) {
+      throw new Error('Resposta inválida do servidor')
+    }
+
+    applySession(access_token, userData)
+
     console.log('Login successful, active company:', activeCompany.value?.name)
-    
-   
+
     const redirectPath = sessionStorage.getItem('redirectAfterLogin') || '/dashboard'
     sessionStorage.removeItem('redirectAfterLogin')
     router.push(redirectPath)
-    
+
     window.showSnackbar?.('Login realizado com sucesso!', 'success')
-    
+
     return response.data
   } catch (err) {
     console.error('Login error:', err)
-    
-   
+
     let errorMessage = 'Erro ao fazer login'
-    
+
     if (err.response?.status === 401) {
       errorMessage = 'Email ou senha incorretos'
     } else if (err.response?.data?.message) {
@@ -88,143 +156,100 @@ export const useAuthStore = defineStore('auth', () => {
     } else if (err.message) {
       errorMessage = err.message
     }
-    
+
     error.value = errorMessage
     window.showSnackbar?.(errorMessage, 'error')
-    
-   
-    token.value = null
-    user.value = null
-    companies.value = []
-    activeCompany.value = null
-    
-    // Limpar localStorage silenciosamente
+
+    clearSession()
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     localStorage.removeItem('companies')
     localStorage.removeItem('activeCompany')
-    
-    // Limpar header do axios
+    localStorage.removeItem('profileIds')
+    localStorage.removeItem('permissions')
+    localStorage.removeItem('processTypePermissions')
     delete api.defaults.headers.common['Authorization']
-    
+
     throw err
   } finally {
     loading.value = false
   }
 }
 
+
   async function register(userData) {
-    loading.value = true
-    error.value = null
-    
-    try {
-      console.log('Attempting register with:', userData.email)
-      
-      const response = await api.post('/auth/register', userData)
-      const { access_token, user: newUser } = response.data
-      
-      console.log('Register response:', response.data)
-      
-      // SoloFlow VALIDAÇÃO: Verificar resposta válida
-      if (!access_token || !newUser?.id) {
-        throw new Error('Resposta inválida do servidor')
-      }
-      
-      // SoloFlow Fazer login automático após registro
-      token.value = access_token
-      user.value = {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-      }
-      companies.value = newUser.companies || []
-      activeCompany.value = newUser.activeCompany
-      
-      // SoloFlow Salvar no localStorage
-      localStorage.setItem('token', access_token)
-      localStorage.setItem('user', JSON.stringify(user.value))
-      localStorage.setItem('companies', JSON.stringify(companies.value))
-      localStorage.setItem('activeCompany', JSON.stringify(activeCompany.value))
-      
-      // SoloFlow Configurar header padrão do axios
-      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-      
-      router.push('/dashboard')
-      window.showSnackbar?.('Conta criada com sucesso!', 'success')
-      
-      return response.data
-    } catch (err) {
-      console.error('Register error:', err)
-      error.value = err.response?.data?.message || 'Erro ao registrar'
-      window.showSnackbar?.(error.value, 'error')
-      throw err
-    } finally {
-      loading.value = false
+  loading.value = true
+  error.value = null
+
+  try {
+    console.log('Attempting register with:', userData.email)
+
+    const response = await api.post('/auth/register', userData)
+    const { access_token, user: newUser } = response.data
+
+    console.log('Register response:', response.data)
+
+    if (!access_token || !newUser?.id) {
+      throw new Error('Resposta inválida do servidor')
     }
+
+    applySession(access_token, newUser)
+
+    router.push('/dashboard')
+    window.showSnackbar?.('Conta criada com sucesso!', 'success')
+
+    return response.data
+  } catch (err) {
+    console.error('Register error:', err)
+    error.value = err.response?.data?.message || 'Erro ao registrar'
+    window.showSnackbar?.(error.value, 'error')
+    throw err
+  } finally {
+    loading.value = false
   }
+}
+
 
   // SoloFlow CORRIGIDO: Switch de empresa SEM force reload
   async function switchCompany(companyId) {
-    if (activeCompany.value?.companyId === companyId) {
-      console.log('Company already active:', companyId)
-      return
+  if (activeCompany.value?.companyId === companyId) {
+    console.log('Company already active:', companyId)
+    return
+  }
+
+  loading.value = true
+  error.value = null
+
+  try {
+    console.log('Switching to company:', companyId)
+
+    const response = await api.post('/auth/switch-company', { companyId })
+    const { access_token, user: userData } = response.data
+
+    if (!access_token || !userData) {
+      throw new Error('Resposta inválida do servidor')
     }
 
-    loading.value = true
-    error.value = null
-    
-    try {
-      console.log('Switching to company:', companyId)
-      
-      const response = await api.post('/auth/switch-company', { companyId })
-      const { access_token, user: userData } = response.data
-      
-      console.log('Switch company response:', response.data)
-      
-      // SoloFlow CRÍTICO: Validar resposta
-      if (!access_token || !userData) {
-        throw new Error('Resposta inválida do servidor')
-      }
-      
-      // SoloFlow Atualizar dados
-      token.value = access_token
-      user.value = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-      }
-      companies.value = userData.companies || []
-      activeCompany.value = userData.activeCompany
-      
-      // SoloFlow Atualizar localStorage
-      localStorage.setItem('token', access_token)
-      localStorage.setItem('user', JSON.stringify(user.value))
-      localStorage.setItem('companies', JSON.stringify(companies.value))
-      localStorage.setItem('activeCompany', JSON.stringify(activeCompany.value))
-      
-      // SoloFlow Atualizar header do axios
-      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-      
-      // SoloFlow CORRIGIDO: Resetar stores em vez de recarregar página
-      await resetAllStores()
-      
-      window.showSnackbar?.(`Empresa alterada para: ${activeCompany.value.name}`, 'success')
-      
-      // SoloFlow MELHORADO: Navegar para dashboard se não estiver lá
-      if (router.currentRoute.value.path !== '/dashboard') {
-        router.push('/dashboard')
-      }
-      
-      return response.data
-    } catch (err) {
-      console.error('Switch company error:', err)
-      error.value = err.response?.data?.message || 'Erro ao trocar empresa'
-      window.showSnackbar?.(error.value, 'error')
-      throw err
-    } finally {
-      loading.value = false
+    applySession(access_token, userData)
+    await resetAllStores()
+
+    window.showSnackbar?.(`Empresa alterada para: ${activeCompany.value.name}`, 'success')
+
+    if (router.currentRoute.value.path !== '/dashboard') {
+      router.push('/dashboard')
     }
+
+    return response.data
+  } catch (err) {
+    console.error('Switch company error:', err)
+    error.value = err.response?.data?.message || 'Erro ao trocar empresa'
+    window.showSnackbar?.(error.value, 'error')
+    throw err
+  } finally {
+    loading.value = false
   }
+}
+
 
   // SoloFlow Resetar todas as stores ao trocar empresa
   async function resetAllStores() {
@@ -265,161 +290,235 @@ export const useAuthStore = defineStore('auth', () => {
 
   // SoloFlow MELHORADO: Refresh token com validações
   async function refreshToken() {
-    if (!token.value) return false
+  if (!token.value) return false
 
-    try {
-      console.log('Refreshing token...')
-      
-      const response = await api.post('/auth/refresh')
-      const { access_token, user: userData } = response.data
-      
-      // SoloFlow VALIDAR: Resposta válida
-      if (!access_token || !userData) {
-        throw new Error('Resposta inválida do servidor')
-      }
-      
-      // SoloFlow Atualizar dados
-      token.value = access_token
-      user.value = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-      }
-      companies.value = userData.companies || []
-      activeCompany.value = userData.activeCompany
-      
-      // SoloFlow Atualizar localStorage
-      localStorage.setItem('token', access_token)
-      localStorage.setItem('user', JSON.stringify(user.value))
-      localStorage.setItem('companies', JSON.stringify(companies.value))
-      localStorage.setItem('activeCompany', JSON.stringify(activeCompany.value))
-      
-      // SoloFlow Atualizar header do axios
-      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-      
-      console.log('Token refreshed successfully')
-      return true
-    } catch (err) {
-      console.error('Refresh token error:', err)
-      // SoloFlow SEGURANÇA: Se refresh falhar, fazer logout
-      logout()
-      return false
+  try {
+    console.log('Refreshing token...')
+
+    const response = await api.post('/auth/refresh')
+    const { access_token, user: userData } = response.data
+
+    if (!access_token || !userData) {
+      throw new Error('Resposta inválida do servidor')
     }
+
+    applySession(access_token, userData)
+
+    console.log('Token refreshed successfully')
+    return true
+  } catch (err) {
+    console.error('Refresh token error:', err)
+    logout()
+    return false
   }
+}
+
 
   function logout() {
-    console.log('Logging out...')
-    
-    // SoloFlow Limpar estado
-    user.value = null
-    token.value = null
-    companies.value = []
-    activeCompany.value = null
-    error.value = null
-    
-    // SoloFlow Limpar localStorage
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    localStorage.removeItem('companies')
-    localStorage.removeItem('activeCompany')
-    
-    // SoloFlow Limpar header do axios
-    delete api.defaults.headers.common['Authorization']
-    
-    // SoloFlow Resetar todas as stores
-    resetAllStores()
-    
-    // SoloFlow Navegar para login
-    router.push('/login')
-    window.showSnackbar?.('Logout realizado com sucesso!', 'info')
-  }
+  console.log('Logging out...')
+
+  clearSession()
+
+  localStorage.removeItem('token')
+  localStorage.removeItem('user')
+  localStorage.removeItem('companies')
+  localStorage.removeItem('activeCompany')
+  localStorage.removeItem('profileIds')
+  localStorage.removeItem('permissions')
+  localStorage.removeItem('processTypePermissions')
+
+  delete api.defaults.headers.common['Authorization']
+
+  resetAllStores()
+
+  router.push('/login')
+  window.showSnackbar?.('Logout realizado com sucesso!', 'info')
+}
+
 
   // SoloFlow MELHORADO: Inicializar auth com validações
   function initializeAuth() {
-    console.log('Initializing auth from localStorage...')
-    
-    const storedToken = localStorage.getItem('token')
-    const storedUser = localStorage.getItem('user')
-    const storedCompanies = localStorage.getItem('companies')
-    const storedActiveCompany = localStorage.getItem('activeCompany')
-    
-    if (storedToken && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser)
-        const parsedCompanies = storedCompanies ? JSON.parse(storedCompanies) : []
-        const parsedActiveCompany = storedActiveCompany ? JSON.parse(storedActiveCompany) : null
-        
-        // SoloFlow VALIDAÇÃO: Verificar se dados são válidos
-        if (!parsedUser?.id || !parsedActiveCompany?.companyId) {
-          console.warn('Invalid stored auth data, clearing...')
-          logout()
-          return
-        }
-        
-        token.value = storedToken
-        user.value = parsedUser
-        companies.value = parsedCompanies
-        activeCompany.value = parsedActiveCompany
-        
-        // SoloFlow Configurar header do axios
-        api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
-        
-        console.log('Auth initialized from localStorage:', {
-          user: user.value?.name,
-          company: activeCompany.value?.name,
-          companies: companies.value?.length
-        })
-        
-        // SoloFlow OPCIONAL: Verificar se token ainda é válido (chamada silenciosa)
-        refreshToken().catch(() => {
-          console.warn('Stored token is invalid, user needs to login again')
-        })
-      } catch (error) {
-        console.error('Error parsing stored auth data:', error)
+  console.log('Initializing auth from localStorage...')
+
+  const storedToken = localStorage.getItem('token')
+  const storedUser = localStorage.getItem('user')
+  const storedCompanies = localStorage.getItem('companies')
+  const storedActiveCompany = localStorage.getItem('activeCompany')
+  const storedProfiles = loadStoredArray('profileIds')
+  const storedPermissions = loadStoredArray('permissions')
+  const storedProcessTypePermissions = loadStoredArray('processTypePermissions')
+
+  if (storedToken && storedUser) {
+    try {
+      const parsedUser = JSON.parse(storedUser)
+      const parsedCompanies = storedCompanies ? JSON.parse(storedCompanies) : []
+      const parsedActiveCompany = storedActiveCompany ? JSON.parse(storedActiveCompany) : null
+
+      if (!parsedUser?.id || !parsedActiveCompany?.companyId) {
+        console.warn('Invalid stored auth data, clearing...')
         logout()
+        return
       }
+
+      token.value = storedToken
+      user.value = parsedUser
+      companies.value = parsedCompanies
+      activeCompany.value = parsedActiveCompany
+      profileIds.value = Array.isArray(storedProfiles) ? storedProfiles : []
+      permissions.value = normalizePermissions(storedPermissions)
+      processTypePermissions.value = normalizeProcessTypePermissions(storedProcessTypePermissions)
+
+      api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
+
+      console.log('Auth initialized from localStorage:', {
+        user: user.value?.name,
+        company: activeCompany.value?.name,
+        companies: companies.value?.length,
+      })
+
+      refreshToken().catch(() => {
+        console.warn('Stored token is invalid, user needs to login again')
+      })
+    } catch (error) {
+      console.error('Error parsing stored auth data:', error)
+      logout()
+    }
+  } else {
+    console.log('No stored auth data found')
+  }
+}
+
+
+  // SoloFlow Verificar se usuário tem permissão
+  const legacyPermissionMap = {
+  manage_companies: { resource: 'companies', action: 'manage' },
+  manage_users: { resource: 'users', action: 'manage' },
+  manage_sectors: { resource: 'sectors', action: 'manage' },
+  manage_process_types: { resource: 'processtypes', action: 'manage' },
+  manage_profiles: { resource: 'profiles', action: 'manage' },
+  manage_processes: { resource: 'processes', action: 'manage' },
+  view_all_processes: { resource: 'processes', action: 'view' },
+  execute_any_step: { resource: 'tasks', action: 'execute' },
+  system_settings: { resource: 'settings', action: 'manage' },
+  view_reports: { resource: 'reports', action: 'view' },
+  create_processes: { resource: 'processes', action: 'create' },
+  view_own_processes: { resource: 'processes', action: 'view' },
+  execute_assigned_steps: { resource: 'tasks', action: 'execute' },
+}
+
+function hasPermission(resource, action) {
+  let targetResource = resource
+  let targetAction = action
+
+  if (typeof resource === 'string' && action === undefined) {
+    const mapped = legacyPermissionMap[resource]
+    if (mapped) {
+      targetResource = mapped.resource
+      targetAction = mapped.action
     } else {
-      console.log('No stored auth data found')
+      targetAction = 'view'
     }
   }
 
-  // SoloFlow Verificar se usuário tem permissão
-  function hasPermission(permission) {
-    const permissions = {
-      ADMIN: [
-        'manage_companies',
-        'manage_users', 
-        'manage_sectors',
-        'manage_process_types',
-        'manage_processes',
-        'view_all_processes',
-        'execute_any_step',
-        'system_settings',
-        'view_reports',
-      ],
-      MANAGER: [
-        'manage_users',
-        'manage_sectors', 
-        'manage_process_types',
-        'view_company_processes',
-        'execute_assigned_steps',
-        'view_reports',
-      ],
-      USER: [
-        'create_processes',
-        'view_own_processes',
-        'execute_assigned_steps',
-      ],
-    };
+  const normalizedResource = String(targetResource || '*').toLowerCase()
+  const normalizedAction = String(targetAction || 'view').toLowerCase()
 
-    const userPermissions = permissions[userRole.value] || []
-    return userPermissions.includes(permission)
+  let effectivePermissions = permissions.value
+
+  if (!effectivePermissions.length) {
+    if (profileIds.value.length === 0) {
+      effectivePermissions = normalizePermissions(fallbackPermissionMatrix[userRole.value] || [])
+    } else {
+      effectivePermissions = []
+    }
   }
 
+  return effectivePermissions.some((permission) => {
+    const permResource = String(permission.resource || '*').toLowerCase()
+    const permAction = String(permission.action || '*').toLowerCase()
+
+    return (permResource === '*' || permResource === normalizedResource) &&
+      (permAction === '*' || permAction === normalizedAction)
+  })
+}
+
+  function matchesPermissionRequirement(requirement) {
+    if (!requirement) {
+      return true
+    }
+
+    if (typeof requirement === 'string') {
+      return hasPermission(requirement)
+    }
+
+    if (Array.isArray(requirement)) {
+      return requirement.some((single) => matchesPermissionRequirement(single))
+    }
+
+    if (typeof requirement === 'object') {
+      return hasPermission(requirement.resource, requirement.action)
+    }
+
+    return false
+  }
+function canAccessProcessType(processTypeId, capability = 'view') {
+  const normalizedCapability = String(capability || 'view').toLowerCase()
+  const candidates = processTypePermissions.value.length
+    ? processTypePermissions.value
+    : [{
+        processTypeId: '*',
+        canView: hasPermission('processes', 'view'),
+        canCreate: hasPermission('processes', 'create'),
+        canExecute: hasPermission('tasks', 'execute'),
+      }]
+
+  return candidates.some((permission) => {
+    const matchesProcess = permission.processTypeId === '*' || permission.processTypeId === processTypeId
+
+    if (!matchesProcess) return false
+
+    if (normalizedCapability === 'view') return permission.canView
+    if (normalizedCapability === 'create') return permission.canCreate
+    if (normalizedCapability === 'execute') return permission.canExecute
+
+    return false
+  })
+}
+
+
+
   // SoloFlow Verificar se pode acessar rota
-  function canAccessRoute(requiredRoles) {
-    if (!requiredRoles || requiredRoles.length === 0) return true
-    return requiredRoles.includes(userRole.value)
+  function canAccessRoute(requirements) {
+    if (!requirements) {
+      return true
+    }
+
+    if (Array.isArray(requirements) && requirements.every((item) => typeof item === 'string')) {
+      return requirements.includes(userRole.value)
+    }
+
+    if (typeof requirements === 'string' || Array.isArray(requirements)) {
+      return matchesPermissionRequirement(requirements)
+    }
+
+    if (typeof requirements === 'object') {
+      const requiredRoles = requirements.roles
+      const requiredPermissions = requirements.permissions ?? requirements.permission
+
+      const roleOk = requiredRoles
+        ? (Array.isArray(requiredRoles)
+            ? requiredRoles.includes(userRole.value)
+            : requiredRoles === userRole.value)
+        : true
+
+      const permissionOk = requiredPermissions
+        ? matchesPermissionRequirement(requiredPermissions)
+        : true
+
+      return roleOk && permissionOk
+    }
+
+    return false
   }
 
   // SoloFlow Obter dados do perfil atual
@@ -479,6 +578,9 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     companies,
     activeCompany,
+    profileIds,
+    permissions,
+    processTypePermissions,
     loading,
     error,
     
@@ -491,6 +593,7 @@ export const useAuthStore = defineStore('auth', () => {
     isManager,
     canManageUsers,
     canManageProcessTypes,
+    canAccessProcessType,
     
     // Actions - Auth
     login,

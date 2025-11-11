@@ -1,0 +1,647 @@
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { SimpleSignatureService, SignatureMetadata } from './simple-signature.service';
+import { SignDocumentSimpleDto } from './dto/sign-document-simple.dto';
+import { CreateSignatureRequirementDto } from './dto/create-signature-requirement.dto';
+import { join } from 'path';
+import * as bcrypt from 'bcrypt';
+import { copyFileSync, unlinkSync } from 'fs';
+
+@Injectable()
+export class SignaturesService {
+  constructor(
+    private prisma: PrismaService,
+    private simpleSignatureService: SimpleSignatureService,
+  ) {}
+
+  /**
+   * Assina um documento com validação de senha do usuário
+   */
+  async signDocument(userId: string, dto: SignDocumentSimpleDto) {
+    // 1. Buscar e validar usuário
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    // 2. Validar senha do usuário
+    const isValidPassword = await bcrypt.compare(dto.userPassword, user.password);
+
+    if (!isValidPassword) {
+      throw new UnauthorizedException('Senha incorreta');
+    }
+
+    // 3. Buscar anexo
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: dto.attachmentId },
+      include: {
+        stepExecution: {
+          include: {
+            stepVersion: {
+              include: {
+                signatureRequirements: {
+                  include: {
+                    signatureRecords: true,
+                    user: { select: { id: true, name: true, email: true } },
+                    sector: { select: { id: true, name: true } },
+                  },
+                  orderBy: { order: 'asc' },
+                },
+              },
+            },
+            processInstance: {
+              include: {
+                createdBy: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Anexo não encontrado');
+    }
+
+    // 4. Verificar se etapa requer assinatura OU se há requisitos criados
+    const hasRequirements = attachment.stepExecution.stepVersion.signatureRequirements?.length > 0;
+
+    if (!attachment.stepExecution.stepVersion.requiresSignature && !hasRequirements) {
+      throw new BadRequestException('Esta etapa não requer assinatura');
+    }
+
+    // 5. Verificar se anexo é PDF
+    if (attachment.mimeType !== 'application/pdf') {
+      throw new BadRequestException('Apenas arquivos PDF podem ser assinados');
+    }
+
+    // 6. Encontrar requirement correspondente PARA ESTE ARQUIVO ESPECÍFICO
+    const requirements = attachment.stepExecution.stepVersion.signatureRequirements.filter(
+      r => !r.attachmentId || r.attachmentId === dto.attachmentId // permitir requisitos globais da etapa
+    );
+
+    const requirement = requirements.find(
+      r => r.userId === userId || r.sectorId != null,
+    );
+
+    // Se não encontrou requirement específico para este usuário, não pode assinar
+    if (!requirement) {
+      throw new ForbiddenException(
+        'Você não está configurado como assinante deste documento. ' +
+        'Verifique se o documento foi configurado corretamente com seus dados como assinante.'
+      );
+    }
+
+    // 7. Verificar se já assinou
+    const existingSignature = await this.prisma.signatureRecord.findFirst({
+      where: {
+        requirementId: requirement.id,
+        signerId: userId,
+        attachmentId: dto.attachmentId,
+      },
+    });
+
+    if (existingSignature) {
+      throw new BadRequestException('Você já assinou este documento');
+    }
+
+    // 8. Verificar ordem de assinatura (se SEQUENTIAL)
+    if (requirement.type === 'SEQUENTIAL') {
+      const previousRequirements = requirements.filter(r => r.order < requirement.order);
+      for (const prevReq of previousRequirements) {
+        const prevSignature = prevReq.signatureRecords.find(
+          s => s.status === 'COMPLETED',
+        );
+        if (!prevSignature) {
+          throw new BadRequestException(
+            `Aguardando assinatura de ${prevReq.user?.name || prevReq.sector?.name} (ordem ${prevReq.order})`,
+          );
+        }
+      }
+    }
+
+    // 9. Preparar metadados da assinatura
+    const metadata: SignatureMetadata = {
+      signer: {
+        name: user.name,
+        cpf: user.cpf ?? undefined,
+        email: user.email,
+      },
+      reason: dto.reason || 'Assinatura Digital',
+      location: dto.location,
+      contactInfo: dto.contactInfo,
+      ipAddress: dto.ipAddress, // IP público capturado
+    };
+
+    // 10. Contar quantas assinaturas já existem NESTE ARQUIVO para determinar a posição
+    const existingSignaturesCount = await this.prisma.signatureRecord.count({
+      where: {
+        attachmentId: dto.attachmentId,
+        status: 'COMPLETED',
+      },
+    });
+
+    console.log(`📝 Assinando arquivo ${attachment.originalName} - Assinatura #${existingSignaturesCount + 1}`);
+
+    // 11. Assinar PDF - criar arquivo temporário
+    const signedFilename = `signed-${Date.now()}-${attachment.filename}`;
+    const tempSignedPath = join(process.cwd(), 'uploads', 'signatures', signedFilename);
+
+    const signatureResult = await this.simpleSignatureService.signPDF(
+      attachment.path,
+      tempSignedPath,
+      metadata,
+      dto.userPassword,
+      existingSignaturesCount, // Passa a ordem para empilhar assinaturas verticalmente
+    );
+
+    // 11.5. Substituir arquivo original pelo assinado
+    console.log(`🔄 Substituindo arquivo original ${attachment.path} pelo assinado`);
+    copyFileSync(tempSignedPath, attachment.path);
+    unlinkSync(tempSignedPath);
+    console.log(`✅ Arquivo original substituído com sucesso`);
+
+    // 12. Criar registro de assinatura
+    const signatureRecord = await this.prisma.signatureRecord.create({
+      data: {
+        requirementId: requirement.id,
+        attachmentId: dto.attachmentId,
+        signerId: userId,
+        stepExecutionId: dto.stepExecutionId,
+        status: 'COMPLETED',
+
+        // Dados do assinante
+        signerName: user.name,
+        signerCPF: user.cpf,
+        signerEmail: user.email,
+
+        // Dados da assinatura
+        signedAt: new Date(),
+        signatureHash: signatureResult.signatureHash,
+        documentHash: signatureResult.documentHash,
+        signatureToken: signatureResult.signatureToken,
+        signatureReason: dto.reason,
+
+        // Metadados
+        ipAddress: dto.ipAddress,
+        userAgent: dto.userAgent,
+        geolocation: dto.geolocation,
+        metadata: {
+          contactInfo: dto.contactInfo,
+        },
+      },
+      include: {
+        signer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            cpf: true,
+          },
+        },
+        requirement: true,
+      },
+    });
+
+    // 13. Atualizar anexo - marcar como assinado (path permanece o mesmo pois foi substituído)
+    await this.prisma.attachment.update({
+      where: { id: dto.attachmentId },
+      data: {
+        isSigned: true,
+        // Não precisa de signedPath separado - o arquivo original foi substituído
+      },
+    });
+
+    // 13. Verificar se todas as assinaturas requeridas DESTE ARQUIVO foram concluídas
+    const allRequirements = await this.prisma.signatureRequirement.findMany({
+      where: {
+        stepVersionId: attachment.stepExecution.stepVersionId,
+        attachmentId: dto.attachmentId, // APENAS REQUISITOS DESTE ANEXO
+        isRequired: true,
+      },
+      include: {
+        signatureRecords: {
+          where: {
+            attachmentId: dto.attachmentId,
+            status: 'COMPLETED',
+          },
+        },
+      },
+    });
+
+    const allSigned = allRequirements.every(req => req.signatureRecords.length > 0);
+
+    console.log(`✅ Requisitos de assinatura para ${attachment.originalName}: ${allRequirements.length} total, ${allRequirements.filter(r => r.signatureRecords.length > 0).length} assinados`);
+
+    // Apenas registrar que todas as assinaturas foram concluídas
+    // Não modificar status da etapa - a etapa já foi concluída quando o usuário clicou em "Concluir Etapa"
+    if (allSigned) {
+      await this.prisma.stepExecution.update({
+        where: { id: dto.stepExecutionId },
+        data: {
+          signedAt: new Date(),
+        },
+      });
+
+      console.log('All signatures completed - step already marked as COMPLETED earlier');
+    }
+
+    return {
+      success: true,
+      signatureRecord,
+      signedPath: attachment.path, // Retorna o path original (que agora contém o PDF assinado)
+      signatureToken: signatureResult.signatureToken,
+      allRequirementsMet: allSigned,
+    };
+  }
+
+  /**
+   * Validação pública de assinatura (sem autenticação)
+   */
+  async validatePublicSignature(signatureToken: string, documentHash?: string) {
+    // Buscar assinatura pelo token
+    const signature = await this.prisma.signatureRecord.findFirst({
+      where: { signatureToken },
+      include: {
+        signer: {
+          select: {
+            name: true,
+            email: true,
+            cpf: true,
+          },
+        },
+        attachment: {
+          select: {
+            originalName: true,
+            mimeType: true,
+          },
+        },
+        stepExecution: {
+          include: {
+            processInstance: {
+              select: {
+                code: true,
+                title: true,
+                description: true,
+              },
+            },
+            stepVersion: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!signature) {
+      return {
+        valid: false,
+        message: 'Token de assinatura não encontrado no sistema',
+      };
+    }
+
+    // Verificar integridade do documento (se hash fornecido)
+    let documentIntegrity: {
+      isValid: boolean;
+      providedHash: string;
+      originalHash: string | null;
+      message: string;
+    } | null = null;
+    if (documentHash) {
+      const isValid = documentHash.toLowerCase() === signature.documentHash?.toLowerCase();
+      documentIntegrity = {
+        isValid,
+        providedHash: documentHash,
+        originalHash: signature.documentHash,
+        message: isValid
+          ? 'Documento íntegro - não foi alterado desde a assinatura'
+          : 'ATENÇÃO: O documento foi alterado após a assinatura',
+      };
+    }
+
+    return {
+      valid: true,
+      signature: {
+        // Dados do assinante
+        signerName: signature.signerName,
+        signerCPF: signature.signerCPF,
+        signerEmail: signature.signerEmail,
+
+        // Dados da assinatura
+        signedAt: signature.signedAt,
+        reason: signature.signatureReason,
+        ipAddress: signature.ipAddress,
+
+        // Dados do processo
+        processCode: signature.stepExecution.processInstance.code,
+        processTitle: signature.stepExecution.processInstance.title,
+        stepName: signature.stepExecution.stepVersion.name,
+
+        // Dados do documento
+        documentName: signature.attachment.originalName,
+        documentType: signature.attachment.mimeType,
+      },
+      documentIntegrity,
+      token: signatureToken,
+      validatedAt: new Date(),
+    };
+  }
+
+  /**
+   * Cria requisito de assinatura para uma etapa
+   */
+  async createSignatureRequirement(dto: CreateSignatureRequirementDto) {
+    if (!dto.userId && !dto.sectorId) {
+      throw new BadRequestException(
+        'Informe userId ou sectorId para o assinante',
+      );
+    }
+
+    const stepVersion = await this.prisma.stepVersion.findUnique({
+      where: { id: dto.stepVersionId },
+    });
+
+    if (!stepVersion) {
+      throw new NotFoundException('Etapa não encontrada');
+    }
+
+    const existing = await this.prisma.signatureRequirement.findUnique({
+      where: {
+        stepVersionId_order: {
+          stepVersionId: dto.stepVersionId,
+          order: dto.order,
+        },
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException(
+        `Já existe um requisito com ordem ${dto.order}`,
+      );
+    }
+
+    const requirement = await this.prisma.signatureRequirement.create({
+      data: {
+        stepVersionId: dto.stepVersionId,
+        order: dto.order,
+        type: dto.type,
+        isRequired: dto.isRequired ?? true,
+        description: dto.description,
+        userId: dto.userId,
+        sectorId: dto.sectorId,
+        attachmentId: dto.attachmentId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        sector: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return requirement;
+  }
+
+  /**
+   * Cria múltiplos requisitos de assinatura de uma vez
+   */
+  async createMultipleSignatureRequirements(requirements: CreateSignatureRequirementDto[]) {
+    const created: any[] = [];
+    const errors: any[] = [];
+
+    for (const dto of requirements) {
+      try {
+        // Validar campos obrigatórios
+        if (!dto.userId && !dto.sectorId) {
+          errors.push({
+            dto,
+            error: 'Informe userId ou sectorId para o assinante',
+          });
+          continue;
+        }
+
+        // Verificar se a etapa existe
+        const stepVersion = await this.prisma.stepVersion.findUnique({
+          where: { id: dto.stepVersionId },
+        });
+
+        if (!stepVersion) {
+          errors.push({
+            dto,
+            error: 'Etapa não encontrada',
+          });
+          continue;
+        }
+
+        // Verificar se já existe um requisito com a mesma ordem
+        const existing = await this.prisma.signatureRequirement.findFirst({
+          where: {
+            stepVersionId: dto.stepVersionId,
+            attachmentId: dto.attachmentId,
+            order: dto.order,
+          },
+        });
+
+        if (existing) {
+          errors.push({
+            dto,
+            error: `Já existe um requisito com ordem ${dto.order}`,
+          });
+          continue;
+        }
+
+        // Criar o requisito
+        const requirement = await this.prisma.signatureRequirement.create({
+          data: {
+            stepVersionId: dto.stepVersionId,
+            order: dto.order,
+            type: dto.type,
+            isRequired: dto.isRequired ?? true,
+            description: dto.description,
+            userId: dto.userId,
+            sectorId: dto.sectorId,
+            attachmentId: dto.attachmentId,
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            sector: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        });
+
+        created.push(requirement);
+      } catch (error) {
+        errors.push({
+          dto,
+          error: error.message || 'Erro ao criar requisito',
+        });
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      created,
+      errors,
+      total: requirements.length,
+      createdCount: created.length,
+      errorCount: errors.length,
+    };
+  }
+
+  /**
+   * Lista requisitos de assinatura de uma etapa
+   */
+  async getSignatureRequirements(stepVersionId: string) {
+    return this.prisma.signatureRequirement.findMany({
+      where: { stepVersionId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        sector: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        signatureRecords: {
+          include: {
+            signer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { order: 'asc' },
+    });
+  }
+
+  /**
+   * Lista assinaturas de um anexo
+   */
+  async getAttachmentSignatures(attachmentId: string) {
+    return this.prisma.signatureRecord.findMany({
+      where: { attachmentId },
+      include: {
+        signer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            cpf: true,
+          },
+        },
+        requirement: {
+          select: {
+            order: true,
+            type: true,
+            description: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Verifica assinaturas de um PDF
+   */
+  async verifySignatures(attachmentId: string) {
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: {
+        signatureRecords: {
+          select: {
+            signatureToken: true,
+            documentHash: true,
+            signerName: true,
+            signedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Anexo não encontrado');
+    }
+
+    if (!attachment.isSigned || attachment.signatureRecords.length === 0) {
+      throw new BadRequestException('Este anexo não possui assinaturas');
+    }
+
+    const signatures = attachment.signatureRecords.map(sig => ({
+      token: sig.signatureToken,
+      signer: sig.signerName,
+      signedAt: sig.signedAt,
+      documentHash: sig.documentHash,
+    }));
+
+    return {
+      isValid: signatures.length > 0,
+      totalSignatures: signatures.length,
+      signatures,
+      message: `Documento possui ${signatures.length} assinatura(s) válida(s)`,
+    };
+  }
+
+  /**
+   * Busca anexo para download
+   */
+  async getAttachmentForDownload(attachmentId: string) {
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      select: {
+        id: true,
+        filename: true,
+        originalName: true,
+        mimeType: true,
+        path: true,
+        isSigned: true,
+      },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Anexo não encontrado');
+    }
+
+    return attachment;
+  }
+}

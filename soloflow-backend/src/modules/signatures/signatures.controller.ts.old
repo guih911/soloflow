@@ -1,0 +1,138 @@
+import {
+  Controller,
+  Post,
+  Get,
+  Delete,
+  Put,
+  Body,
+  Param,
+  UseGuards,
+  Req,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SignaturesService } from './signatures.service';
+import { UploadCertificateDto } from './dto/upload-certificate.dto';
+import { SignDocumentDto } from './dto/sign-document.dto';
+import { CreateSignatureRequirementDto } from './dto/create-signature-requirement.dto';
+import { memoryStorage } from 'multer';
+
+@Controller('signatures')
+@UseGuards(JwtAuthGuard)
+export class SignaturesController {
+  constructor(private readonly signaturesService: SignaturesService) {}
+
+  /**
+   * Upload de certificado A1
+   */
+  @Post('certificates/upload')
+  @UseInterceptors(
+    FileInterceptor('certificate', {
+      storage: memoryStorage(),
+      fileFilter: (req, file, cb) => {
+        if (
+          file.mimetype === 'application/x-pkcs12' ||
+          file.originalname.endsWith('.pfx') ||
+          file.originalname.endsWith('.p12')
+        ) {
+          cb(null, true);
+        } else {
+          cb(
+            new BadRequestException(
+              'Apenas arquivos .pfx ou .p12 são permitidos',
+            ),
+            false,
+          );
+        }
+      },
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
+    }),
+  )
+  async uploadCertificate(
+    @Req() req,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: UploadCertificateDto,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Arquivo de certificado é obrigatório');
+    }
+
+    return this.signaturesService.uploadCertificate(req.user.userId, file, dto);
+  }
+
+  /**
+   * Lista meus certificados
+   */
+  @Get('certificates/my')
+  async getMyCertificates(@Req() req) {
+    return this.signaturesService.getMyCertificates(req.user.userId);
+  }
+
+  /**
+   * Remove certificado
+   */
+  @Delete('certificates/:id')
+  async deleteCertificate(@Req() req, @Param('id') certificateId: string) {
+    return this.signaturesService.deleteCertificate(req.user.userId, certificateId);
+  }
+
+  /**
+   * Define certificado padrão
+   */
+  @Put('certificates/:id/set-default')
+  async setDefaultCertificate(@Req() req, @Param('id') certificateId: string) {
+    return this.signaturesService.setDefaultCertificate(
+      req.user.userId,
+      certificateId,
+    );
+  }
+
+  /**
+   * Assina um documento
+   */
+  @Post('sign')
+  async signDocument(@Req() req, @Body() dto: SignDocumentDto) {
+    // Capturar IP e User-Agent automaticamente
+    dto.ipAddress = req.ip || req.connection.remoteAddress;
+    dto.userAgent = req.headers['user-agent'];
+
+    return this.signaturesService.signDocument(req.user.userId, dto);
+  }
+
+  /**
+   * Cria requisito de assinatura
+   */
+  @Post('requirements')
+  async createRequirement(@Body() dto: CreateSignatureRequirementDto) {
+    return this.signaturesService.createSignatureRequirement(dto);
+  }
+
+  /**
+   * Lista requisitos de assinatura de uma etapa
+   */
+  @Get('requirements/step/:stepVersionId')
+  async getStepRequirements(@Param('stepVersionId') stepVersionId: string) {
+    return this.signaturesService.getSignatureRequirements(stepVersionId);
+  }
+
+  /**
+   * Lista assinaturas de um anexo
+   */
+  @Get('attachments/:attachmentId')
+  async getAttachmentSignatures(@Param('attachmentId') attachmentId: string) {
+    return this.signaturesService.getAttachmentSignatures(attachmentId);
+  }
+
+  /**
+   * Verifica assinaturas de um PDF
+   */
+  @Get('verify/:attachmentId')
+  async verifySignatures(@Param('attachmentId') attachmentId: string) {
+    return this.signaturesService.verifySignatures(attachmentId);
+  }
+}

@@ -623,6 +623,25 @@ export class ProcessesService {
                     },
                   },
                 },
+                signatureRequirements: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                      },
+                    },
+                    signatureRecords: {
+                      select: {
+                        id: true,
+                        status: true,
+                        signerId: true,
+                        requirementId: true,
+                      },
+                    },
+                  },
+                },
               },
             },
             executor: {
@@ -633,14 +652,15 @@ export class ProcessesService {
               },
             },
             attachments: {
-              select: {
-                id: true,
-                filename: true,
-                originalName: true,
-                mimeType: true,
-                size: true,
-                isSigned: true,
-                createdAt: true,
+              include: {
+                signatureRecords: {
+                  select: {
+                    id: true,
+                    status: true,
+                    signerId: true,
+                    requirementId: true,
+                  },
+                },
               },
             },
           },
@@ -676,6 +696,111 @@ export class ProcessesService {
       }),
     };
   }
+
+  async cancelProcess(processId: string, user: any, reason?: string) {
+    const process = await this.prisma.processInstance.findUnique({
+      where: { id: processId },
+      include: {
+        processTypeVersion: {
+          include: {
+            processType: true,
+            steps: { orderBy: { order: 'asc' } },
+            formFields: { orderBy: { order: 'asc' } },
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        stepExecutions: {
+          orderBy: { stepVersion: { order: 'asc' } },
+        },
+      },
+    });
+
+    if (!process) {
+      throw new NotFoundException('Processo nao encontrado');
+    }
+
+    await this.checkViewPermission(process, user.id);
+
+    const terminalStatuses: ProcessStatus[] = [
+      ProcessStatus.COMPLETED,
+      ProcessStatus.CANCELLED,
+      ProcessStatus.REJECTED,
+    ];
+
+    if (terminalStatuses.includes(process.status)) {
+      throw new BadRequestException('Processo ja finalizado; cancelamento nao permitido');
+    }
+
+    const userCompany = await this.prisma.userCompany.findFirst({
+      where: {
+        userId: user.id,
+        companyId: process.companyId,
+      },
+    });
+
+    if (!userCompany) {
+      throw new ForbiddenException('Sem permissao para cancelar este processo');
+    }
+
+    const isCreator = process.createdById === user.id;
+    const isCompanyManager = ['ADMIN', 'MANAGER'].includes(userCompany.role);
+    const hasManagePermission = this.userHasPermission(user, 'processes', 'manage');
+
+    if (!isCreator && !isCompanyManager && !hasManagePermission) {
+      throw new ForbiddenException('Somente o criador ou usuarios autorizados podem cancelar o processo');
+    }
+
+    const normalizedReason = reason?.trim() ? reason.trim() : null;
+    const cancellationDate = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.stepExecution.updateMany({
+        where: {
+          processInstanceId: process.id,
+          status: {
+            in: [StepExecutionStatus.IN_PROGRESS, StepExecutionStatus.PENDING],
+          },
+        },
+        data: {
+          status: StepExecutionStatus.SKIPPED,
+          completedAt: cancellationDate,
+        },
+      });
+
+      const baseMetadata =
+        process.metadata &&
+        typeof process.metadata === 'object' &&
+        !Array.isArray(process.metadata)
+          ? { ...(process.metadata as Record<string, any>) }
+          : {};
+
+      baseMetadata.cancellation = {
+        byUserId: user.id,
+        byUserName: user.name ?? null,
+        byUserEmail: user.email ?? null,
+        at: cancellationDate.toISOString(),
+        reason: normalizedReason,
+        previousStatus: process.status,
+      };
+
+      await tx.processInstance.update({
+        where: { id: process.id },
+        data: {
+          status: ProcessStatus.CANCELLED,
+          completedAt: cancellationDate,
+          metadata: baseMetadata as Prisma.InputJsonValue,
+        },
+      });
+    });
+
+    return this.findOne(processId, user.id);
+  }
   
   // INÍCIO DA SEÇÃO ATUALIZADA
   async getMyTasks(userId: string, companyId: string) {
@@ -683,9 +808,9 @@ export class ProcessesService {
       where: { userId, companyId },
       include: { sector: true },
     });
-  
-    // Buscar tarefas através dos assignments E tarefas onde o usuário é o criador
-    const tasks = await this.prisma.stepExecution.findMany({
+
+    // 1. Buscar tarefas normais (IN_PROGRESS) através dos assignments
+    const normalTasks = await this.prisma.stepExecution.findMany({
       where: {
         status: 'IN_PROGRESS',
         processInstance: { companyId },
@@ -714,7 +839,7 @@ export class ProcessesService {
               },
             },
           },
-          // NOVO: Tarefas atribuídas ao criador
+          // Tarefas atribuídas ao criador
           {
             AND: [
               {
@@ -786,9 +911,103 @@ export class ProcessesService {
       },
       orderBy: { createdAt: 'asc' },
     });
-  
+
+    // 2. Buscar assinaturas pendentes (COMPLETED ou qualquer status) separadamente
+    const signatureTasks = await this.prisma.stepExecution.findMany({
+      where: {
+        processInstance: { companyId },
+        stepVersion: {
+          signatureRequirements: {
+            some: {
+              userId: userId,
+              signatureRecords: {
+                none: {
+                  signerId: userId,
+                  status: 'COMPLETED',
+                },
+              },
+            },
+          },
+        },
+      },
+      include: {
+        stepVersion: {
+          include: {
+            assignments: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+                sector: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        processInstance: {
+          include: {
+            processTypeVersion: {
+              include: {
+                processType: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        attachments: {
+          select: {
+            id: true,
+            originalName: true,
+            mimeType: true,
+            size: true,
+            isSigned: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    console.log(`Found ${normalTasks.length} normal tasks and ${signatureTasks.length} signature tasks`);
+
+    // 3. Combinar resultados, removendo duplicatas
+    const taskIds = new Set<string>();
+    const allTasks: typeof normalTasks = [];
+
+    for (const task of normalTasks) {
+      if (!taskIds.has(task.id)) {
+        taskIds.add(task.id);
+        allTasks.push(task);
+      }
+    }
+
+    for (const task of signatureTasks) {
+      if (!taskIds.has(task.id)) {
+        taskIds.add(task.id);
+        allTasks.push(task);
+      }
+    }
+
     // Adaptar resposta para incluir informação se é atribuída ao criador
-    return tasks.map(task => {
+    return allTasks.map(task => {
       const isAssignedToCreator = task.stepVersion.assignedToCreator && 
                                   task.processInstance.createdById === userId;
       
@@ -940,8 +1159,17 @@ export class ProcessesService {
 
     await this.checkExecutePermission(stepExecution, userId);
 
-    if (stepExecution.status !== StepExecutionStatus.IN_PROGRESS) {
-      throw new BadRequestException('Esta etapa não está em progresso');
+    // Permitir executar etapas PENDING ou IN_PROGRESS
+    if (stepExecution.status !== StepExecutionStatus.IN_PROGRESS && stepExecution.status !== StepExecutionStatus.PENDING) {
+      throw new BadRequestException('Esta etapa não está disponível para execução');
+    }
+
+    // Se está PENDING, atualizar para IN_PROGRESS antes de executar
+    if (stepExecution.status === StepExecutionStatus.PENDING) {
+      await this.prisma.stepExecution.update({
+        where: { id: executeDto.stepExecutionId },
+        data: { status: StepExecutionStatus.IN_PROGRESS },
+      });
     }
 
     // Processar etapa INPUT com configuração dinâmica
@@ -1023,6 +1251,8 @@ export class ProcessesService {
         };
       }
 
+      // Marcar etapa como concluída normalmente
+      // As assinaturas ficam pendentes como atividade separada
       const updatedExecution = await tx.stepExecution.update({
         where: { id: executeDto.stepExecutionId },
         data: {
@@ -1087,6 +1317,7 @@ export class ProcessesService {
         ? allSteps.find((s) => s.order === nextStepOrder)
         : null;
 
+      // Avançar para próxima etapa normalmente
       if (nextStep && !shouldEnd) {
         console.log('Activating next step:', {
           stepId: nextStep.id,
@@ -1380,6 +1611,25 @@ export class ProcessesService {
     throw new ForbiddenException('Sem permissão para executar esta etapa');
   }
   // FIM DA SEÇÃO ATUALIZADA
+
+  private userHasPermission(user: any, resource: string, action: string): boolean {
+    if (!user?.permissions || !Array.isArray(user.permissions)) {
+      return false;
+    }
+
+    const normalizedResource = resource.toLowerCase();
+    const normalizedAction = action.toLowerCase();
+
+    return user.permissions.some((permission: any) => {
+      const permResource = String(permission.resource || '*').toLowerCase();
+      const permAction = String(permission.action || '*').toLowerCase();
+
+      return (
+        (permResource === '*' || permResource === normalizedResource) &&
+        (permAction === '*' || permAction === normalizedAction)
+      );
+    });
+  }
 
   private async validateFormData(
     formData: Record<string, any>,

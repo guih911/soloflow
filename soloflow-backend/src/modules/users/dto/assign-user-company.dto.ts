@@ -15,6 +15,10 @@ export class AssignUserCompanyDto {
   @IsUUID()
   sectorId?: string;
 
+
+  @IsOptional()
+  @IsUUID()
+  profileId?: string;
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;

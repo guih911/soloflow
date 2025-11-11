@@ -126,6 +126,66 @@
                     class="mb-3"
                   />
 
+                  <v-text-field
+                    v-else-if="field.type === 'CPF'"
+                    v-model="formData[field.name]"
+                    :label="field.label"
+                    :placeholder="field.placeholder || '000.000.000-00'"
+                    :required="field.required"
+                    :rules="getFieldRules(field)"
+                    :hint="field.helpText"
+                    v-mask="'###.###.###-##'"
+                    persistent-hint
+                    variant="outlined"
+                    prepend-inner-icon="mdi-card-account-details"
+                    class="mb-3"
+                  />
+
+                  <v-text-field
+                    v-else-if="field.type === 'CNPJ'"
+                    v-model="formData[field.name]"
+                    :label="field.label"
+                    :placeholder="field.placeholder || '00.000.000/0000-00'"
+                    :required="field.required"
+                    :rules="getFieldRules(field)"
+                    :hint="field.helpText"
+                    v-mask="'##.###.###/####-##'"
+                    persistent-hint
+                    variant="outlined"
+                    prepend-inner-icon="mdi-domain"
+                    class="mb-3"
+                  />
+
+                  <v-text-field
+                    v-else-if="field.type === 'PHONE'"
+                    v-model="formData[field.name]"
+                    :label="field.label"
+                    :placeholder="field.placeholder || '(00) 00000-0000'"
+                    :required="field.required"
+                    :rules="getFieldRules(field)"
+                    :hint="field.helpText"
+                    v-mask="['(##) ####-####', '(##) #####-####']"
+                    persistent-hint
+                    variant="outlined"
+                    prepend-inner-icon="mdi-phone"
+                    class="mb-3"
+                  />
+
+                  <v-text-field
+                    v-else-if="field.type === 'CURRENCY'"
+                    v-model="formData[field.name]"
+                    :label="field.label"
+                    :placeholder="field.placeholder"
+                    :required="field.required"
+                    :rules="getFieldRules(field)"
+                    :hint="field.helpText"
+                    persistent-hint
+                    variant="outlined"
+                    prepend-inner-icon="mdi-currency-usd"
+                    prefix="R$"
+                    class="mb-3"
+                  />
+
                   <v-textarea
                     v-else-if="field.type === 'TEXTAREA'"
                     v-model="formData[field.name]"
@@ -141,48 +201,39 @@
                     class="mb-3"
                   />
 
-                 
-                  <div v-else-if="field.type === 'FILE'" class="file-field-container mb-4">
-                    <FileUploadField
+                  <v-select
+                    v-else-if="field.type === 'DROPDOWN'"
+                    v-model="formData[field.name]"
+                    :label="field.label"
+                    :placeholder="field.placeholder"
+                    :required="field.required"
+                    :rules="getFieldRules(field)"
+                    :hint="field.helpText"
+                    :items="field.options || []"
+                    persistent-hint
+                    variant="outlined"
+                    prepend-inner-icon="mdi-form-dropdown"
+                    class="mb-3"
+                  />
+
+                  <div v-else-if="field.type === 'CHECKBOX'" class="mb-4">
+                    <label class="text-subtitle-2 mb-2 d-block font-weight-medium">
+                      {{ field.label }}
+                      <span v-if="field.required" class="text-error">*</span>
+                    </label>
+                    <v-checkbox
+                      v-for="(option, idx) in (field.options || [])"
+                      :key="idx"
                       v-model="formData[field.name]"
-                      :label="field.label"
-                      :required="field.required"
-                      :help-text="field.helpText || getFileInputHelpText(field)"
-                      :multiple="getFieldFileConfig(field).multiple"
-                      :max-files="getFieldFileConfig(field).maxFiles"
-                      :max-size="getFieldFileConfig(field).maxSize"
-                      :allowed-types="getFieldFileConfig(field).allowedTypes"
-                      :upload-title="field.placeholder || 'Clique ou arraste arquivos aqui'"
-                      :upload-description="`Selecione ${getFieldFileConfig(field).multiple ? 'um ou mais arquivos' : 'um arquivo'} para ${field.label.toLowerCase()}`"
-                      @files-changed="handleFieldFilesChanged(field, $event)"
-                      @error="handleFileError"
-                      class="mb-3"
+                      :label="option"
+                      :value="option"
+                      hide-details
+                      density="compact"
+                      class="mt-1"
                     />
-                    
-                    <!-- ✅ Indicador de progresso por campo -->
-                    <div v-if="uploadProgress[field.name]" class="upload-progress-container mt-2">
-                      <v-card variant="outlined" class="pa-3">
-                        <div class="d-flex align-center mb-2">
-                          <v-icon color="info" class="mr-2">mdi-upload</v-icon>
-                          <span class="text-body-2 font-weight-medium">
-                            Enviando arquivos para {{ field.label }}...
-                          </span>
-                        </div>
-                        
-                        <v-progress-linear
-                          :model-value="uploadProgress[field.name].progress"
-                          color="primary"
-                          height="8"
-                          rounded
-                          class="mb-2"
-                        />
-                        
-                        <div class="text-caption text-medium-emphasis">
-                          {{ uploadProgress[field.name].current }} de {{ uploadProgress[field.name].total }} arquivo(s)
-                          - {{ Math.round(uploadProgress[field.name].progress) }}%
-                        </div>
-                      </v-card>
-                    </div>
+                    <small v-if="field.helpText" class="text-caption text-medium-emphasis d-block mt-2">
+                      {{ field.helpText }}
+                    </small>
                   </div>
                 </v-col>
               </v-row>
@@ -234,57 +285,21 @@
           
         
           
-          <!-- ✅ CREATE BUTTON - CORRIGIDO -->
           <v-btn
             color="primary"
             variant="elevated"
             size="large"
             :loading="creating"
-            :disabled="!formValid || isUploading"
+            :disabled="!formValid"
             @click="createProcessWithFiles"
           >
-            <v-icon start>{{ isUploading ? 'mdi-upload' : 'mdi-rocket-launch' }}</v-icon>
-            {{ isUploading ? 'Enviando arquivos...' : 'Criar Processo' }}
+            <v-icon start>mdi-rocket-launch</v-icon>
+            Criar Processo
           </v-btn>
         </v-card-actions>
       </v-card>
     </div>
 
-    <!-- ✅ Overlay de Progresso Global -->
-    <v-overlay
-      :model-value="creating && isUploading"
-      contained
-      class="align-center justify-center"
-    >
-      <v-card class="pa-6" min-width="400">
-        <div class="text-center">
-          <v-progress-circular
-            :model-value="globalUploadProgress"
-            size="80"
-            width="8"
-            color="primary"
-            class="mb-4"
-          >
-            {{ Math.round(globalUploadProgress) }}%
-          </v-progress-circular>
-          
-          <h3 class="text-h6 mb-2">{{ uploadStatusText }}</h3>
-          
-          <p class="text-body-2 text-medium-emphasis mb-4">
-            {{ uploadDetailText }}
-          </p>
-          
-          <div v-if="uploadErrors.length > 0" class="upload-errors">
-            <v-alert type="warning" variant="tonal" density="compact">
-              <v-icon start>mdi-alert</v-icon>
-              {{ uploadErrors.length }} arquivo(s) com erro
-            </v-alert>
-          </div>
-        </div>
-      </v-card>
-    </v-overlay>
-
-    <!-- Dialogs mantidos iguais -->
   </div>
 </template>
 
@@ -293,7 +308,6 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
 import { useProcessTypeStore } from '@/stores/processTypes'
-import FileUploadField from '@/components/FileUploadField.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -312,13 +326,6 @@ const formValid = ref(true)
 const creating = ref(false)
 
 
-// ✅ Estado de upload
-const isUploading = ref(false)
-const uploadProgress = ref({}) // Por campo
-const globalUploadProgress = ref(0)
-const uploadStatusText = ref('')
-const uploadDetailText = ref('')
-const uploadErrors = ref([])
 
 const processForm = ref(null)
 const processData = ref({
@@ -348,133 +355,29 @@ async function createProcessWithFiles() {
   }
 
   creating.value = true
-  isUploading.value = false
-  uploadErrors.value = []
-  
-  try {
-    
-    
-    
-    const { sanitizedFormData, filesMap } = separateFormDataAndFiles()
-    
 
-   
-    uploadStatusText.value = 'Criando processo...'
-    uploadDetailText.value = 'Salvando informações básicas'
-    
+  try {
     const basePayload = {
       processTypeId: selectedProcessType.value.id,
       title: generateProcessTitle(),
       description: processData.value.observations?.trim() || null,
-      formData: sanitizedFormData 
+      formData: formData.value
     }
 
-    
     const createdProcess = await processStore.createProcess(basePayload)
-   
 
-    // ✅ ETAPA 2: Upload de arquivos por campo (se existirem)
-    if (Object.keys(filesMap).length > 0) {
-      
-      isUploading.value = true
-      
-      uploadStatusText.value = 'Enviando arquivos...'
-      uploadDetailText.value = 'Organizando anexos por campo'
-      
-      // Inicializar progresso por campo
-      for (const [fieldName, fileList] of Object.entries(filesMap)) {
-        uploadProgress.value[fieldName] = {
-          progress: 0,
-          current: 0,
-          total: fileList.length
-        }
-      }
-
-      // ✅ ETAPA 2: Upload usando método correto do store
-      await processStore.uploadProcessFiles(createdProcess.id, filesMap)
-      
-      
-      uploadStatusText.value = 'Arquivos enviados!'
-      uploadDetailText.value = 'Processo criado com sucesso'
-      globalUploadProgress.value = 100
-    } else {
-      
-    }
-
-   
-    window.showSnackbar?.('Processo criado com sucesso! 🎉', 'success')
-    
+    window.showSnackbar?.('Processo criado com sucesso!', 'success')
 
     setTimeout(() => {
       router.push(`/processes/${createdProcess.id}`)
     }, 500)
-    
+
   } catch (error) {
-    console.error('❌ Error in createProcessWithFiles:', error)
-    
-    // ✅ TRATAMENTO DE ERRO ESPECÍFICO
-    if (error.message?.includes('arquivo(s) falharam')) {
-      // Erro parcial de upload - processo foi criado mas alguns arquivos falharam
-      window.showSnackbar?.(
-        'Processo criado, mas alguns arquivos não foram enviados: ' + error.message, 
-        'warning'
-      )
-      
-      // Ainda navegar para o processo (usuário pode tentar re-upload)
-      setTimeout(() => {
-        if (createdProcess?.id) {
-          router.push(`/processes/${createdProcess.id}`)
-        }
-      }, 1000)
-    } else {
-      // Erro total
-      window.showSnackbar?.(error.message || 'Erro ao criar processo', 'error')
-    }
+    console.error('Erro ao criar processo:', error)
+    window.showSnackbar?.(error.message || 'Erro ao criar processo', 'error')
   } finally {
     creating.value = false
-    isUploading.value = false
-    uploadProgress.value = {}
-    globalUploadProgress.value = 0
   }
-}
-
-
-// ✅ NOVO: Função para separar dados limpos de arquivos
-function separateFormDataAndFiles() {
-  const sanitizedFormData = {}
-  const filesMap = {}
-  
-  // Processar formData separando arquivos de outros dados
-  for (const [fieldName, fieldValue] of Object.entries(formData.value)) {
-    if (Array.isArray(fieldValue) && fieldValue.length > 0 && fieldValue[0]?.file instanceof File) {
-      // É campo de arquivo
-      filesMap[fieldName] = fieldValue
-      console.log(`🔍 File field detected: ${fieldName} with ${fieldValue.length} files`)
-    } else if (fieldValue !== null && fieldValue !== undefined && fieldValue !== '') {
-      // É campo normal (string, number, date, etc.) com valor válido
-      sanitizedFormData[fieldName] = fieldValue
-      console.log(`📝 Regular field: ${fieldName} = ${fieldValue}`)
-    }
-  }
-  
-  return { 
-    sanitizedFormData: Object.keys(sanitizedFormData).length > 0 ? sanitizedFormData : undefined,
-    filesMap 
-  }
-}
-
-
-// ✅ Métodos de acompanhamento de progresso
-function handleFieldFilesChanged(field, files) {
-  console.log(`📝 Files changed for field ${field.name}:`, files.length)
-  // O v-model já cuida da atualização automaticamente
-}
-
-function handleFileError(errors) {
-  console.error('🚨 File validation errors:', errors)
-  errors.forEach(error => {
-    window.showSnackbar?.(error, 'error')
-  })
 }
 
 
@@ -500,54 +403,10 @@ function getFieldCols(field) {
   switch (field.type) {
     case 'TEXTAREA':
     case 'CHECKBOX':
-    case 'FILE':
       return 12
     default:
       return { cols: 12, md: 6 }
   }
-}
-
-function getFieldFileConfig(field) {
-  const defaultConfig = {
-    multiple: false,
-    maxFiles: 1,
-    maxSize: 10 * 1024 * 1024, 
-    allowedTypes: ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.xls', '.xlsx']
-  }
-
-  if (field.validations) {
-    try {
-      const validations = typeof field.validations === 'object' ? 
-        field.validations : JSON.parse(field.validations)
-      
-      return {
-        multiple: validations.maxFiles ? validations.maxFiles > 1 : defaultConfig.multiple,
-        maxFiles: validations.maxFiles || defaultConfig.maxFiles,
-        maxSize: validations.maxSize || defaultConfig.maxSize,
-        allowedTypes: validations.allowedTypes || defaultConfig.allowedTypes
-      }
-    } catch {
-      return defaultConfig
-    }
-  }
-
-  return defaultConfig
-}
-
-function getFileInputHelpText(field) {
-  const config = getFieldFileConfig(field)
-  const maxSize = formatFileSize(config.maxSize)
-  const types = config.allowedTypes.slice(0, 3).map(t => t.replace('.', '').toUpperCase()).join(', ')
-  
-  return `Máx: ${config.maxFiles} arquivo(s), ${maxSize} cada. Tipos: ${types}${config.allowedTypes.length > 3 ? '...' : ''}`
-}
-
-function formatFileSize(bytes) {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }
 
 function getFieldRules(field) {
@@ -558,14 +417,11 @@ function getFieldRules(field) {
       if (field.type === 'CHECKBOX') {
         return (v && v.length > 0) || `${field.label} é obrigatório`
       }
-      if (field.type === 'FILE') {
-        return (v && v.length > 0) || `${field.label} é obrigatório`
-      }
       return !!v || `${field.label} é obrigatório`
     })
   }
 
-  
+
   switch (field.type) {
     case 'EMAIL':
       rules.push(v => !v || /.+@.+\..+/.test(v) || 'E-mail inválido')
@@ -575,6 +431,9 @@ function getFieldRules(field) {
       break
     case 'CNPJ':
       rules.push(v => !v || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'CNPJ inválido')
+      break
+    case 'PHONE':
+      rules.push(v => !v || /^\(\d{2}\) \d{4,5}-\d{4}$/.test(v) || 'Telefone inválido')
       break
   }
 
@@ -605,14 +464,12 @@ function proceedToForm() {
 
 function initializeFormData(processType) {
   formData.value = {}
-  
+
   if (processType?.formFields) {
     getVisibleFormFields(processType).forEach(field => {
       if (field.defaultValue) {
         formData.value[field.name] = field.defaultValue
       } else if (field.type === 'CHECKBOX') {
-        formData.value[field.name] = []
-      } else if (field.type === 'FILE') {
         formData.value[field.name] = []
       }
     })
@@ -678,30 +535,6 @@ onMounted(async () => {
 .form-section h4 {
   border-left: 4px solid rgb(var(--v-theme-primary));
   padding-left: 16px;
-}
-
-/* ✅ NOVOS: Estilos para upload progress */
-.file-field-container {
-  position: relative;
-}
-
-.upload-progress-container {
-  margin-top: 8px;
-}
-
-.upload-progress-container .v-card {
-  border: 1px solid rgba(var(--v-theme-info), 0.3);
-  background: rgba(var(--v-theme-info), 0.02);
-}
-
-/* Progress overlay */
-.v-overlay .v-card {
-  border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.upload-errors {
-  margin-top: 16px;
 }
 
 /* Responsividade */
