@@ -492,16 +492,6 @@ const allDocuments = computed(() => {
             const hasSignature = signatureRecord && signatureRecord.status === 'COMPLETED'
 
             if (!hasSignature) {
-              // Adicionar à lista de pendentes
-              if (req.user) {
-                pendingSigners.push({
-                  id: req.userId,
-                  name: req.user.name,
-                  email: req.user.email,
-                  requirementId: req.id
-                })
-              }
-
               // Verificar se o usuário atual pode assinar
               // O usuário só pode assinar se:
               // 1. É o userId do requisito
@@ -511,6 +501,16 @@ const allDocuments = computed(() => {
                 if (isPending) {
                   canSign = true
                   userRequirement = req
+                }
+              } else {
+                // Adicionar à lista de pendentes (apenas outros usuários, não o atual)
+                if (req.user) {
+                  pendingSigners.push({
+                    id: req.userId,
+                    name: req.user.name,
+                    email: req.user.email,
+                    requirementId: req.id
+                  })
                 }
               }
             }

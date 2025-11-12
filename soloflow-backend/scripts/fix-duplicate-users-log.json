@@ -1,0 +1,24 @@
+{
+  "appliedAt": "2025-11-12T21:40:30.012Z",
+  "totalChanges": 2,
+  "changes": [
+    {
+      "userId": "82d4bc69-4d2b-4a7d-af47-7b90e385ef8d",
+      "email": "matheus.guih91@outlook.com",
+      "oldName": "Matheus Guilherme Araujo",
+      "newName": "Matheus Guilherme Araujo - Compras",
+      "sector": "Compras",
+      "companyId": "708e2a13-c044-48df-8067-749c0b5a20f6",
+      "companyName": "Soloflow"
+    },
+    {
+      "userId": "033e3b7a-f651-4c86-8af7-f0a88d41e84d",
+      "email": "matheus.guih58@gmail.com",
+      "oldName": "Matheus Guilherme Araujo",
+      "newName": "Matheus Guilherme Araujo - Diretoria",
+      "sector": "Diretoria",
+      "companyId": "708e2a13-c044-48df-8067-749c0b5a20f6",
+      "companyName": "Soloflow"
+    }
+  ]
+}

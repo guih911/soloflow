@@ -42,31 +42,13 @@
             </div>
           </div>
 
-          <!-- Informações legais compactas -->
-          <v-alert type="info" variant="tonal" density="compact" class="mt-6">
+          <!-- Informação simplificada -->
+          <v-alert type="info" variant="tonal" density="compact" class="mt-6" border="start">
             <div class="text-caption">
               <v-icon size="16" start>mdi-information-outline</v-icon>
-              <strong>Assinatura Eletrônica Simples</strong> - conforme MP 2.200-2/2001
-            </div>
-            <div class="text-caption mt-1">
-              Seus dados (nome, CPF, e-mail, IP e data/hora) serão registrados no documento.
+              Seus dados (nome, CPF, e-mail e data/hora) serão registrados no documento.
             </div>
           </v-alert>
-
-          <!-- Checkbox de aceite -->
-          <v-checkbox
-            v-model="acceptTerms"
-            :rules="[v => !!v || 'Você deve aceitar para continuar']"
-            required
-            density="compact"
-            class="mt-4"
-          >
-            <template #label>
-              <span class="text-body-2">
-                Li e concordo em assinar este documento eletronicamente
-              </span>
-            </template>
-          </v-checkbox>
         </v-card-text>
 
         <v-divider />
@@ -80,7 +62,7 @@
             color="primary"
             variant="elevated"
             size="large"
-            :disabled="!signValid || !acceptTerms"
+            :disabled="!signValid"
             :loading="loading"
             prepend-icon="mdi-pen"
             @click="handleSign"
@@ -133,7 +115,6 @@ const emit = defineEmits(['update:modelValue', 'signed'])
 const signaturesStore = useSignaturesStore()
 
 const signValid = ref(false)
-const acceptTerms = ref(false)
 const successDialog = ref(false)
 
 const signData = ref({
@@ -158,7 +139,6 @@ watch(() => props.modelValue, (newVal) => {
       location: '',
       contactInfo: ''
     }
-    acceptTerms.value = false
   }
 })
 
@@ -170,7 +150,7 @@ function formatFileSize(bytes) {
 }
 
 async function handleSign() {
-  if (!signValid.value || !acceptTerms.value) return
+  if (!signValid.value) return
 
   console.log('📝 Signing document:', signData.value)
 

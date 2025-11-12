@@ -395,6 +395,8 @@ model Attachment {
   signatureRequirements SignatureRequirement[]
   signatureRecords      SignatureRecord[]
 
+  // Nota: UUID já garante unicidade na prática (gerado em attachments.controller.ts)
+  // @@unique([filename]) pode ser adicionado futuramente se necessário
   @@map("attachments")
 }
 

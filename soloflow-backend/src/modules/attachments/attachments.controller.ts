@@ -17,20 +17,19 @@ import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 import { AttachmentsService } from './attachments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-
-
-
-
 // Configuração do Multer para upload
+// Usa UUID para garantir nomes únicos e evitar colisões
 const storage = diskStorage({
   destination: './uploads/attachments',
   filename: (req, file, callback) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = extname(file.originalname);
-    callback(null, `${uniqueSuffix}${ext}`);
+    // Gera nome único usando UUID v4 + extensão original
+    // Isso garante 100% de segurança contra colisões de nomes
+    const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
+    callback(null, uniqueName);
   },
 });
 

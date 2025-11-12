@@ -63,11 +63,6 @@
 
           <!-- Conteúdo do painel -->
           <v-expansion-panel-text class="panel-content">
-            <!-- Informações da Decisão/Ação -->
-            <div v-if="execution.action" class="action-badge mb-4" :class="`badge-${getActionType(execution.action)}`">
-              <span class="badge-label">{{ execution.action }}</span>
-            </div>
-
             <!-- Tipo de Etapa -->
             <div v-if="execution.step?.type" class="info-row mb-3">
               <span class="info-label">Tipo de etapa</span>

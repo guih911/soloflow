@@ -367,14 +367,6 @@
             </div>
           </div>
         </v-card>
-
-        <!-- Histórico do Processo -->
-        <ProcessHistory
-          v-if="process"
-          :history="process.stepExecutions"
-          :process-form-fields="process.processType?.formFields || []"
-          class="mt-6"
-        />
       </v-col>
     </v-row>
 

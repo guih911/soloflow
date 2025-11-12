@@ -3,21 +3,35 @@
     <v-row justify="center">
       <v-col cols="12" md="8" lg="6">
         <!-- Card Principal -->
-        <v-card elevation="8">
-          <v-card-title class="text-h4 text-center pa-8 bg-primary">
-            <div class="d-flex flex-column align-center">
-              <v-icon size="64" color="white">mdi-shield-check</v-icon>
-              <div class="mt-4 text-white">Validar Assinatura Digital</div>
+        <v-card elevation="2">
+          <!-- Cabeçalho Profissional -->
+          <div class="bg-primary">
+            <v-card-title class="d-flex align-center justify-space-between pa-6">
+              <div class="d-flex align-center">
+                <v-icon size="48" color="white" class="mr-4">mdi-shield-check</v-icon>
+                <div>
+                  <div class="text-h5 font-weight-bold text-white">
+                    Soloflow
+                  </div>
+                  <div class="text-caption text-white" style="opacity: 0.9;">
+                    Sistema de Gestão de Processos
+                  </div>
+                </div>
+              </div>
+            </v-card-title>
+            <div class="px-6 pb-4">
+              <div class="text-h6 text-white font-weight-medium">
+                Validação de Assinatura Digital
+              </div>
             </div>
-          </v-card-title>
+          </div>
 
           <v-card-text class="pa-8">
-            <v-alert type="info" variant="tonal" class="mb-6">
+            <v-alert type="info" variant="tonal" class="mb-6" border="start">
               <div class="text-body-1">
                 <strong>Como validar:</strong>
                 <ul class="mt-2">
-                  <li>Digite o <strong>Token de Validação</strong> que aparece no documento PDF assinado</li>
-                  <li>Opcionalmente, informe o <strong>Hash do Documento</strong> para verificar integridade</li>
+                  <li>Digite o <strong>Código de Validação</strong> que aparece no documento PDF assinado</li>
                   <li>Clique em "Validar Assinatura"</li>
                 </ul>
               </div>
@@ -26,26 +40,16 @@
             <v-form ref="form" v-model="formValid" @submit.prevent="validateSignature">
               <v-text-field
                 v-model="token"
-                label="Token de Validação *"
+                label="Código de Validação *"
                 placeholder="Ex: A1B2C3D4E5F6G7H8"
                 prepend-icon="mdi-key"
-                :rules="[v => !!v || 'Token obrigatório']"
+                :rules="[v => !!v || 'Código obrigatório']"
                 required
                 variant="outlined"
-                class="mb-4"
-                hint="Token exibido no documento assinado"
-                persistent-hint
-              />
-
-              <v-text-field
-                v-model="documentHash"
-                label="Hash do Documento (Opcional)"
-                placeholder="Hash SHA-256 do documento"
-                prepend-icon="mdi-fingerprint"
-                variant="outlined"
                 class="mb-6"
-                hint="Para verificar se o documento foi alterado"
+                hint="Código exibido no documento assinado"
                 persistent-hint
+                density="comfortable"
               />
 
               <v-btn
@@ -230,7 +234,7 @@
             <div class="text-center">
               <v-chip color="primary" size="large" label>
                 <v-icon start>mdi-key</v-icon>
-                Token: {{ result.token }}
+                Código: {{ result.token }}
               </v-chip>
             </div>
           </v-card-text>
@@ -242,7 +246,7 @@
                 <v-col cols="12">
                   <div class="text-h6">{{ result.message }}</div>
                   <div class="text-body-2 mt-2">
-                    Verifique se o token foi digitado corretamente.
+                    Verifique se o código foi digitado corretamente.
                   </div>
                 </v-col>
               </v-row>

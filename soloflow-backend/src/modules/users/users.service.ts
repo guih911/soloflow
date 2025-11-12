@@ -54,6 +54,7 @@ export class UsersService {
   async create(createUserDto: CreateUserCompanyDto, assignedBy?: string): Promise<any> {
     console.log('Creating user with data:', createUserDto);
 
+    // ✅ VALIDAÇÃO 1: Email único (obrigatório)
     const existingUser = await this.prisma.user.findUnique({
       where: { email: createUserDto.email },
     });
@@ -62,6 +63,8 @@ export class UsersService {
       throw new ConflictException('Email j� est� em uso');
     }
 
+    // ✅ VALIDAÇÃO 2: Verificar duplicação de nomes na mesma empresa
+    // Sistema de Workflow Profissional: Evita confusão entre usuários
     let companiesToAssign: UserCompanyAssignmentDto[] = [];
 
     if (createUserDto.companies && createUserDto.companies.length > 0) {
@@ -85,6 +88,33 @@ export class UsersService {
 
       if (!company || !company.isActive) {
         throw new BadRequestException(`Empresa ${companyAssignment.companyId} n�o encontrada ou inativa`);
+      }
+
+      // ✅ VALIDAÇÃO DE NOME DUPLICADO na empresa
+      const duplicateNameUsers = await this.prisma.user.findMany({
+        where: {
+          name: createUserDto.name,
+          userCompanies: {
+            some: {
+              companyId: companyAssignment.companyId
+            }
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true
+        }
+      });
+
+      if (duplicateNameUsers.length > 0) {
+        const existingEmails = duplicateNameUsers.map(u => u.email).join(', ');
+        throw new BadRequestException(
+          `⚠️ Já existe um usuário com o nome "${createUserDto.name}" na empresa "${company.name}". ` +
+          `Usuários existentes: ${existingEmails}. ` +
+          `Para evitar confusão no sistema de workflow e assinaturas, use um nome mais específico ` +
+          `(exemplo: adicione sobrenome completo, departamento ou função).`
+        );
       }
 
       if (companyAssignment.sectorId) {

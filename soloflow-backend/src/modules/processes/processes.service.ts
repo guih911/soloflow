@@ -913,6 +913,8 @@ export class ProcessesService {
     });
 
     // 2. Buscar assinaturas pendentes (COMPLETED ou qualquer status) separadamente
+    // IMPORTANTE: Filtra apenas execuções com anexos PDF não assinados
+    // Isso resolve o problema de assinaturas PARALLEL aparecerem mesmo sem anexos
     const signatureTasks = await this.prisma.stepExecution.findMany({
       where: {
         processInstance: { companyId },
@@ -929,6 +931,14 @@ export class ProcessesService {
             },
           },
         },
+        // Filtro crucial: execução DEVE ter anexos PDF não assinados
+        // Sem isso, execuções PARALLEL sem anexos são retornadas incorretamente
+        attachments: {
+          some: {
+            mimeType: 'application/pdf',
+            isSigned: false
+          }
+        }
       },
       include: {
         stepVersion: {

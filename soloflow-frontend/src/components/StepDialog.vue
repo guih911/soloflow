@@ -63,10 +63,58 @@
                   </v-select>
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-select v-if="responsibleType === 'user'" v-model="localStepData.assignedToUserId" :items="users"
-                    item-title="name" item-value="id" label="Usuário Responsável" />
-                  <v-select v-else-if="responsibleType === 'sector'" v-model="localStepData.assignedToSectorId"
-                    :items="sectors" item-title="name" item-value="id" label="Setor Responsável" />
+                  <!-- Autocomplete aprimorado para usuário -->
+                  <v-autocomplete
+                    v-if="responsibleType === 'user'"
+                    v-model="localStepData.assignedToUserId"
+                    :items="users"
+                    item-value="id"
+                    label="Usuário Responsável"
+                    placeholder="Digite nome ou email..."
+                    :custom-filter="customUserFilter"
+                    variant="outlined"
+                    clearable
+                  >
+                    <template v-slot:item="{ props, item }">
+                      <v-list-item v-bind="props">
+                        <template v-slot:prepend>
+                          <v-avatar :color="getAvatarColor(item.raw.name)" size="36">
+                            <span class="text-caption font-weight-bold text-white">
+                              {{ getInitials(item.raw.name) }}
+                            </span>
+                          </v-avatar>
+                        </template>
+                        <v-list-item-title class="font-weight-medium">
+                          {{ item.raw.name }}
+                        </v-list-item-title>
+                        <v-list-item-subtitle class="text-caption">
+                          <v-icon size="12" class="mr-1">mdi-email</v-icon>
+                          {{ item.raw.email }}
+                        </v-list-item-subtitle>
+                      </v-list-item>
+                    </template>
+                    <template v-slot:selection="{ item }">
+                      <v-chip size="small" :color="getAvatarColor(item.raw.name)">
+                        <v-avatar start size="20">
+                          <span class="text-caption font-weight-bold text-white">
+                            {{ getInitials(item.raw.name) }}
+                          </span>
+                        </v-avatar>
+                        {{ item.raw.name }}
+                      </v-chip>
+                    </template>
+                  </v-autocomplete>
+
+                  <v-select
+                    v-else-if="responsibleType === 'sector'"
+                    v-model="localStepData.assignedToSectorId"
+                    :items="sectors"
+                    item-title="name"
+                    item-value="id"
+                    label="Setor Responsável"
+                    variant="outlined"
+                    clearable
+                  />
                 </v-col>
                 <v-col cols="12">
                   <v-switch v-model="localStepData.requiresSignature" label="Requer assinatura digital" color="primary"
@@ -1198,6 +1246,57 @@ watch(reviewAttachmentOptions, (options) => {
     reviewAttachmentSelection.value = filtered
   }
 })
+
+// ============================================================
+// 🎯 FUNÇÕES AUXILIARES PARA UX PROFISSIONAL
+// ============================================================
+
+/**
+ * Retorna as iniciais do nome para avatares
+ */
+function getInitials(name) {
+  if (!name) return '??'
+
+  const parts = name.trim().split(' ').filter(p => p.length > 0)
+  if (parts.length === 0) return '??'
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
+
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+/**
+ * Gera uma cor consistente baseada no nome
+ */
+function getAvatarColor(name) {
+  if (!name) return 'grey'
+
+  const colors = [
+    'blue', 'indigo', 'purple', 'pink', 'red',
+    'orange', 'amber', 'lime', 'green', 'teal',
+    'cyan', 'blue-grey', 'deep-purple', 'deep-orange'
+  ]
+
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+
+  const index = Math.abs(hash) % colors.length
+  return colors[index]
+}
+
+/**
+ * Filtro customizado que busca por nome OU email
+ */
+function customUserFilter(itemText, queryText, item) {
+  if (!queryText) return true
+
+  const query = queryText.toLowerCase()
+  const name = item.raw.name?.toLowerCase() || ''
+  const email = item.raw.email?.toLowerCase() || ''
+
+  return name.includes(query) || email.includes(query)
+}
 </script>
 
 <style scoped>

@@ -348,14 +348,14 @@
                               </v-radio>
                             </v-radio-group>
 
-                            <!-- Autocomplete de assinantes -->
+                            <!-- Autocomplete de assinantes - MELHORADO com busca por nome e email -->
                             <v-autocomplete
                               v-model="file.signers"
                               :items="availableSigners"
-                              item-title="name"
+                              :item-title="getSignerDisplayName"
                               item-value="id"
                               label="Selecionar Assinantes"
-                              placeholder="Digite para buscar pelo nome..."
+                              placeholder="Digite nome ou email para buscar..."
                               multiple
                               chips
                               closable-chips
@@ -364,24 +364,42 @@
                               @update:model-value="onSignersChanged(index)"
                               prepend-inner-icon="mdi-account-search"
                               clearable
-                              :hint="stepExecution.step.requiresSignature ? 'Obrigatório selecionar pelo menos 1 assinante' : 'Opcional - deixe vazio se não precisar'"
+                              :hint="stepExecution.step.requiresSignature ? 'Obrigatório selecionar pelo menos 1 assinante para cada PDF' : 'Opcional - selecione quem deve assinar este documento'"
                               persistent-hint
+                              :custom-filter="customSignerFilter"
                             >
                               <template v-slot:chip="{ props, item }">
-                                <v-chip v-bind="props" size="small" color="primary">
-                                  <v-avatar start>
-                                    <v-icon size="16">mdi-account</v-icon>
+                                <v-chip v-bind="props" size="small" color="primary" class="signer-chip">
+                                  <v-avatar start :color="getAvatarColor(item.raw.name)">
+                                    <span class="text-caption font-weight-bold text-white">
+                                      {{ getInitials(item.raw.name) }}
+                                    </span>
                                   </v-avatar>
-                                  {{ item.raw.name }}
+                                  <span class="ml-1">{{ item.raw.name }}</span>
                                 </v-chip>
                               </template>
                               <template v-slot:item="{ props, item }">
-                                <v-list-item v-bind="props" :title="item.raw.name" :subtitle="item.raw.email">
+                                <v-list-item
+                                  v-bind="props"
+                                  :title="item.raw.name"
+                                  class="signer-list-item"
+                                >
                                   <template v-slot:prepend>
-                                    <v-avatar color="primary" size="32">
-                                      <v-icon size="18" color="white">mdi-account</v-icon>
+                                    <v-avatar :color="getAvatarColor(item.raw.name)" size="40">
+                                      <span class="text-subtitle-2 font-weight-bold text-white">
+                                        {{ getInitials(item.raw.name) }}
+                                      </span>
                                     </v-avatar>
                                   </template>
+
+                                  <v-list-item-title class="font-weight-medium">
+                                    {{ item.raw.name }}
+                                  </v-list-item-title>
+
+                                  <v-list-item-subtitle class="d-flex align-center mt-1">
+                                    <v-icon size="14" class="mr-1">mdi-email</v-icon>
+                                    <span class="text-caption">{{ item.raw.email }}</span>
+                                  </v-list-item-subtitle>
                                 </v-list-item>
                               </template>
                             </v-autocomplete>
@@ -1472,15 +1490,96 @@ function openSignatureDialog(file, index) {
   console.log('Opening signature dialog for:', file.name)
 }
 
-// Funções para gerenciar assinantes
+// ============================================================
+// 🎯 FUNÇÕES PARA GERENCIAR ASSINANTES - SISTEMA PROFISSIONAL
+// ============================================================
+
+/**
+ * Retorna o nome completo do assinante com diferenciação clara
+ * Usado nas listas de assinantes selecionados
+ */
 function getSignerName(signerId) {
   const signer = availableSigners.value.find(u => u.id === signerId)
-  return signer?.name || 'Usuário não encontrado'
+  if (!signer) return 'Usuário não encontrado'
+
+  // Se houver outros usuários com o mesmo nome, adicionar email para diferenciar
+  const duplicates = availableSigners.value.filter(u => u.name === signer.name)
+  if (duplicates.length > 1) {
+    return `${signer.name} (${signer.email})`
+  }
+
+  return signer.name
 }
 
+/**
+ * Retorna o email do assinante
+ * Usado para exibir informações adicionais
+ */
 function getSignerEmail(signerId) {
   const signer = availableSigners.value.find(u => u.id === signerId)
-  return signer?.email || ''
+  return signer?.email || 'Email não encontrado'
+}
+
+/**
+ * Retorna as iniciais do nome para avatares
+ * Ex: "Matheus Araujo" -> "MA"
+ */
+function getInitials(name) {
+  if (!name) return '??'
+
+  const parts = name.trim().split(' ').filter(p => p.length > 0)
+  if (parts.length === 0) return '??'
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
+
+  // Pegar primeira letra do primeiro e último nome
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+/**
+ * Gera uma cor consistente baseada no nome
+ * Sempre retorna a mesma cor para o mesmo nome
+ */
+function getAvatarColor(name) {
+  if (!name) return 'grey'
+
+  const colors = [
+    'blue', 'indigo', 'purple', 'pink', 'red',
+    'orange', 'amber', 'lime', 'green', 'teal',
+    'cyan', 'blue-grey', 'deep-purple', 'deep-orange'
+  ]
+
+  // Gerar hash simples do nome
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+
+  const index = Math.abs(hash) % colors.length
+  return colors[index]
+}
+
+/**
+ * Retorna o nome de exibição no dropdown
+ * Sempre mostra nome + email para evitar confusão
+ */
+function getSignerDisplayName(user) {
+  if (!user) return 'Usuário desconhecido'
+  return `${user.name} (${user.email})`
+}
+
+/**
+ * Filtro customizado que busca por nome OU email
+ * Permite buscar digitando qualquer parte do nome ou email
+ */
+function customSignerFilter(itemText, queryText, item) {
+  if (!queryText) return true
+
+  const query = queryText.toLowerCase()
+  const name = item.raw.name?.toLowerCase() || ''
+  const email = item.raw.email?.toLowerCase() || ''
+
+  // Busca em nome OU email
+  return name.includes(query) || email.includes(query)
 }
 
 function toggleSignatureConfig(fileIndex) {

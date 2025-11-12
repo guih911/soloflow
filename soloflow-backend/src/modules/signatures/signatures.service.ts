@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SimpleSignatureService, SignatureMetadata } from './simple-signature.service';
+import { ModernSignatureService } from './modern-signature.service';
 import { SignDocumentSimpleDto } from './dto/sign-document-simple.dto';
 import { CreateSignatureRequirementDto } from './dto/create-signature-requirement.dto';
 import { join } from 'path';
@@ -18,6 +19,7 @@ export class SignaturesService {
   constructor(
     private prisma: PrismaService,
     private simpleSignatureService: SimpleSignatureService,
+    private modernSignatureService: ModernSignatureService,
   ) {}
 
   /**
@@ -37,7 +39,10 @@ export class SignaturesService {
     const isValidPassword = await bcrypt.compare(dto.userPassword, user.password);
 
     if (!isValidPassword) {
-      throw new UnauthorizedException('Senha incorreta');
+      throw new UnauthorizedException(
+        'Senha incorreta. Por favor, verifique sua senha e tente novamente. ' +
+        'A senha deve ser a mesma utilizada para acessar o sistema.'
+      );
     }
 
     // 3. Buscar anexo
@@ -152,11 +157,11 @@ export class SignaturesService {
 
     console.log(`📝 Assinando arquivo ${attachment.originalName} - Assinatura #${existingSignaturesCount + 1}`);
 
-    // 11. Assinar PDF - criar arquivo temporário
+    // 11. Assinar PDF com design moderno, QR Code e página de validação
     const signedFilename = `signed-${Date.now()}-${attachment.filename}`;
     const tempSignedPath = join(process.cwd(), 'uploads', 'signatures', signedFilename);
 
-    const signatureResult = await this.simpleSignatureService.signPDF(
+    const signatureResult = await this.modernSignatureService.signPDF(
       attachment.path,
       tempSignedPath,
       metadata,
@@ -453,19 +458,29 @@ export class SignaturesService {
           continue;
         }
 
-        // Verificar se já existe um requisito com a mesma ordem
+        // Verificar se já existe um requisito duplicado
+        // Busca por: mesmo stepVersion + mesmo anexo + mesmo usuário/setor
+        // Isso evita criar requisitos duplicados quando o mesmo arquivo é usado múltiplas vezes
         const existing = await this.prisma.signatureRequirement.findFirst({
           where: {
             stepVersionId: dto.stepVersionId,
             attachmentId: dto.attachmentId,
-            order: dto.order,
+            ...(dto.userId ? { userId: dto.userId } : {}),
+            ...(dto.sectorId ? { sectorId: dto.sectorId } : {}),
+            // Verifica se não há assinatura completa ainda
+            signatureRecords: {
+              none: {
+                status: 'COMPLETED'
+              }
+            }
           },
         });
 
         if (existing) {
+          console.log(`⚠️  Requisito duplicado ignorado: ${dto.userId || dto.sectorId} já tem requisito para este anexo`);
           errors.push({
             dto,
-            error: `Já existe um requisito com ordem ${dto.order}`,
+            error: `Requisito de assinatura já existe para este usuário/setor neste anexo`,
           });
           continue;
         }
