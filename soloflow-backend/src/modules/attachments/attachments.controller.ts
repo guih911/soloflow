@@ -20,6 +20,9 @@ import { createReadStream, existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { AttachmentsService } from './attachments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 // Configuração do Multer para upload
 // Usa UUID para garantir nomes únicos e evitar colisões
@@ -34,7 +37,8 @@ const storage = diskStorage({
 });
 
 @Controller('attachments')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
 export class AttachmentsController {
   constructor(private readonly attachmentsService: AttachmentsService) {}
 

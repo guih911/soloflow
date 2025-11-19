@@ -83,12 +83,13 @@ export const useUserStore = defineStore('users', () => {
         name: data.name.trim(),
         email: data.email.trim().toLowerCase(),
         password: data.password,
+        cpf: data.cpf || null,
         companies: data.companies.map(company => ({
           companyId: company.companyId,
-          role: company.role || 'USER',
           sectorId: company.sectorId || null,
           profileId: company.profileId,
           isDefault: Boolean(company.isDefault)
+          // role removido - backend define USER automaticamente
         }))
       }
       
@@ -194,10 +195,10 @@ export const useUserStore = defineStore('users', () => {
       // Preparar dados
       const companies = companiesData.map(company => ({
         companyId: company.companyId,
-        role: company.role || 'USER',
         sectorId: company.sectorId || null,
         profileId: company.profileId,
         isDefault: Boolean(company.isDefault)
+        // role removido - backend define USER automaticamente
       }))
       
       const response = await api.patch(`/users/${id}/companies`, { companies })
@@ -266,6 +267,30 @@ export const useUserStore = defineStore('users', () => {
     }
   }
 
+  async function resetUserPassword(userId, newPassword) {
+    loading.value = true
+    error.value = null
+
+    try {
+      console.log('Resetting password for user:', userId)
+
+      if (!newPassword || newPassword.length < 6) {
+        throw new Error('Senha deve ter no mínimo 6 caracteres')
+      }
+
+      await api.patch(`/users/${userId}/reset-password`, { newPassword })
+
+      console.log('Password reset successfully')
+    } catch (err) {
+      console.error('Error resetting password:', err)
+      const errorMessage = err.response?.data?.message || 'Erro ao resetar senha'
+      error.value = errorMessage
+      throw new Error(errorMessage)
+    } finally {
+      loading.value = false
+    }
+  }
+
   function clearError() {
     error.value = null
   }
@@ -295,9 +320,6 @@ export const useUserStore = defineStore('users', () => {
         if (!company.companyId) {
           errors.push(`Empresa ${index + 1}: ID da empresa é obrigatório`)
         }
-        if (!company.role) {
-          errors.push(`Empresa ${index + 1}: Perfil é obrigatório`)
-        }
         if (!company.profileId) {
           errors.push(`Empresa ${index + 1}: Perfil de acesso é obrigatório`)
         }
@@ -324,6 +346,7 @@ export const useUserStore = defineStore('users', () => {
     updateUserCompanies,
     assignSector,
     deleteUser,
+    resetUserPassword,
     clearError,
     validateUserData,
   }

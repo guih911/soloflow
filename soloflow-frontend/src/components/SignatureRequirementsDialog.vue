@@ -183,46 +183,47 @@
               </v-col>
 
               <v-col cols="12" md="6">
-                <!-- Autocomplete aprimorado para seleção de usuário -->
+                <!-- Autocomplete minimalista - apenas nome e email -->
                 <v-autocomplete
                   v-if="signerType === 'user'"
                   v-model="requirementData.userId"
                   :items="users"
                   item-value="id"
+                  item-title="name"
                   label="Usuário"
                   placeholder="Digite nome ou email..."
                   :rules="[v => !!v || 'Usuário obrigatório']"
                   :custom-filter="customUserFilter"
                   variant="outlined"
+                  density="compact"
                   required
                 >
                   <template v-slot:item="{ props, item }">
-                    <v-list-item v-bind="props">
+                    <v-list-item v-bind="props" :title="null" :subtitle="null" class="user-item-minimal">
                       <template v-slot:prepend>
-                        <v-avatar :color="getAvatarColor(item.raw.name)" size="36">
+                        <v-avatar :color="getAvatarColor(item.raw.name)" size="32">
                           <span class="text-caption font-weight-bold text-white">
                             {{ getInitials(item.raw.name) }}
                           </span>
                         </v-avatar>
                       </template>
-                      <v-list-item-title class="font-weight-medium">
+                      <v-list-item-title class="text-body-2 font-weight-medium">
                         {{ item.raw.name }}
                       </v-list-item-title>
-                      <v-list-item-subtitle class="text-caption">
-                        <v-icon size="12" class="mr-1">mdi-email</v-icon>
+                      <v-list-item-subtitle class="text-caption text-medium-emphasis">
                         {{ item.raw.email }}
                       </v-list-item-subtitle>
                     </v-list-item>
                   </template>
                   <template v-slot:selection="{ item }">
-                    <v-chip size="small" :color="getAvatarColor(item.raw.name)">
-                      <v-avatar start size="20">
-                        <span class="text-caption font-weight-bold text-white">
+                    <div class="d-flex align-center">
+                      <v-avatar :color="getAvatarColor(item.raw.name)" size="20" class="mr-2">
+                        <span style="font-size: 9px; font-weight: bold;" class="text-white">
                           {{ getInitials(item.raw.name) }}
                         </span>
                       </v-avatar>
-                      {{ item.raw.name }}
-                    </v-chip>
+                      <span class="text-body-2">{{ item.raw.name }}</span>
+                    </div>
                   </template>
                 </v-autocomplete>
 
@@ -502,5 +503,21 @@ function customUserFilter(itemText, queryText, item) {
 <style scoped>
 .gap-1 {
   gap: 4px;
+}
+
+/* Item de usuário minimalista - apenas nome e email */
+.user-item-minimal {
+  padding: 8px 12px !important;
+}
+
+.user-item-minimal .v-list-item-title {
+  font-weight: 500 !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+  margin-bottom: 2px;
+}
+
+.user-item-minimal .v-list-item-subtitle {
+  color: rgba(0, 0, 0, 0.6) !important;
+  font-size: 0.75rem !important;
 }
 </style>

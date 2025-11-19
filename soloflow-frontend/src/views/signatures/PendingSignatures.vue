@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="pending-signatures-page">
     <!-- Header -->
     <div class="d-flex align-center justify-space-between mb-6">
       <div>
@@ -9,24 +9,82 @@
         </p>
       </div>
       <v-btn
-        variant="text"
-        @click="refreshData"
+        variant="outlined"
+        prepend-icon="mdi-refresh"
         :loading="loading"
+        @click="refreshData"
       >
-        <v-icon start>mdi-refresh</v-icon>
         Atualizar
       </v-btn>
     </div>
 
+    <!-- Stats Cards -->
+    <v-row class="mb-6">
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="stat-card" color="error" variant="tonal" elevation="0">
+          <v-card-text>
+            <div class="d-flex align-center justify-space-between">
+              <div>
+                <div class="text-h4 font-weight-bold">{{ totalPending }}</div>
+                <div class="text-body-2">Total Pendentes</div>
+              </div>
+              <v-icon size="48" color="error">mdi-draw-pen</v-icon>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="stat-card" color="warning" variant="tonal" elevation="0">
+          <v-card-text>
+            <div class="d-flex align-center justify-space-between">
+              <div>
+                <div class="text-h4 font-weight-bold">{{ urgentCount }}</div>
+                <div class="text-body-2">Urgentes</div>
+              </div>
+              <v-icon size="48" color="warning">mdi-clock-alert-outline</v-icon>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="stat-card" color="info" variant="tonal" elevation="0">
+          <v-card-text>
+            <div class="d-flex align-center justify-space-between">
+              <div>
+                <div class="text-h4 font-weight-bold">{{ todayCount }}</div>
+                <div class="text-body-2">Recebidas Hoje</div>
+              </div>
+              <v-icon size="48" color="info">mdi-calendar-today</v-icon>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="stat-card" color="success" variant="tonal" elevation="0">
+          <v-card-text>
+            <div class="d-flex align-center justify-space-between">
+              <div>
+                <div class="text-h4 font-weight-bold">{{ documentsCount }}</div>
+                <div class="text-body-2">Documentos</div>
+              </div>
+              <v-icon size="48" color="success">mdi-file-document-multiple</v-icon>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
     <!-- Filtros -->
-    <v-card class="mb-6">
+    <v-card class="mb-6" elevation="0">
       <v-card-text>
         <v-row>
-          <v-col cols="12" md="6">
+          <v-col cols="12" md="5">
             <v-text-field
               v-model="search"
-              label="Buscar documento"
+              label="Buscar por código, título ou processo"
               prepend-inner-icon="mdi-magnify"
+              variant="outlined"
+              density="comfortable"
               clearable
               hide-details
             />
@@ -36,15 +94,19 @@
               v-model="urgencyFilter"
               :items="urgencyOptions"
               label="Urgência"
+              variant="outlined"
+              density="comfortable"
               clearable
               hide-details
             />
           </v-col>
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="4">
             <v-select
               v-model="typeFilter"
               :items="typeOptions"
               label="Tipo de Processo"
+              variant="outlined"
+              density="comfortable"
               clearable
               hide-details
             />
@@ -53,133 +115,146 @@
       </v-card-text>
     </v-card>
 
-    <!-- Lista de Assinaturas Pendentes -->
+    <!-- Grid de Assinaturas (Cards Modernos) -->
     <v-row v-if="!loading && paginatedTasks.length > 0">
       <v-col
         v-for="task in paginatedTasks"
         :key="task.id"
         cols="12"
       >
-        <v-card
-          class="signature-card"
-          :class="{ 
-            'border-error': isUrgent(task),
-            'border-warning': isHighPriority(task) 
-          }"
-        >
-          <v-card-text>
-            <v-row align="center">
-              <!-- Ícone e Indicadores -->
-              <v-col cols="auto">
-                <div class="d-flex flex-column align-center">
+        <v-hover v-slot="{ isHovering, props }">
+          <v-card
+            v-bind="props"
+            class="signature-task-card"
+            :class="{
+              'border-urgent': isUrgent(task),
+              'border-high': isHighPriority(task)
+            }"
+            :elevation="isHovering ? 8 : 2"
+            @click="openSignatureDialog(task)"
+          >
+            <v-card-text class="pa-4">
+              <v-row align="center">
+                <!-- Avatar com Ícone -->
+                <v-col cols="auto">
                   <v-avatar
-                    color="error"
-                    size="56"
-                    class="mb-2"
-                  >
-                    <v-icon size="28">mdi-draw-pen</v-icon>
-                  </v-avatar>
-                  
-                  <v-chip
-                    size="x-small"
                     :color="getPriorityColor(task)"
+                    size="56"
                     variant="tonal"
                   >
-                    {{ getPriorityText(task) }}
-                  </v-chip>
-                </div>
-              </v-col>
+                    <v-icon
+                      :icon="getPriorityIcon(task)"
+                      size="28"
+                    />
+                  </v-avatar>
+                </v-col>
 
-              <!-- Informações do Documento -->
-              <v-col>
-                <div class="d-flex align-center mb-2">
-                  <h3 class="text-h6 mr-2">
-                    {{ task.processInstance.title || task.processInstance.code }}
-                  </h3>
-                  <v-chip
-                    size="small"
-                    color="info"
-                    variant="tonal"
-                  >
-                    {{ task.processInstance.code }}
-                  </v-chip>
-                </div>
+                <!-- Informações Principais -->
+                <v-col>
+                  <div class="d-flex align-center mb-1">
+                    <h3 class="text-h6 font-weight-medium mr-2">
+                      {{ task.processInstance.title || task.processInstance.code }}
+                    </h3>
+                    <v-chip
+                      :color="getPriorityColor(task)"
+                      size="small"
+                      variant="tonal"
+                    >
+                      {{ task.processInstance.code }}
+                    </v-chip>
+                    <v-chip
+                      size="small"
+                      color="error"
+                      variant="tonal"
+                      class="ml-1"
+                    >
+                      <v-icon start size="16">mdi-draw-pen</v-icon>
+                      Requer Assinatura
+                    </v-chip>
+                  </div>
 
-                <p class="text-body-2 text-grey mb-2">
-                  <v-icon size="16">mdi-file-document-outline</v-icon>
-                  {{ task.processInstance.processType.name }}
-                  <span class="mx-2">•</span>
-                  <v-icon size="16">mdi-debug-step-over</v-icon>
-                  {{ task.step.name }}
-                </p>
+                  <p class="text-body-2 text-medium-emphasis mb-2">
+                    <v-icon size="16">mdi-file-document-outline</v-icon>
+                    {{ task.processInstance.processType?.name || 'Tipo de Processo' }}
+                    <span class="mx-2">•</span>
+                    <v-icon size="16">mdi-debug-step-over</v-icon>
+                    {{ task.step.name }}
+                  </p>
 
-                <div class="text-caption text-grey">
-                  <div class="mb-1">
+                  <div class="text-caption text-medium-emphasis">
                     <v-icon size="16">mdi-account</v-icon>
                     Solicitado por: {{ task.processInstance.createdBy.name }}
                     <span class="mx-2">•</span>
                     <v-icon size="16">mdi-clock-outline</v-icon>
                     {{ getTimeAgo(task.createdAt) }}
                   </div>
-                  
-                  <div v-if="task.processInstance.description">
-                    <v-icon size="16">mdi-text</v-icon>
-                    {{ task.processInstance.description }}
-                  </div>
-                </div>
+                </v-col>
 
-                <!-- Documentos para Assinar -->
-                <div v-if="getDocumentsToSign(task).length > 0" class="mt-3">
+                <!-- Documentos Badge -->
+                <v-col cols="auto" class="text-center">
                   <v-chip
-                    v-for="doc in getDocumentsToSign(task)"
-                    :key="doc.id"
-                    size="small"
-                    color="primary"
+                    :color="getPriorityColor(task)"
                     variant="tonal"
-                    class="mr-1 mb-1"
+                    size="large"
+                    class="font-weight-bold"
                   >
-                    <v-icon start size="16">mdi-file-pdf-box</v-icon>
-                    {{ doc.originalName }}
+                    <div class="d-flex flex-column align-center">
+                      <v-icon size="24">mdi-file-pdf-box</v-icon>
+                      <div class="text-h6">{{ getDocumentsToSign(task).length }}</div>
+                      <div class="text-caption">documento(s)</div>
+                    </div>
                   </v-chip>
-                </div>
-              </v-col>
+                </v-col>
 
-              <!-- Ações -->
-              <v-col cols="auto">
-                <div class="d-flex flex-column gap-2">
+                <!-- Botão de Ação -->
+                <v-col cols="auto">
                   <v-btn
                     color="primary"
-                    @click="openSignatureDialog(task)"
-                    :loading="signingTasks.includes(task.id)"
+                    size="large"
+                    @click.stop="openSignatureDialog(task)"
                   >
                     <v-icon start>mdi-draw-pen</v-icon>
                     Assinar
                   </v-btn>
-                  
-                  <v-btn
-                    variant="outlined"
-                    size="small"
-                    @click="viewProcess(task)"
-                  >
-                    <v-icon start>mdi-eye</v-icon>
-                    Ver Processo
-                  </v-btn>
-                </div>
-              </v-col>
-            </v-row>
-          </v-card-text>
+                </v-col>
+              </v-row>
 
-          <!-- Aviso sobre documentos -->
-          <v-card-text v-if="task.step.description" class="pt-0">
-            <v-alert
-              type="info"
-              variant="tonal"
-              density="compact"
-            >
-              {{ task.step.description }}
-            </v-alert>
-          </v-card-text>
-        </v-card>
+              <!-- Alerta de Descrição/Instruções (se houver) -->
+              <v-alert
+                v-if="task.step.description"
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mt-3"
+              >
+                {{ task.step.description }}
+              </v-alert>
+
+              <!-- Lista de Documentos (preview) -->
+              <div v-if="getDocumentsToSign(task).length > 0" class="mt-3">
+                <div class="d-flex flex-wrap gap-1">
+                  <v-chip
+                    v-for="doc in getDocumentsToSign(task).slice(0, 3)"
+                    :key="doc.id"
+                    size="small"
+                    variant="outlined"
+                    color="grey-darken-1"
+                  >
+                    <v-icon start size="16">mdi-file-pdf-box</v-icon>
+                    {{ truncateFilename(doc.originalName, 25) }}
+                  </v-chip>
+                  <v-chip
+                    v-if="getDocumentsToSign(task).length > 3"
+                    size="small"
+                    variant="tonal"
+                  >
+                    +{{ getDocumentsToSign(task).length - 3 }} mais
+                  </v-chip>
+                </div>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-hover>
       </v-col>
     </v-row>
 
@@ -257,83 +332,237 @@
       </v-card>
     </div>
 
-    <!-- Dialog de Assinatura Rápida -->
+    <!-- Dialog Fullscreen de Assinatura com Visualizador -->
     <v-dialog
       v-model="signatureDialog"
-      max-width="600"
-      persistent
+      fullscreen
+      transition="dialog-bottom-transition"
     >
-      <v-card v-if="selectedTask">
-        <v-card-title class="d-flex align-center">
-          <v-icon color="error" class="mr-2">mdi-draw-pen</v-icon>
-          Assinar Documentos
-        </v-card-title>
-        
-        <v-divider />
-        
-        <v-card-text>
-          <div class="mb-4">
-            <h3 class="text-subtitle-1 mb-2">Processo:</h3>
-            <p class="text-body-2">
-              {{ selectedTask.processInstance.title || selectedTask.processInstance.code }}
-            </p>
-          </div>
-
-          <div class="mb-4">
-            <h3 class="text-subtitle-1 mb-2">Documentos para assinar:</h3>
-            <v-list density="compact">
-              <v-list-item
-                v-for="doc in getDocumentsToSign(selectedTask)"
-                :key="doc.id"
-              >
-                <template v-slot:prepend>
-                  <v-icon color="error">mdi-file-pdf-box</v-icon>
-                </template>
-                <v-list-item-title>{{ doc.originalName }}</v-list-item-title>
-                <v-list-item-subtitle>{{ formatFileSize(doc.size) }}</v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
-          </div>
-
-          <v-alert
-            type="warning"
-            variant="tonal"
-            class="mb-4"
-          >
-            <v-icon>mdi-shield-check</v-icon>
-            Para continuar, confirme sua senha para validar a assinatura digital.
-          </v-alert>
-
-          <v-text-field
-            v-model="password"
-            label="Confirme sua senha"
-            type="password"
-            :rules="passwordRules"
-            required
-          />
-        </v-card-text>
-
-        <v-divider />
-
-        <v-card-actions>
+      <v-card v-if="selectedTask" class="signature-fullscreen-dialog">
+        <!-- Toolbar -->
+        <v-toolbar color="primary" dark>
+          <v-btn icon @click="closeSignatureDialog">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+          <v-toolbar-title>
+            <div class="d-flex align-center">
+              <v-icon class="mr-2">mdi-draw-pen</v-icon>
+              <div>
+                <div class="text-subtitle-1">Assinatura de Documentos</div>
+                <div class="text-caption">
+                  {{ selectedTask.processInstance.code }} - {{ selectedTask.processInstance.processType?.name || 'Tipo de Processo' }}
+                </div>
+              </div>
+            </div>
+          </v-toolbar-title>
           <v-spacer />
-          <v-btn
-            variant="text"
-            @click="closeSignatureDialog"
-          >
-            Cancelar
-          </v-btn>
-          <v-btn
-            color="primary"
-            variant="elevated"
-            :loading="signing"
-            :disabled="!password"
-            @click="proceedToFullSignature"
-          >
-            <v-icon start>mdi-arrow-right</v-icon>
-            Continuar
-          </v-btn>
-        </v-card-actions>
+        </v-toolbar>
+
+        <!-- Main Content: Split View -->
+        <v-container fluid class="pa-0 signature-content">
+          <v-row no-gutters class="fill-height">
+            <!-- Left Side: PDF Viewer -->
+            <v-col cols="12" md="8" class="pdf-viewer-section">
+              <div class="pdf-viewer-container">
+                <!-- Document Navigation -->
+                <div class="document-navigation">
+                  <v-btn
+                    v-if="documentsToSign.length > 1"
+                    icon
+                    size="small"
+                    :disabled="currentDocumentIndex === 0"
+                    @click="previousDocument"
+                  >
+                    <v-icon>mdi-chevron-left</v-icon>
+                  </v-btn>
+                  <div class="d-flex flex-column align-center mx-3">
+                    <span class="text-body-2 font-weight-medium">
+                      {{ documentsToSign[currentDocumentIndex]?.originalName }}
+                    </span>
+                    <v-chip
+                      size="x-small"
+                      variant="tonal"
+                      color="primary"
+                      class="mt-1"
+                    >
+                      {{ currentDocumentIndex + 1 }} de {{ documentsToSign.length }}
+                    </v-chip>
+                  </div>
+                  <v-btn
+                    v-if="documentsToSign.length > 1"
+                    icon
+                    size="small"
+                    :disabled="currentDocumentIndex === documentsToSign.length - 1"
+                    @click="nextDocument"
+                  >
+                    <v-icon>mdi-chevron-right</v-icon>
+                  </v-btn>
+                </div>
+
+                <!-- PDF Embed -->
+                <div class="pdf-embed-wrapper">
+                  <iframe
+                    v-if="currentDocumentUrl"
+                    :src="currentDocumentUrl"
+                    class="pdf-iframe"
+                    frameborder="0"
+                  />
+                  <div v-else class="pdf-loading">
+                    <v-progress-circular indeterminate color="primary" size="64" />
+                    <p class="mt-4 text-body-1">Carregando documento...</p>
+                  </div>
+                </div>
+              </div>
+            </v-col>
+
+            <!-- Right Side: Signature Form -->
+            <v-col cols="12" md="4" class="signature-form-section">
+              <v-card flat class="signature-form-card">
+                <v-card-text class="pa-6">
+                  <!-- Process Info -->
+                  <div class="mb-6">
+                    <h3 class="text-h6 mb-2 font-weight-bold">Informações do Processo</h3>
+                    <v-divider class="mb-3" />
+
+                    <div class="info-item mb-3">
+                      <label class="text-caption text-grey">Código:</label>
+                      <p class="text-body-1 font-weight-medium">
+                        {{ selectedTask.processInstance.code }}
+                      </p>
+                    </div>
+
+                    <div class="info-item mb-3">
+                      <label class="text-caption text-grey">Tipo:</label>
+                      <p class="text-body-1">
+                        {{ selectedTask.processInstance.processType?.name || 'Tipo de Processo' }}
+                      </p>
+                    </div>
+
+                    <div v-if="selectedTask.processInstance.title && selectedTask.processInstance.title !== 'undefined'" class="info-item mb-3">
+                      <label class="text-caption text-grey">Título:</label>
+                      <p class="text-body-1">
+                        {{ selectedTask.processInstance.title }}
+                      </p>
+                    </div>
+
+                    <div class="info-item mb-3">
+                      <label class="text-caption text-grey">Etapa:</label>
+                      <p class="text-body-1">
+                        {{ selectedTask.step.name }}
+                      </p>
+                    </div>
+
+                    <div class="info-item">
+                      <label class="text-caption text-grey">Solicitante:</label>
+                      <div class="d-flex align-center mt-1">
+                        <v-avatar size="32" color="primary" class="mr-2">
+                          <span class="text-caption">
+                            {{ getInitials(selectedTask.processInstance.createdBy.name) }}
+                          </span>
+                        </v-avatar>
+                        <div>
+                          <p class="text-body-2 font-weight-medium">
+                            {{ selectedTask.processInstance.createdBy.name }}
+                          </p>
+                          <p class="text-caption text-grey">
+                            {{ selectedTask.processInstance.createdBy.email }}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Documents List -->
+                  <div class="mb-6">
+                    <h3 class="text-h6 mb-2 font-weight-bold">
+                      Documentos ({{ documentsToSign.length }})
+                    </h3>
+                    <v-divider class="mb-3" />
+
+                    <v-list density="compact" class="documents-list">
+                      <v-list-item
+                        v-for="(doc, index) in documentsToSign"
+                        :key="doc.id"
+                        :active="index === currentDocumentIndex"
+                        @click="currentDocumentIndex = index"
+                        class="document-list-item"
+                      >
+                        <template v-slot:prepend>
+                          <v-icon
+                            :color="index === currentDocumentIndex ? 'primary' : 'grey'"
+                            size="20"
+                          >
+                            mdi-file-pdf-box
+                          </v-icon>
+                        </template>
+                        <v-list-item-title class="text-body-2">
+                          {{ doc.originalName }}
+                        </v-list-item-title>
+                        <v-list-item-subtitle class="text-caption">
+                          {{ formatFileSize(doc.size) }}
+                        </v-list-item-subtitle>
+                        <template v-slot:append>
+                          <v-icon
+                            v-if="signedDocuments.includes(doc.id)"
+                            color="success"
+                            size="20"
+                          >
+                            mdi-check-circle
+                          </v-icon>
+                        </template>
+                      </v-list-item>
+                    </v-list>
+                  </div>
+
+                  <!-- Signature Form -->
+                  <div class="mb-6">
+                    <h3 class="text-h6 mb-2 font-weight-bold">Dados da Assinatura</h3>
+                    <v-divider class="mb-3" />
+
+                    <v-text-field
+                      v-model="password"
+                      label="Senha de confirmação *"
+                      type="password"
+                      :rules="passwordRules"
+                      prepend-inner-icon="mdi-lock"
+                      variant="outlined"
+                      density="comfortable"
+                      required
+                      autofocus
+                    />
+                  </div>
+
+                  <!-- Action Buttons -->
+                  <div class="signature-actions">
+                    <v-btn
+                      block
+                      size="large"
+                      color="primary"
+                      variant="elevated"
+                      :loading="signing"
+                      :disabled="!password || signedDocuments.includes(documentsToSign[currentDocumentIndex]?.id)"
+                      @click="signCurrentDocument"
+                      class="mb-3"
+                    >
+                      <v-icon start>mdi-pen</v-icon>
+                      {{ signedDocuments.includes(documentsToSign[currentDocumentIndex]?.id) ? 'Documento Assinado' : 'Assinar Documento' }}
+                    </v-btn>
+
+                    <v-btn
+                      block
+                      size="large"
+                      variant="outlined"
+                      @click="closeSignatureDialog"
+                      :disabled="signing"
+                    >
+                      {{ allDocumentsSigned ? 'Concluir' : 'Cancelar' }}
+                    </v-btn>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
+        </v-container>
       </v-card>
     </v-dialog>
   </div>
@@ -365,6 +594,11 @@ const signing = ref(false)
 const authStore = useAuthStore()
 const signingTasks = ref([])
 
+// Novos estados para Fase 3
+const currentDocumentIndex = ref(0)
+const signedDocuments = ref([])
+const currentDocumentUrl = ref(null)
+
 // Estado de paginação
 const currentPage = ref(1)
 const itemsPerPage = ref(12)
@@ -387,10 +621,11 @@ const filteredTasks = computed(() => {
   // Filtro de busca
   if (search.value) {
     const searchLower = search.value.toLowerCase()
-    tasks = tasks.filter(t => 
+    tasks = tasks.filter(t =>
       t.processInstance.code.toLowerCase().includes(searchLower) ||
       t.processInstance.title?.toLowerCase().includes(searchLower) ||
-      t.step.name.toLowerCase().includes(searchLower)
+      t.step.name.toLowerCase().includes(searchLower) ||
+      t.processInstance.processType.name.toLowerCase().includes(searchLower)
     )
   }
 
@@ -443,14 +678,39 @@ const paginatedTasks = computed(() => {
 const typeOptions = computed(() => {
   const types = new Set()
   pendingTasks.value.forEach(task => {
-    if (task.step.requiresSignature) {
-      types.add(task.processInstance.processType)
-    }
+    types.add(task.processInstance.processType)
   })
   return Array.from(types).map(type => ({
     title: type.name,
     value: type.id
   }))
+})
+
+// Stats computeds
+const totalPending = computed(() => filteredTasks.value.length)
+
+const urgentCount = computed(() =>
+  filteredTasks.value.filter(t => getPriorityLevel(t) === 'urgent').length
+)
+
+const todayCount = computed(() =>
+  filteredTasks.value.filter(t => dayjs(t.createdAt).isSame(dayjs(), 'day')).length
+)
+
+const documentsCount = computed(() => {
+  return filteredTasks.value.reduce((sum, task) => sum + getDocumentsToSign(task).length, 0)
+})
+
+// Computed para documentos da tarefa selecionada
+const documentsToSign = computed(() => {
+  if (!selectedTask.value) return []
+  return getDocumentsToSign(selectedTask.value)
+})
+
+// Computed para verificar se todos documentos foram assinados
+const allDocumentsSigned = computed(() => {
+  if (documentsToSign.value.length === 0) return false
+  return documentsToSign.value.every(doc => signedDocuments.value.includes(doc.id))
 })
 
 // Watchers para resetar página quando filtros mudarem
@@ -460,6 +720,22 @@ watch([search, urgencyFilter, typeFilter], () => {
 
 watch(itemsPerPage, () => {
   currentPage.value = 1
+})
+
+// Watcher para carregar PDF quando documento muda
+watch(currentDocumentIndex, async () => {
+  await loadCurrentDocument()
+})
+
+// Watcher para resetar quando abre o dialog
+watch(signatureDialog, (newVal) => {
+  if (newVal && selectedTask.value) {
+    currentDocumentIndex.value = 0
+    signedDocuments.value = []
+    loadCurrentDocument()
+  } else {
+    currentDocumentUrl.value = null
+  }
 })
 
 // Opções
@@ -528,9 +804,96 @@ function formatFileSize(bytes) {
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }
 
+function getInitials(name) {
+  if (!name) return '??'
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+function truncateFilename(filename, maxLength) {
+  if (!filename || filename.length <= maxLength) return filename
+  const lastDotIndex = filename.lastIndexOf('.')
+  if (lastDotIndex === -1) {
+    return filename.substring(0, maxLength - 3) + '...'
+  }
+  const ext = filename.substring(lastDotIndex)
+  const name = filename.substring(0, lastDotIndex)
+  const availableLength = maxLength - ext.length - 3
+  return name.substring(0, availableLength) + '...' + ext
+}
+
+function getPriorityIcon(task) {
+  const level = getPriorityLevel(task)
+  const icons = {
+    urgent: 'mdi-alert-circle',
+    high: 'mdi-alert',
+    normal: 'mdi-information'
+  }
+  return icons[level] || 'mdi-information'
+}
+
 // Métodos
 async function refreshData() {
   await processStore.fetchMyTasks()
+}
+
+async function loadCurrentDocument() {
+  if (!documentsToSign.value[currentDocumentIndex.value]) {
+    currentDocumentUrl.value = null
+    return
+  }
+
+  const doc = documentsToSign.value[currentDocumentIndex.value]
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+
+  try {
+    // Buscar o token de autenticação
+    const token = localStorage.getItem('token')
+
+    if (!token) {
+      console.error('No authentication token found')
+      currentDocumentUrl.value = null
+      return
+    }
+
+    // Fazer requisição com autenticação para baixar o PDF
+    const response = await fetch(`${API_URL}/attachments/${doc.id}/download`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    // Converter response em blob
+    const blob = await response.blob()
+
+    // Revogar URL anterior se existir
+    if (currentDocumentUrl.value && currentDocumentUrl.value.startsWith('blob:')) {
+      URL.revokeObjectURL(currentDocumentUrl.value)
+    }
+
+    // Criar URL do blob
+    currentDocumentUrl.value = URL.createObjectURL(blob)
+  } catch (error) {
+    console.error('Error loading document:', error)
+    currentDocumentUrl.value = null
+    window.showSnackbar?.('Erro ao carregar documento', 'error')
+  }
+}
+
+function previousDocument() {
+  if (currentDocumentIndex.value > 0) {
+    currentDocumentIndex.value--
+  }
+}
+
+function nextDocument() {
+  if (currentDocumentIndex.value < documentsToSign.value.length - 1) {
+    currentDocumentIndex.value++
+  }
 }
 
 function openSignatureDialog(task) {
@@ -546,25 +909,36 @@ function openSignatureDialog(task) {
 }
 
 function closeSignatureDialog() {
+  // Revogar URL do blob para liberar memória
+  if (currentDocumentUrl.value && currentDocumentUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(currentDocumentUrl.value)
+  }
+
   signatureDialog.value = false
   selectedTask.value = null
   password.value = ''
+  currentDocumentUrl.value = null
 }
 
-async function proceedToFullSignature() {
+async function signCurrentDocument() {
   if (!selectedTask.value || !password.value) return
+
+  const currentDoc = documentsToSign.value[currentDocumentIndex.value]
+  if (!currentDoc) {
+    window.showSnackbar?.('Nenhum documento selecionado', 'warning')
+    return
+  }
+
+  // Verificar se já foi assinado
+  if (signedDocuments.value.includes(currentDoc.id)) {
+    window.showSnackbar?.('Este documento já foi assinado', 'info')
+    return
+  }
 
   signing.value = true
 
   try {
-    const documentsToSign = getDocumentsToSign(selectedTask.value)
-
-    if (documentsToSign.length === 0) {
-      window.showSnackbar?.('Nenhum documento para assinar', 'warning')
-      return
-    }
-
-    console.log('Assinando documentos:', documentsToSign)
+    console.log('Assinando documento:', currentDoc.originalName)
 
     // Importar o store de assinaturas
     const { useSignaturesStore } = await import('@/stores/signatures')
@@ -582,7 +956,7 @@ async function proceedToFullSignature() {
           : []
 
         if (myRequirements.length === 0) {
-          window.showSnackbar?.('Você não está configurado como assinante para estes documentos.', 'warning')
+          window.showSnackbar?.('Você não está configurado como assinante para este documento.', 'warning')
           return
         }
       }
@@ -591,38 +965,45 @@ async function proceedToFullSignature() {
       // Prossegue mesmo assim; backend ainda validará permissões
     }
 
-    // Assinar cada documento
-    for (const doc of documentsToSign) {
-      try {
-        const signatureData = {
-          attachmentId: doc.id,
-          stepExecutionId: selectedTask.value.stepExecutionId || selectedTask.value.id,
-          userPassword: password.value,
-          reason: 'Assinatura via Assinaturas Pendentes',
-          location: 'Sistema SoloFlow',
-          contactInfo: null,
-        }
-
-        console.log('Signing document:', doc.originalName, signatureData)
-
-        await signaturesStore.signDocument(signatureData)
-
-        window.showSnackbar?.(`Documento "${doc.originalName}" assinado com sucesso!`, 'success')
-      } catch (error) {
-        console.error('Error signing document:', doc.originalName, error)
-        throw error
-      }
+    // Assinar o documento atual
+    const signatureData = {
+      attachmentId: currentDoc.id,
+      stepExecutionId: selectedTask.value.stepExecutionId || selectedTask.value.id,
+      userPassword: password.value,
+      reason: 'Assinatura via Assinaturas Pendentes',
+      location: 'Sistema SoloFlow',
+      contactInfo: null,
     }
 
-    // Atualizar lista de tarefas
-    await refreshData()
-    closeSignatureDialog()
+    console.log('Signing document:', currentDoc.originalName, signatureData)
 
-    window.showSnackbar?.('Todos os documentos foram assinados!', 'success')
+    await signaturesStore.signDocument(signatureData)
+
+    // Adicionar documento à lista de assinados
+    signedDocuments.value.push(currentDoc.id)
+
+    window.showSnackbar?.(`Documento "${currentDoc.originalName}" assinado com sucesso!`, 'success')
+
+    // Se todos documentos foram assinados, atualizar lista e fechar
+    if (allDocumentsSigned.value) {
+      await refreshData()
+      window.showSnackbar?.('Todos os documentos foram assinados!', 'success')
+      setTimeout(() => {
+        closeSignatureDialog()
+      }, 1500)
+    } else {
+      // Avançar para próximo documento não assinado
+      const nextUnsingedIndex = documentsToSign.value.findIndex(
+        (doc, idx) => idx > currentDocumentIndex.value && !signedDocuments.value.includes(doc.id)
+      )
+      if (nextUnsingedIndex !== -1) {
+        currentDocumentIndex.value = nextUnsingedIndex
+      }
+    }
   } catch (error) {
-    console.error('Erro ao assinar documentos:', error)
+    console.error('Erro ao assinar documento:', error)
     window.showSnackbar?.(
-      error.response?.data?.message || error.message || 'Erro ao assinar documentos. Verifique sua senha.',
+      error.response?.data?.message || error.message || 'Erro ao assinar documento. Verifique sua senha.',
       'error'
     )
   } finally {
@@ -640,6 +1021,23 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.pending-signatures-page {
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* Stat Cards */
+.stat-card {
+  height: 100%;
+  border-radius: 12px !important;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
 .signature-card {
   transition: all 0.3s ease;
 }
@@ -698,5 +1096,179 @@ onMounted(() => {
   background: #1976D2;
   color: #fff;
   box-shadow: none;
+}
+
+/* Modern Task Cards - Redesigned */
+.signature-task-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  border-radius: 8px !important;
+}
+
+.signature-task-card.border-urgent {
+  border-left: 4px solid #f44336 !important;
+}
+
+.signature-task-card.border-high {
+  border-left: 4px solid #ff9800 !important;
+}
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-truncate-2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+}
+
+.documents-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gap-1 {
+  gap: 4px;
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+.gap-4 {
+  gap: 16px;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.transition-swing {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Fullscreen Signature Dialog - Phase 3 */
+.signature-fullscreen-dialog {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.signature-content {
+  flex: 1;
+  overflow: hidden;
+  height: calc(100vh - 64px);
+}
+
+.pdf-viewer-section {
+  background: #f5f5f5;
+  height: 100%;
+  overflow: hidden;
+}
+
+.pdf-viewer-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.document-navigation {
+  background: white;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.pdf-embed-wrapper {
+  flex: 1;
+  position: relative;
+  background: #525252;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pdf-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.pdf-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.signature-form-section {
+  height: 100%;
+  overflow-y: auto;
+  background: white;
+  border-left: 1px solid #e0e0e0;
+}
+
+.signature-form-card {
+  height: 100%;
+}
+
+.info-item label {
+  display: block;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-item p {
+  margin: 4px 0 0 0;
+}
+
+.documents-list {
+  background: transparent;
+}
+
+.document-list-item {
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.document-list-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.signature-actions {
+  position: sticky;
+  bottom: 0;
+  background: white;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 960px) {
+  .signature-content {
+    height: auto;
+  }
+
+  .pdf-viewer-section {
+    height: 400px;
+  }
+
+  .signature-form-section {
+    height: auto;
+  }
 }
 </style>

@@ -66,7 +66,6 @@ export class CompaniesService {
                 id: true,
                 name: true,
                 email: true,
-                role: true,
               },
             },
           },
@@ -78,7 +77,10 @@ export class CompaniesService {
       throw new NotFoundException('Empresa não encontrada');
     }
 
-    const users = company.userCompanies.map((uc) => uc.user);
+    const users = company.userCompanies.map((uc) => ({
+      ...uc.user,
+      role: uc.role, // Role da UserCompany
+    }));
 
     return {
       ...company,

@@ -5,12 +5,12 @@
       <div class="ml-4 flex-grow-1">
         <div class="d-flex align-center">
           <h1 class="text-h4 font-weight-bold ">
-            {{ process.title || process.code }}
+            {{ process.code }} - {{ process.processType.name }}
           </h1>
-        
+
         </div>
-        <p class="text-subtitle-1 text-medium-emphasis">
-          {{ process.processType.name }}
+        <p v-if="process.title && process.title !== 'undefined'" class="text-subtitle-1 text-medium-emphasis">
+          {{ process.title }}
         </p>
       </div>
 

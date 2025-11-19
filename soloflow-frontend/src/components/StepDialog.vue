@@ -69,6 +69,7 @@
                     v-model="localStepData.assignedToUserId"
                     :items="users"
                     item-value="id"
+                    item-title="name"
                     label="Usuário Responsável"
                     placeholder="Digite nome ou email..."
                     :custom-filter="customUserFilter"
@@ -76,7 +77,7 @@
                     clearable
                   >
                     <template v-slot:item="{ props, item }">
-                      <v-list-item v-bind="props">
+                      <v-list-item v-bind="props" :title="null" :subtitle="null">
                         <template v-slot:prepend>
                           <v-avatar :color="getAvatarColor(item.raw.name)" size="36">
                             <span class="text-caption font-weight-bold text-white">
@@ -88,20 +89,19 @@
                           {{ item.raw.name }}
                         </v-list-item-title>
                         <v-list-item-subtitle class="text-caption">
-                          <v-icon size="12" class="mr-1">mdi-email</v-icon>
                           {{ item.raw.email }}
                         </v-list-item-subtitle>
                       </v-list-item>
                     </template>
                     <template v-slot:selection="{ item }">
-                      <v-chip size="small" :color="getAvatarColor(item.raw.name)">
-                        <v-avatar start size="20">
-                          <span class="text-caption font-weight-bold text-white">
+                      <div class="d-flex align-center">
+                        <v-avatar :color="getAvatarColor(item.raw.name)" size="24" class="mr-2">
+                          <span style="font-size: 10px; font-weight: bold;" class="text-white">
                             {{ getInitials(item.raw.name) }}
                           </span>
                         </v-avatar>
-                        {{ item.raw.name }}
-                      </v-chip>
+                        <span>{{ item.raw.name }}</span>
+                      </div>
                     </template>
                   </v-autocomplete>
 

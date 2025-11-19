@@ -26,9 +26,17 @@ export class SignaturesService {
    * Assina um documento com validação de senha do usuário
    */
   async signDocument(userId: string, dto: SignDocumentSimpleDto) {
-    // 1. Buscar e validar usuário
+    // 1. Buscar e validar usuário com suas empresas/setores
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: {
+        userCompanies: {
+          select: {
+            sectorId: true,
+            companyId: true,
+          },
+        },
+      },
     });
 
     if (!user) {
@@ -94,9 +102,40 @@ export class SignaturesService {
       r => !r.attachmentId || r.attachmentId === dto.attachmentId // permitir requisitos globais da etapa
     );
 
+    console.log(`📋 Signature requirements found for this attachment:`, {
+      total: requirements.length,
+      forAttachment: requirements.filter(r => r.attachmentId === dto.attachmentId).length,
+      global: requirements.filter(r => !r.attachmentId).length,
+      requirements: requirements.map(r => ({
+        id: r.id,
+        userId: r.userId,
+        sectorId: r.sectorId,
+        attachmentId: r.attachmentId,
+        order: r.order,
+        type: r.type,
+      })),
+    });
+
+    // Extrair IDs dos setores do usuário
+    const userSectorIds = user.userCompanies.map(uc => uc.sectorId).filter(id => id !== null);
+
+    console.log(`👤 User info:`, {
+      userId: user.id,
+      userName: user.name,
+      sectorIds: userSectorIds,
+    });
+
+    // Buscar requirement que corresponda ao usuário OU ao setor do usuário
     const requirement = requirements.find(
-      r => r.userId === userId || r.sectorId != null,
+      r => r.userId === userId || (r.sectorId && userSectorIds.includes(r.sectorId)),
     );
+
+    console.log(`🔍 Matching requirement:`, requirement ? {
+      id: requirement.id,
+      userId: requirement.userId,
+      sectorId: requirement.sectorId,
+      matched: requirement.userId === userId ? 'by user' : 'by sector',
+    } : 'NOT FOUND');
 
     // Se não encontrou requirement específico para este usuário, não pode assinar
     if (!requirement) {

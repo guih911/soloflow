@@ -22,14 +22,18 @@ import { UserRole } from '@prisma/client';
 export class SectorsController {
   constructor(private readonly sectorsService: SectorsService) {}
 
+  /**
+   * Criar setor - ADMIN pode criar em qualquer empresa, MANAGER apenas na sua
+   */
   @Post()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   create(@Body() createSectorDto: CreateSectorDto, @Request() req) {
     console.log('Creating sector with payload:', createSectorDto);
     console.log('Request user:', req.user);
 
-    // Se não for admin, forçar a empresa do usuário
-    if (req.user.role !== UserRole.ADMIN) {
+    // MANAGER: Restringir à empresa do usuário logado
+    const isAdmin = req.user.role === UserRole.ADMIN;
+    if (!isAdmin) {
       createSectorDto.companyId = req.user.companyId;
     }
 

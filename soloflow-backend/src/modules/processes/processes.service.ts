@@ -998,7 +998,54 @@ export class ProcessesService {
 
     console.log(`Found ${normalTasks.length} normal tasks and ${signatureTasks.length} signature tasks`);
 
-    // 3. Combinar resultados, removendo duplicatas
+    // 3. Filtrar signature tasks para incluir apenas quando é a vez do usuário (assinatura sequencial)
+    const filteredSignatureTasks: typeof signatureTasks = [];
+
+    for (const task of signatureTasks) {
+      // Buscar requisitos de assinatura da step
+      const requirements = await this.prisma.signatureRequirement.findMany({
+        where: { stepVersionId: task.stepVersionId },
+        orderBy: { order: 'asc' },
+      });
+
+      // Encontrar o requisito do usuário atual
+      const userRequirement = requirements.find(r => r.userId === userId);
+
+      if (!userRequirement) {
+        continue; // Usuário não está nos requisitos, pular
+      }
+
+      // Se for assinatura sequencial, verificar se é a vez do usuário
+      if (userRequirement.type === 'SEQUENTIAL' && userRequirement.order > 1) {
+        // Buscar assinaturas já concluídas nos anexos desta step execution
+        const completedSignatures = await this.prisma.signatureRecord.findMany({
+          where: {
+            stepExecutionId: task.id,
+            status: 'COMPLETED',
+          },
+          include: {
+            requirement: true,
+          },
+        });
+
+        // Verificar se todos os requisitos anteriores foram assinados
+        const previousRequirements = requirements.filter(r => r.order < userRequirement.order);
+        const allPreviousSigned = previousRequirements.every(req =>
+          completedSignatures.some(sig => sig.requirementId === req.id)
+        );
+
+        if (!allPreviousSigned) {
+          continue; // Ainda não é a vez deste usuário, pular
+        }
+      }
+
+      // É a vez do usuário ou assinatura paralela
+      filteredSignatureTasks.push(task);
+    }
+
+    console.log(`After sequential filter: ${filteredSignatureTasks.length} signature tasks`);
+
+    // 4. Combinar resultados, removendo duplicatas
     const taskIds = new Set<string>();
     const allTasks: typeof normalTasks = [];
 
@@ -1009,7 +1056,7 @@ export class ProcessesService {
       }
     }
 
-    for (const task of signatureTasks) {
+    for (const task of filteredSignatureTasks) {
       if (!taskIds.has(task.id)) {
         taskIds.add(task.id);
         allTasks.push(task);

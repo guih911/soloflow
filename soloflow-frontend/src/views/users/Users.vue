@@ -44,15 +44,6 @@
           </v-card-title>
         </template>
 
-        <template v-slot:item.role="{ item }">
-          <v-chip
-            :color="getRoleColor(item.role)"
-            size="small"
-          >
-            {{ getRoleText(item.role) }}
-          </v-chip>
-        </template>
-
         <template v-slot:item.sector="{ item }">
           <v-chip
             v-if="item.sector"
@@ -69,7 +60,7 @@
             <v-tooltip
               v-for="company in (item.companies || []).slice(0, 2)"
               :key="company.companyId"
-              :text="`${company.companyName} - ${getRoleText(company.role)}`"
+              :text="`${company.companyName}`"
               location="top"
             >
               <template v-slot:activator="{ props }">
@@ -111,7 +102,21 @@
             size="small"
             variant="text"
             @click="openDialog(item)"
-          />
+          >
+            <v-icon>mdi-pencil</v-icon>
+            <v-tooltip activator="parent" location="top">Editar</v-tooltip>
+          </v-btn>
+          <v-btn
+            v-if="authStore.isAdmin"
+            icon="mdi-lock-reset"
+            size="small"
+            variant="text"
+            color="warning"
+            @click="openResetPasswordDialog(item)"
+          >
+            <v-icon>mdi-lock-reset</v-icon>
+            <v-tooltip activator="parent" location="top">Resetar Senha</v-tooltip>
+          </v-btn>
           <v-btn
             v-if="canDelete(item)"
             icon="mdi-delete"
@@ -119,24 +124,47 @@
             variant="text"
             color="error"
             @click="confirmDelete(item)"
-          />
+          >
+            <v-icon>mdi-delete</v-icon>
+            <v-tooltip activator="parent" location="top">Excluir</v-tooltip>
+          </v-btn>
         </template>
       </v-data-table>
     </v-card>
 
-    <!-- Dialog de Criação/Edição -->
+    <!-- Dialog de Criação/Edição - Design Profissional -->
     <v-dialog
       v-model="dialog"
-      max-width="900"
+      max-width="1000"
       persistent
       scrollable
+      transition="dialog-bottom-transition"
     >
-      <v-card>
-        <v-card-title class="d-flex align-center">
-          <v-icon class="mr-2">
-            {{ editingItem?.id ? 'mdi-account-edit' : 'mdi-account-plus' }}
-          </v-icon>
-          {{ editingItem?.id ? 'Editar Usuário' : 'Novo Usuário' }}
+      <v-card class="user-dialog-card" elevation="24">
+        <!-- Header Moderno com Gradiente -->
+        <v-card-title class="user-dialog-header pa-6">
+          <div class="d-flex align-center">
+            <v-avatar
+              :color="editingItem?.id ? 'primary' : 'success'"
+              size="56"
+              class="mr-4"
+            >
+              <v-icon size="32" color="white">
+                {{ editingItem?.id ? 'mdi-account-edit' : 'mdi-account-plus' }}
+              </v-icon>
+            </v-avatar>
+            <div>
+              <h2 class="text-h5 font-weight-bold mb-1">
+                {{ editingItem?.id ? 'Editar Usuário' : 'Novo Usuário' }}
+              </h2>
+              <p class="text-body-2 text-medium-emphasis mb-0">
+                {{ editingItem?.id
+                  ? 'Atualize as informações do usuário e suas permissões'
+                  : 'Preencha os dados para criar um novo usuário no sistema'
+                }}
+              </p>
+            </div>
+          </div>
         </v-card-title>
 
         <v-divider />
@@ -146,35 +174,67 @@
           v-model="valid"
           @submit.prevent="save"
         >
-          <v-card-text style="max-height: 70vh; overflow-y: auto;">
-            <!-- Informações Básicas -->
-            <div class="mb-6">
-              <h3 class="text-h6 mb-4">
-                <v-icon class="mr-2">mdi-account</v-icon>
-                Informações Básicas
-              </h3>
+          <v-card-text style="max-height: 70vh; overflow-y: auto;" class="px-6 py-6">
+            <!-- Informações Básicas - Design Profissional -->
+            <div class="form-section mb-8">
+              <div class="d-flex align-center mb-5">
+                <v-avatar color="primary" variant="tonal" size="40" class="mr-3 section-avatar">
+                  <v-icon size="24">mdi-account-circle</v-icon>
+                </v-avatar>
+                <div>
+                  <h3 class="text-h6 font-weight-bold mb-1">Informações Básicas</h3>
+                  <p class="text-caption text-medium-emphasis mb-0">Dados pessoais e de identificação do usuário</p>
+                </div>
+              </div>
 
               <v-row>
                 <v-col cols="12" md="6">
                   <v-text-field
                     v-model="formData.name"
-                    label="Nome completo *"
+                    label="Nome completo"
                     :rules="nameRules"
                     required
-                    prepend-icon="mdi-account"
-                  />
+                    variant="outlined"
+                    density="comfortable"
+                    prepend-inner-icon="mdi-account-outline"
+                    placeholder="Ex: João Silva Santos"
+                    hint="Informe o nome completo do usuário"
+                    persistent-hint
+                    counter
+                    maxlength="100"
+                  >
+                    <template v-slot:append-inner>
+                      <v-icon v-if="formData.name && formData.name.length >= 3" color="success">
+                        mdi-check-circle
+                      </v-icon>
+                    </template>
+                  </v-text-field>
                 </v-col>
 
                 <v-col cols="12" md="6">
                   <v-text-field
                     v-model="formData.email"
-                    label="E-mail *"
+                    label="E-mail corporativo"
                     type="email"
                     :rules="emailRules"
                     :disabled="!!editingItem?.id"
                     required
-                    prepend-icon="mdi-email"
-                  />
+                    variant="outlined"
+                    density="comfortable"
+                    prepend-inner-icon="mdi-email-outline"
+                    placeholder="usuario@empresa.com.br"
+                    hint="E-mail para login e notificações"
+                    persistent-hint
+                  >
+                    <template v-slot:append-inner>
+                      <v-icon v-if="formData.email && emailRules.every(r => r(formData.email) === true)" color="success">
+                        mdi-check-circle
+                      </v-icon>
+                      <v-tooltip v-if="!!editingItem?.id" activator="parent" location="top">
+                        O e-mail não pode ser alterado após a criação
+                      </v-tooltip>
+                    </template>
+                  </v-text-field>
                 </v-col>
               </v-row>
 
@@ -182,115 +242,197 @@
                 <v-col cols="12" md="6">
                   <v-text-field
                     v-model="formData.cpf"
-                    label="CPF (Necessário para assinatura digital)"
-                    hint="Digite o CPF sem pontos e traços"
+                    label="CPF"
+                    prepend-inner-icon="mdi-card-account-details-outline"
+                    :rules="cpfRules"
+                    required
+                    variant="outlined"
+                    density="comfortable"
+                    placeholder="Digite apenas números"
+                    hint="Digite apenas os números do CPF (11 dígitos)"
                     persistent-hint
-                    v-mask="'###.###.###-##'"
-                    prepend-icon="mdi-card-account-details"
-                    clearable
+                    maxlength="11"
+                    type="text"
+                    counter
                   >
                     <template v-slot:append-inner>
-                      <v-icon v-if="formData.cpf && formData.cpf.length === 14" color="success">
+                      <v-icon v-if="formData.cpf && formData.cpf.length === 11" color="success">
                         mdi-check-circle
                       </v-icon>
                     </template>
+                    <template v-slot:append>
+                      <v-tooltip location="top" max-width="300">
+                        <template v-slot:activator="{ props }">
+                          <v-icon v-bind="props" color="info" size="small">mdi-information</v-icon>
+                        </template>
+                        <div class="text-caption">
+                          <strong>CPF Obrigatório para Assinatura Digital</strong><br/>
+                          O CPF é necessário para:<br/>
+                          • Assinatura digital de documentos<br/>
+                          • Validação de identidade<br/>
+                          • Auditoria e rastreabilidade
+                        </div>
+                      </v-tooltip>
+                    </template>
                   </v-text-field>
                 </v-col>
-              </v-row>
 
-              <v-row v-if="!editingItem?.id">
-                <v-col cols="12" md="6">
+                <v-col cols="12" md="6" v-if="!editingItem?.id">
                   <v-text-field
                     v-model="formData.password"
-                    label="Senha *"
-                    type="password"
+                    label="Senha inicial"
+                    :type="showPassword ? 'text' : 'password'"
                     :rules="passwordRules"
                     required
-                    prepend-icon="mdi-lock"
-                  />
+                    variant="outlined"
+                    density="comfortable"
+                    prepend-inner-icon="mdi-lock-outline"
+                    placeholder="Mínimo 6 caracteres"
+                    hint="O usuário poderá alterar a senha após o primeiro login"
+                    persistent-hint
+                    counter
+                    maxlength="50"
+                  >
+                    <template v-slot:append-inner>
+                      <v-btn
+                        :icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                        variant="text"
+                        density="compact"
+                        @click="showPassword = !showPassword"
+                      />
+                    </template>
+                  </v-text-field>
                 </v-col>
-              </v-row>
 
-              <v-row v-if="editingItem?.id">
-                <v-col cols="12">
-                  <v-switch
-                    v-model="formData.isActive"
-                    label="Usuário Ativo"
-                    color="primary"
-                    prepend-icon="mdi-account-check"
-                  />
+                <v-col cols="12" md="6" v-if="editingItem?.id">
+                  <v-card variant="outlined" class="pa-4">
+                    <div class="d-flex align-center justify-space-between">
+                      <div class="d-flex align-center">
+                        <v-icon :color="formData.isActive ? 'success' : 'error'" class="mr-3" size="28">
+                          {{ formData.isActive ? 'mdi-account-check' : 'mdi-account-off' }}
+                        </v-icon>
+                        <div>
+                          <p class="text-subtitle-2 font-weight-bold mb-1">
+                            Status do Usuário
+                          </p>
+                          <p class="text-caption text-medium-emphasis mb-0">
+                            {{ formData.isActive ? 'Usuário pode acessar o sistema' : 'Usuário bloqueado' }}
+                          </p>
+                        </div>
+                      </div>
+                      <v-switch
+                        v-model="formData.isActive"
+                        color="success"
+                        hide-details
+                        inset
+                      />
+                    </div>
+                  </v-card>
                 </v-col>
               </v-row>
             </div>
 
-            <!-- Empresas e Permissões -->
-            <div>
-              <div class="d-flex align-center justify-space-between mb-4">
-                <h3 class="text-h6">
-                  Empresas e Permissões
-                </h3>
+            <!-- Empresas e Permissões - Design Profissional -->
+            <div class="form-section">
+              <div class="d-flex align-center justify-space-between mb-5">
+                <div class="d-flex align-center">
+                  <v-avatar color="success" variant="tonal" size="40" class="mr-3 section-avatar">
+                    <v-icon size="24">mdi-office-building</v-icon>
+                  </v-avatar>
+                  <div>
+                    <h3 class="text-h6 font-weight-bold mb-1">Empresas e Permissões</h3>
+                    <p class="text-caption text-medium-emphasis mb-0">Configure o acesso do usuário às empresas do sistema</p>
+                  </div>
+                </div>
                 <v-btn
                   v-if="canAddMoreCompanies"
                   @click="addCompany"
-                  variant="outlined"
                   color="primary"
-                  size="small"
-                  prepend-icon="mdi-plus"
+                  variant="elevated"
+                  prepend-icon="mdi-plus-circle"
+                  class="add-company-btn"
                 >
                   Adicionar Empresa
                 </v-btn>
               </div>
 
-              <!-- Validação visual -->
-              <v-alert
-                v-if="formData.companies.length === 0"
-                type="warning"
-                variant="tonal"
-                class="mb-4"
-              >
-                <v-icon>mdi-alert</v-icon>
-                É necessário adicionar pelo menos uma empresa para o usuário.
-              </v-alert>
+              <!-- Empty State - Design Moderno -->
+              <div v-if="formData.companies.length === 0" class="empty-state-card">
+                <v-card variant="outlined" class="pa-8 text-center" color="primary">
+                  <v-avatar color="primary" size="80" class="mb-4 empty-state-avatar">
+                    <v-icon size="48" color="white">mdi-office-building-plus-outline</v-icon>
+                  </v-avatar>
+                  <h4 class="text-h6 font-weight-bold mb-2">Nenhuma Empresa Associada</h4>
+                  <p class="text-body-2 text-medium-emphasis mb-4">
+                    É necessário vincular o usuário a pelo menos uma empresa para que ele possa acessar o sistema.
+                  </p>
+                  <v-btn
+                    @click="addCompany"
+                    color="primary"
+                    variant="elevated"
+                    size="large"
+                    prepend-icon="mdi-plus-circle"
+                  >
+                    Adicionar Primeira Empresa
+                  </v-btn>
+                </v-card>
+              </div>
               
-              <!-- Lista de empresas -->
-              <div v-if="formData.companies.length > 0" class="space-y-4">
+              <!-- Lista de empresas - Cards Modernos -->
+              <div v-if="formData.companies.length > 0" class="companies-list">
                 <v-card
                   v-for="(company, index) in formData.companies"
                   :key="`company-${index}`"
-                  variant="outlined"
-                  class="mb-4"
-                  :class="{ 'border-warning': company.isDefault }"
+                  class="company-card mb-4"
+                  :class="{ 'company-card-default': company.isDefault }"
+                  elevation="2"
                 >
-                  <v-card-title class="d-flex align-center justify-space-between py-3 bg-grey-lighten-5">
-                    <div class="d-flex align-center">
-                      <div>
-                        <div class="font-weight-medium">
-                          Empresa {{ index + 1 }}
+                  <!-- Header do Card com Gradiente -->
+                  <div class="company-card-header">
+                    <div class="d-flex align-center flex-grow-1">
+                      <v-avatar
+                        :color="company.isDefault ? 'info' : 'primary'"
+                        size="48"
+                        class="mr-3 company-avatar"
+                      >
+                        <v-icon color="white" size="28">
+                          {{ company.isDefault ? 'mdi-check-decagram' : 'mdi-office-building' }}
+                        </v-icon>
+                      </v-avatar>
+                      <div class="flex-grow-1">
+                        <div class="d-flex align-center">
+                          <h4 class="text-subtitle-1 font-weight-bold">
+                            {{ getCompanyName(company.companyId) || 'Selecione uma empresa' }}
+                          </h4>
                           <v-chip
                             v-if="company.isDefault"
-                            size="x-small"
-                            color="warning"
-                            variant="elevated"
+                            size="small"
+                            color="info"
+                            variant="flat"
                             class="ml-2"
+                            prepend-icon="mdi-check-decagram"
                           >
-                            Padrão
+                            Empresa Padrão
                           </v-chip>
                         </div>
-                        <div class="text-caption text-medium-emphasis">
-                          {{ getCompanyName(company.companyId) || 'Selecione uma empresa' }}
-                        </div>
+                        <p class="text-caption text-medium-emphasis mb-0">
+                          Empresa #{{ index + 1 }} • {{ company.companyId ? 'Configurada' : 'Pendente' }}
+                        </p>
                       </div>
                     </div>
-                    
+
                     <v-btn
                       v-if="formData.companies.length > 1"
-                      icon="mdi-close"
-                      color="error"
+                      icon
                       variant="text"
                       size="small"
+                      color="error"
                       @click="removeCompany(index)"
-                    />
-                  </v-card-title>
+                    >
+                      <v-icon>mdi-delete-outline</v-icon>
+                      <v-tooltip activator="parent" location="top">Remover Empresa</v-tooltip>
+                    </v-btn>
+                  </div>
 
                   <v-card-text class="pt-4">
                     <v-row>
@@ -312,30 +454,33 @@
 
                       <v-col cols="12" md="6">
                         <v-select
-                          v-model="company.role"
-                          :items="getAvailableRoles()"
-                          label="Papel do sistema *"
-                          :rules="[v => !!v || 'Papel do sistema é obrigatório']"
-                          required
-                          prepend-icon="mdi-account-lock-outline"
-                          variant="outlined"
-                          density="comfortable"
-                        />
-                        <v-select
-                          class="mt-4"
                           v-model="company.profileId"
                           :items="getProfilesForCompany(company.companyId)"
                           item-title="name"
                           item-value="id"
-                          label="Perfil de acesso *"
+                          label="Perfil de Acesso *"
                           :rules="[v => !!v || 'Perfil de acesso é obrigatório']"
                           :disabled="!company.companyId || !getProfilesForCompany(company.companyId).length"
                           prepend-icon="mdi-badge-account"
                           variant="outlined"
                           density="comfortable"
-                          :hint="!company.companyId ? 'Selecione uma empresa primeiro' : (!getProfilesForCompany(company.companyId).length ? 'Cadastre um perfil antes de continuar' : '')"
+                          :hint="!company.companyId ? 'Selecione uma empresa primeiro' : (!getProfilesForCompany(company.companyId).length ? 'Cadastre um perfil antes de continuar' : 'O perfil controla TODAS as permissões do usuário')"
                           persistent-hint
-                        />
+                        >
+                          <template v-slot:prepend>
+                            <v-tooltip location="top" max-width="300">
+                              <template v-slot:activator="{ props }">
+                                <v-icon v-bind="props" color="primary">mdi-shield-account</v-icon>
+                              </template>
+                              <div class="text-caption">
+                                <strong>Perfil de Acesso:</strong><br/>
+                                • Define TODAS as permissões do usuário<br/>
+                                • Controla telas, funcionalidades e processos<br/>
+                                • Crie perfis personalizados na tela de Perfis
+                              </div>
+                            </v-tooltip>
+                          </template>
+                        </v-select>
                       </v-col>
 
 
@@ -372,7 +517,7 @@
 
                     <!-- Resumo da empresa -->
                     <v-alert
-                      v-if="company.companyId && company.role"
+                      v-if="company.companyId && company.profileId"
                       type="info"
                       variant="tonal"
                       density="compact"
@@ -381,7 +526,6 @@
                       <div class="text-caption">
                         <div>
                           <strong>{{ getCompanyName(company.companyId) }}</strong>
-                          • {{ getRoleText(company.role) }}
                           <span v-if="company.sectorId">
                             • {{ getSectorName(company.sectorId) }}
                           </span>
@@ -484,7 +628,7 @@
     >
       <v-card>
         <v-card-title>Confirmar Exclusão</v-card-title>
-        
+
         <v-card-text>
           Tem certeza que deseja remover o usuário
           <strong>{{ deletingItem?.name }}</strong>?
@@ -510,6 +654,81 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Dialog de Reset de Senha -->
+    <v-dialog
+      v-model="resetPasswordDialog"
+      max-width="500"
+    >
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon class="mr-2" color="warning">mdi-lock-reset</v-icon>
+          Resetar Senha
+        </v-card-title>
+
+        <v-divider />
+
+        <v-form ref="resetPasswordForm" v-model="resetPasswordValid" @submit.prevent="resetPassword">
+          <v-card-text>
+            <p class="mb-4">
+              Você está prestes a resetar a senha do usuário
+              <strong>{{ resettingUser?.name }}</strong>.
+            </p>
+
+            <v-text-field
+              v-model="resetPasswordData.newPassword"
+              label="Nova Senha *"
+              type="password"
+              :rules="passwordRules"
+              required
+              prepend-icon="mdi-lock"
+              variant="outlined"
+              hint="Mínimo 6 caracteres"
+              persistent-hint
+            />
+
+            <v-text-field
+              v-model="resetPasswordData.confirmPassword"
+              label="Confirmar Nova Senha *"
+              type="password"
+              :rules="[
+                v => !!v || 'Confirmação de senha é obrigatória',
+                v => v === resetPasswordData.newPassword || 'As senhas não coincidem'
+              ]"
+              required
+              prepend-icon="mdi-lock-check"
+              variant="outlined"
+              class="mt-4"
+            />
+
+           
+          </v-card-text>
+
+          <v-divider />
+
+          <v-card-actions class="px-6 py-4">
+            <v-spacer />
+            <v-btn
+              variant="text"
+              @click="closeResetPasswordDialog"
+              :disabled="resettingPassword"
+            >
+              Cancelar
+            </v-btn>
+            <v-btn
+              type="submit"
+              color="warning"
+              variant="elevated"
+              :loading="resettingPassword"
+              :disabled="!resetPasswordValid"
+            >
+              <v-icon start>mdi-lock-reset</v-icon>
+              Resetar Senha
+            </v-btn>
+          </v-card-actions>
+        </v-form>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -530,14 +749,20 @@ const profileStore = useProfileStore()
 // Estado
 const dialog = ref(false)
 const deleteDialog = ref(false)
+const resetPasswordDialog = ref(false)
 const valid = ref(false)
+const resetPasswordValid = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
+const resettingPassword = ref(false)
 const search = ref('')
 const editingItem = ref(null)
 const deletingItem = ref(null)
+const resettingUser = ref(null)
+const showPassword = ref(false) // ✅ NOVO: Controle de visibilidade da senha
 
 const form = ref(null)
+const resetPasswordForm = ref(null)
 const formData = ref({
   name: '',
   email: '',
@@ -545,6 +770,10 @@ const formData = ref({
   cpf: '',
   companies: [],
   isActive: true
+})
+const resetPasswordData = ref({
+  newPassword: '',
+  confirmPassword: ''
 })
 
 // Computed
@@ -575,9 +804,9 @@ const canAddMoreCompanies = computed(() => {
 })
 
 const canSave = computed(() => {
-  return valid.value && 
-         formData.value.companies.length > 0 && 
-         formData.value.companies.every(c => c.companyId && c.role && c.profileId) &&
+  return valid.value &&
+         formData.value.companies.length > 0 &&
+         formData.value.companies.every(c => c.companyId && c.profileId) &&
          formData.value.companies.some(c => c.isDefault)
 })
 
@@ -585,7 +814,6 @@ const canSave = computed(() => {
 const headers = [
   { title: 'Nome', key: 'name' },
   { title: 'E-mail', key: 'email' },
-  { title: 'Perfil Atual', key: 'role' },
   { title: 'Setor Atual', key: 'sector' },
   { title: 'Empresas', key: 'companies', sortable: false },
   { title: 'Status', key: 'isActive', align: 'center' },
@@ -608,28 +836,19 @@ const passwordRules = [
   v => (v && v.length >= 6) || 'Senha deve ter no mínimo 6 caracteres'
 ]
 
-// Opções
-const roles = [
-  { title: 'Administrador', value: 'ADMIN' },
-  { title: 'Gerente', value: 'MANAGER' },
-  { title: 'Usuário', value: 'USER' }
+const cpfRules = [
+  v => !!v || 'CPF é obrigatório (necessário para assinatura digital)',
+  v => /^\d+$/.test(v) || 'CPF deve conter apenas números',
+  v => (v && v.length === 11) || 'CPF deve ter 11 dígitos',
+  v => {
+    if (!v) return true
+    // Validação básica de CPF (evitar sequências como 11111111111)
+    if (/^(\d)\1{10}$/.test(v)) return 'CPF inválido'
+    return true
+  }
 ]
 
 // Métodos auxiliares
-function getRoleColor(role) {
-  const colors = {
-    ADMIN: 'error',
-    MANAGER: 'warning',
-    USER: 'info'
-  }
-  return colors[role] || 'grey'
-}
-
-function getRoleText(role) {
-  const role_obj = roles.find(r => r.value === role)
-  return role_obj?.title || role
-}
-
 function canDelete(user) {
   return authStore.isAdmin && user.id !== authStore.user?.id
 }
@@ -662,14 +881,6 @@ function getAvailableCompaniesForIndex(index) {
   return availableCompanies.value.filter(company => 
     company.id === currentCompanyId || !selectedCompanyIds.includes(company.id)
   )
-}
-
-function getAvailableRoles() {
-  // Se não for admin, não pode criar outros admins
-  if (!authStore.isAdmin) {
-    return roles.filter(r => r.value !== 'ADMIN')
-  }
-  return roles
 }
 
 function getProfilesForCompany(companyId) {
@@ -743,12 +954,11 @@ function addCompany() {
   if (availableCompanyIds.length > 0) {
     const newCompany = {
       companyId: availableCompanyIds[0], // Selecionar automaticamente a primeira disponível
-      role: 'USER',
       sectorId: null,
       profileId: null,
       isDefault: formData.value.companies.length === 0
     }
-    
+
     formData.value.companies.push(newCompany)
     applyDefaultProfileForCompany(formData.value.companies.length - 1)
   } else {
@@ -814,14 +1024,12 @@ function openDialog(item = null) {
       companies: item.companies && item.companies.length > 0
         ? item.companies.map(company => ({
             companyId: company.companyId,
-            role: company.role,
             sectorId: company.sectorId || null,
             profileId: company.profileId || null,
             isDefault: company.isDefault || false
           }))
         : [{
             companyId: authStore.user?.companyId || (availableCompanies.value[0]?.id || ''),
-            role: item.role || 'USER',
             sectorId: item.sector?.id || null,
             profileId: null,
             isDefault: true
@@ -843,7 +1051,6 @@ function openDialog(item = null) {
     if (availableCompanies.value.length > 0) {
       formData.value.companies.push({
         companyId: availableCompanies.value[0].id,
-        role: 'USER',
         sectorId: null,
         profileId: null,
         isDefault: true
@@ -883,7 +1090,7 @@ async function save() {
   }
 
   // Validar se todas as empresas têm dados obrigatórios
-  const invalidCompanies = formData.value.companies.filter(c => !c.companyId || !c.role || !c.profileId)
+  const invalidCompanies = formData.value.companies.filter(c => !c.companyId || !c.profileId)
   if (invalidCompanies.length > 0) {
     window.showSnackbar?.('Todas as empresas devem ter empresa e perfil selecionados', 'error')
     return
@@ -897,16 +1104,15 @@ async function save() {
 
   saving.value = true
   try {
-    // Limpar máscara do CPF (remover pontos e traços)
-    const cleanCpf = formData.value.cpf ? formData.value.cpf.replace(/[.-]/g, '') : null
+    // Manter CPF formatado (backend espera formato XXX.XXX.XXX-XX)
+    const cpf = formData.value.cpf || null
 
     const data = {
       name: formData.value.name,
       email: formData.value.email,
-      cpf: cleanCpf, // CPF limpo, sem pontos e traços
+      cpf: cpf, // CPF formatado
       companies: formData.value.companies.map(company => ({
         companyId: company.companyId,
-        role: company.role,
         sectorId: company.sectorId || null,
         profileId: company.profileId,
         isDefault: company.isDefault || false
@@ -972,6 +1178,42 @@ async function deleteUser() {
   }
 }
 
+function openResetPasswordDialog(user) {
+  resettingUser.value = user
+  resetPasswordData.value = {
+    newPassword: '',
+    confirmPassword: ''
+  }
+  resetPasswordDialog.value = true
+}
+
+function closeResetPasswordDialog() {
+  resetPasswordDialog.value = false
+  resettingUser.value = null
+  resetPasswordForm.value?.reset()
+  resetPasswordData.value = {
+    newPassword: '',
+    confirmPassword: ''
+  }
+}
+
+async function resetPassword() {
+  if (!resetPasswordValid.value || !resettingUser.value) return
+
+  resettingPassword.value = true
+  try {
+    await userStore.resetUserPassword(resettingUser.value.id, resetPasswordData.value.newPassword)
+    window.showSnackbar(`Senha de ${resettingUser.value.name} resetada com sucesso!`, 'success')
+    closeResetPasswordDialog()
+  } catch (error) {
+    console.error('Error resetting password:', error)
+    const errorMessage = error.response?.data?.message || error.message || 'Erro ao resetar senha'
+    window.showSnackbar(errorMessage, 'error')
+  } finally {
+    resettingPassword.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     await Promise.all([
@@ -988,9 +1230,134 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.border-warning {
-  border-color: rgb(var(--v-theme-warning)) !important;
-  border-width: 2px !important;
+/* ========================================
+   🎨 DESIGN PROFISSIONAL - USUÁRIOS
+   ======================================== */
+
+/* Header do Dialog */
+.user-dialog-header {
+  background: linear-gradient(135deg, rgb(var(--v-theme-primary)) 0%, rgb(var(--v-theme-primary-darken-1)) 100%);
+  color: white !important;
+}
+
+.user-dialog-header .v-avatar {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Seções do Formulário */
+.form-section {
+  background: rgb(var(--v-theme-surface));
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid rgba(var(--v-border-color), 0.12);
+}
+
+.form-section:hover {
+  border-color: rgba(var(--v-theme-primary), 0.3);
+  transition: border-color 0.3s ease;
+}
+
+/* ========================================
+   CARDS DE EMPRESA - DESIGN PREMIUM
+   ======================================== */
+
+/* ========================================
+   CENTRALIZAÇÃO DE ÍCONES NOS AVATARES
+   ======================================== */
+
+/* Avatares de Seção */
+.section-avatar,
+.company-avatar,
+.empty-state-avatar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.section-avatar .v-icon,
+.company-avatar .v-icon,
+.empty-state-avatar .v-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Lista de Empresas */
+.companies-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Card de Empresa */
+.company-card {
+  border-radius: 12px !important;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid transparent;
+}
+
+.company-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Card Padrão com Destaque - Azul Escuro */
+.company-card-default {
+  border-color: rgb(var(--v-theme-info)) !important;
+  background: linear-gradient(135deg,
+    rgba(var(--v-theme-info), 0.08) 0%,
+    rgba(var(--v-theme-info), 0.03) 100%
+  );
+  box-shadow: 0 4px 16px rgba(var(--v-theme-info), 0.15) !important;
+}
+
+.company-card-default .company-card-header {
+  background: linear-gradient(135deg,
+    rgba(var(--v-theme-info), 0.18) 0%,
+    rgba(var(--v-theme-info), 0.1) 100%
+  );
+  border-bottom: 2px solid rgba(var(--v-theme-info), 0.4);
+}
+
+/* Header do Card */
+.company-card-header {
+  padding: 16px 20px;
+  background: linear-gradient(135deg,
+    rgba(var(--v-theme-primary), 0.08) 0%,
+    rgba(var(--v-theme-primary), 0.03) 100%
+  );
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Empty State */
+.empty-state-card {
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Botão Adicionar Empresa */
+.add-company-btn {
+  box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.25) !important;
+  transition: all 0.3s ease;
+}
+
+.add-company-btn:hover {
+  box-shadow: 0 6px 20px rgba(var(--v-theme-primary), 0.35) !important;
+  transform: translateY(-1px);
 }
 
 .space-y-4 > * + * {

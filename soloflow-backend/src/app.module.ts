@@ -10,6 +10,9 @@ import { ProcessesModule } from './modules/processes/processes.module';
 import { AttachmentsModule } from './modules/attachments/attachments.module';
 import { ProfilesModule } from './modules/profiles/profiles.module';
 import { SignaturesModule } from './modules/signatures/signatures.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { CacheModule } from './modules/cache/cache.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -17,6 +20,7 @@ import { SignaturesModule } from './modules/signatures/signatures.module';
       isGlobal: true,
     }),
     PrismaModule,
+    CacheModule,
     AuthModule,
     UsersModule,
     CompaniesModule,
@@ -26,6 +30,8 @@ import { SignaturesModule } from './modules/signatures/signatures.module';
     AttachmentsModule,
     ProfilesModule,
     SignaturesModule,
+    AuditModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

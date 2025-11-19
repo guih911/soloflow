@@ -4,6 +4,9 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SwitchCompanyDto } from './dto/switch-company.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { Roles } from './decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 @Controller('auth')
 export class AuthController {
@@ -19,18 +22,18 @@ export class AuthController {
     return this.authService.register(registerDto);
   }
 
+  @Post('refresh')
+  @UseGuards(JwtAuthGuard)
+  async refresh(@Request() req) {
+    // Retorna um novo token com as mesmas informações
+    return this.authService.refreshToken(req.user);
+  }
+
   //    Switch de empresa
   @Post('switch-company')
   @UseGuards(JwtAuthGuard)
   async switchCompany(@Body() switchDto: SwitchCompanyDto, @Request() req) {
     return this.authService.switchCompany(req.user.id, switchDto);
-  }
-
-  //    Refresh token
-  @Post('refresh')
-  @UseGuards(JwtAuthGuard)
-  async refreshToken(@Request() req) {
-    return this.authService.refreshToken(req.user.id);
   }
 
   //    Verificar permissões atuais

@@ -34,7 +34,14 @@
       "Bash(node scripts/audit-duplicate-users.js:*)",
       "Bash(node scripts/fix-duplicate-users.js:*)",
       "Bash(node scripts/test-duplicate-validation.js:*)",
-      "Bash(npx vue-tsc:*)"
+      "Bash(npx vue-tsc:*)",
+      "Bash(sqlite3:*)",
+      "Bash(test:*)",
+      "Bash(build-output.txt)",
+      "Bash(perl:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(timeout 10 bash:*)",
+      "Bash(node scripts/debug-signature-issue.js:*)"
     ],
     "deny": [],
     "ask": []

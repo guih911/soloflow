@@ -1,6 +1,15 @@
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
+
+// Helper para criar permissão com ID
+const perm = (resource: string, action: string, scope: any = {}) => ({
+  id: randomUUID(),
+  resource,
+  action,
+  scope,
+});
 
 async function createDefaultProfiles() {
   console.log('🔧 Criando perfis padrão...');
@@ -12,7 +21,7 @@ async function createDefaultProfiles() {
     console.log(`\n📌 Criando perfis para empresa: ${company.name}`);
 
     // Perfil de Administrador
-    const adminProfile = await prisma.profile.upsert({
+    const adminProfile = await prisma.profiles.upsert({
       where: {
         companyId_name: {
           companyId: company.id,
@@ -20,28 +29,30 @@ async function createDefaultProfiles() {
         },
       },
       create: {
+        id: randomUUID(),
         name: 'Administrador',
         description: 'Acesso total ao sistema',
         companyId: company.id,
         isDefault: false,
-        permissions: {
+        updatedAt: new Date(),
+        profile_permissions: {
           create: [
-            { resource: 'users', action: 'view', scope: {} },
-            { resource: 'users', action: 'create', scope: {} },
-            { resource: 'users', action: 'edit', scope: {} },
-            { resource: 'users', action: 'delete', scope: {} },
-            { resource: 'processes', action: 'view', scope: {} },
-            { resource: 'processes', action: 'create', scope: {} },
-            { resource: 'processes', action: 'edit', scope: {} },
-            { resource: 'processes', action: 'delete', scope: {} },
-            { resource: 'process_types', action: 'view', scope: {} },
-            { resource: 'process_types', action: 'create', scope: {} },
-            { resource: 'process_types', action: 'edit', scope: {} },
-            { resource: 'process_types', action: 'delete', scope: {} },
-            { resource: 'profiles', action: 'view', scope: {} },
-            { resource: 'profiles', action: 'create', scope: {} },
-            { resource: 'profiles', action: 'edit', scope: {} },
-            { resource: 'profiles', action: 'delete', scope: {} },
+            perm('users', 'view'),
+            perm('users', 'create'),
+            perm('users', 'edit'),
+            perm('users', 'delete'),
+            perm('processes', 'view'),
+            perm('processes', 'create'),
+            perm('processes', 'edit'),
+            perm('processes', 'delete'),
+            perm('process_types', 'view'),
+            perm('process_types', 'create'),
+            perm('process_types', 'edit'),
+            perm('process_types', 'delete'),
+            perm('profiles', 'view'),
+            perm('profiles', 'create'),
+            perm('profiles', 'edit'),
+            perm('profiles', 'delete'),
           ],
         },
       },
@@ -51,7 +62,7 @@ async function createDefaultProfiles() {
     console.log(`✅ Perfil criado: ${adminProfile.name}`);
 
     // Perfil de Gerente
-    const managerProfile = await prisma.profile.upsert({
+    const managerProfile = await prisma.profiles.upsert({
       where: {
         companyId_name: {
           companyId: company.id,
@@ -59,17 +70,19 @@ async function createDefaultProfiles() {
         },
       },
       create: {
+        id: randomUUID(),
         name: 'Gerente',
         description: 'Gerenciamento de processos e visualização de usuários',
         companyId: company.id,
         isDefault: false,
-        permissions: {
+        updatedAt: new Date(),
+        profile_permissions: {
           create: [
-            { resource: 'users', action: 'view', scope: {} },
-            { resource: 'processes', action: 'view', scope: {} },
-            { resource: 'processes', action: 'create', scope: {} },
-            { resource: 'processes', action: 'edit', scope: {} },
-            { resource: 'process_types', action: 'view', scope: {} },
+            perm('users', 'view'),
+            perm('processes', 'view'),
+            perm('processes', 'create'),
+            perm('processes', 'edit'),
+            perm('process_types', 'view'),
           ],
         },
       },
@@ -79,7 +92,7 @@ async function createDefaultProfiles() {
     console.log(`✅ Perfil criado: ${managerProfile.name}`);
 
     // Perfil de Usuário Padrão
-    const userProfile = await prisma.profile.upsert({
+    const userProfile = await prisma.profiles.upsert({
       where: {
         companyId_name: {
           companyId: company.id,
@@ -87,14 +100,16 @@ async function createDefaultProfiles() {
         },
       },
       create: {
+        id: randomUUID(),
         name: 'Usuário',
         description: 'Visualização e execução de processos',
         companyId: company.id,
         isDefault: true, // Perfil padrão
-        permissions: {
+        updatedAt: new Date(),
+        profile_permissions: {
           create: [
-            { resource: 'processes', action: 'view', scope: {} },
-            { resource: 'processes', action: 'create', scope: {} },
+            perm('processes', 'view'),
+            perm('processes', 'create'),
           ],
         },
       },
@@ -118,22 +133,24 @@ async function createDefaultProfiles() {
       profileId = userProfile.id;
 
       // Criar ou atualizar UserProfile
-      await prisma.userProfile.upsert({
+      const existingProfile = await prisma.user_profiles.findFirst({
         where: {
-          userId_companyId: {
-            userId: uc.userId,
-            companyId: company.id,
-          },
-        },
-        create: {
           userId: uc.userId,
           companyId: company.id,
           profileId: profileId,
         },
-        update: {
-          profileId: profileId,
-        },
       });
+
+      if (!existingProfile) {
+        await prisma.user_profiles.create({
+          data: {
+            id: randomUUID(),
+            userId: uc.userId,
+            companyId: company.id,
+            profileId: profileId,
+          },
+        });
+      }
 
       console.log(`  👤 Usuário ${uc.user.name} → Perfil: ${userProfile.name}`);
     }

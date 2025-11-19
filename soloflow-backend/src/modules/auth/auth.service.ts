@@ -95,7 +95,6 @@ export class AuthService {
     const resolvedPermissions = await this.profilesService.resolveUserPermissions(
       user.id,
       defaultCompany.companyId,
-      defaultCompany.role,
     );
 
     const payload = {
@@ -197,7 +196,6 @@ export class AuthService {
     const resolvedPermissions = await this.profilesService.resolveUserPermissions(
       result.user.id,
       registerDto.companyId,
-      UserRole.USER,
     );
 
     const payload = {
@@ -294,7 +292,6 @@ export class AuthService {
     const resolvedPermissions = await this.profilesService.resolveUserPermissions(
       userId,
       switchDto.companyId,
-      userCompany.role,
     );
 
     const payload = {
@@ -337,74 +334,6 @@ export class AuthService {
     };
   }
 
-  //    Refresh token melhorado
-  async refreshToken(userId: string) {
-    const userWithCompanies = await this.prisma.user.findUnique({
-      where: { id: userId, isActive: true },
-      include: {
-        userCompanies: {
-          where: { company: { isActive: true } },
-          include: {
-            company: { select: { id: true, name: true, cnpj: true } },
-            sector: { select: { id: true, name: true } },
-          },
-          orderBy: { lastAccessedAt: 'desc' },
-        },
-      },
-    });
-
-    if (!userWithCompanies?.userCompanies?.length) {
-      throw new UnauthorizedException('Usuario nao tem empresas ativas validas');
-    }
-
-    const activeCompany = userWithCompanies.userCompanies[0];
-
-    const resolvedPermissions = await this.profilesService.resolveUserPermissions(
-      userId,
-      activeCompany.companyId,
-      activeCompany.role,
-    );
-
-    const payload = {
-      sub: userId,
-      email: userWithCompanies.email,
-      companyId: activeCompany.companyId,
-      role: activeCompany.role,
-      profiles: resolvedPermissions.profileIds,
-    };
-
-    return {
-      access_token: this.jwtService.sign(payload),
-      user: {
-        id: userWithCompanies.id,
-        name: userWithCompanies.name,
-        email: userWithCompanies.email,
-        activeCompany: {
-          id: activeCompany.company.id,
-          companyId: activeCompany.companyId,
-          name: activeCompany.company.name,
-          role: activeCompany.role,
-          sector: activeCompany.sector,
-          isDefault: activeCompany.isDefault,
-          profileIds: resolvedPermissions.profileIds,
-        },
-        companies: userWithCompanies.userCompanies.map((uc) => ({
-          id: uc.id,
-          companyId: uc.company.id,
-          name: uc.company.name,
-          cnpj: uc.company.cnpj,
-          role: uc.role,
-          sector: uc.sector,
-          isDefault: uc.isDefault,
-          lastAccessedAt: uc.lastAccessedAt,
-        })),
-        permissions: resolvedPermissions.permissions,
-        processTypePermissions: resolvedPermissions.processTypes,
-        profileIds: resolvedPermissions.profileIds,
-      },
-    };
-  }
-
   //    Verificar permissoes com validacao de empresa ativa
   async checkUserPermissions(userId: string, companyId: string) {
     const userCompany = await this.prisma.userCompany.findFirst({
@@ -427,7 +356,6 @@ export class AuthService {
     const resolvedPermissions = await this.profilesService.resolveUserPermissions(
       userId,
       companyId,
-      userCompany.role,
     );
 
     return {
@@ -452,6 +380,55 @@ export class AuthService {
     });
 
     return !!userCompany;
+  }
+
+  async refreshToken(user: any) {
+    // Buscar informações atualizadas do usuário
+    const userCompany = await this.prisma.userCompany.findFirst({
+      where: {
+        userId: user.id,
+        companyId: user.companyId,
+        user: { isActive: true },
+        company: { isActive: true },
+      },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            isActive: true,
+          },
+        },
+        sector: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!userCompany) {
+      throw new UnauthorizedException('Usuário ou empresa inativos');
+    }
+
+    // Resolver permissões atualizadas
+    const resolvedPermissions = await this.profilesService.resolveUserPermissions(
+      user.id,
+      user.companyId,
+    );
+
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      companyId: user.companyId,
+      role: userCompany.role,
+      profiles: resolvedPermissions.profileIds,
+    };
+
+    return {
+      access_token: this.jwtService.sign(payload),
+    };
   }
 }
 

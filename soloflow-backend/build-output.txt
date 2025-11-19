@@ -1,0 +1,6 @@
+
+> soloflow-backend@0.0.1 build
+> nest build
+
+Found 24 error(s).
+

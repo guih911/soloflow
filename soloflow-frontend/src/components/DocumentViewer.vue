@@ -69,7 +69,7 @@
             class="document-item-drawer-card mb-3"
             elevation="0"
           >
-            <div class="d-flex align-start pa-3" @click="openDocument(doc)">
+            <div class="d-flex align-start pa-3">
               <v-avatar :color="getFileColor(doc.mimeType)" size="48" class="mr-3 flex-shrink-0">
                 <v-icon color="white" size="28">{{ getFileIcon(doc.mimeType) }}</v-icon>
               </v-avatar>
@@ -103,53 +103,119 @@
                   <span class="text-caption text-grey ml-2">{{ formatFileSize(doc.size) }}</span>
                 </div>
 
-                <!-- Status de Assinatura -->
-                <div v-if="doc.pendingSigners && doc.pendingSigners.length > 0" class="signature-status-pending">
-                  <v-divider class="mb-2" />
-                  <div class="d-flex align-center justify-space-between">
-                    <div class="d-flex align-center">
-                      <v-icon size="16" color="warning" class="mr-1">mdi-clock-alert</v-icon>
-                      <span class="text-caption font-weight-medium text-warning">
-                        Aguardando {{ doc.pendingSigners.length }} assinatura(s)
-                      </span>
-                    </div>
-                    <v-btn
-                      v-if="doc.canSign"
-                      size="small"
-                      color="warning"
-                      variant="elevated"
-                      @click.stop="openSignDialog(doc)"
-                      class="sign-button"
+                <!-- Status de Assinatura - Design Profissional -->
+                <div v-if="doc.canSign || (doc.pendingSigners && doc.pendingSigners.length > 0)" class="signature-status-section mt-3">
+                  <v-divider class="mb-3" />
+
+                  <!-- Ação Principal: Assinar (se pode assinar) -->
+                  <div v-if="doc.canSign" class="signature-action-primary mb-3">
+                    <v-alert
+                      type="warning"
+                      variant="tonal"
+                      border="start"
+                      density="compact"
+                      class="signature-alert"
                     >
-                      <v-icon start size="18">mdi-pen</v-icon>
-                      Assinar Agora
-                    </v-btn>
+                      <div class="d-flex align-center justify-space-between">
+                        <div class="d-flex align-center">
+                          <v-icon size="20" class="mr-2">mdi-draw-pen</v-icon>
+                          <div>
+                            <div class="text-body-2 font-weight-bold">Sua assinatura é necessária</div>
+                            <div class="text-caption">Clique no botão ao lado para assinar este documento</div>
+                          </div>
+                        </div>
+                        <v-btn
+                          color="warning"
+                          variant="elevated"
+                          size="default"
+                          @click.stop="openSignDialog(doc)"
+                          class="sign-button-primary ml-3"
+                        >
+                          <v-icon start size="20">mdi-pen</v-icon>
+                          Assinar Agora
+                        </v-btn>
+                      </div>
+                    </v-alert>
                   </div>
 
-                  <!-- Lista de pendentes -->
-                  <v-expansion-panels variant="accordion" class="mt-2">
-                    <v-expansion-panel elevation="0">
-                      <v-expansion-panel-title class="pa-2 min-height-auto">
-                        <span class="text-caption">Ver pendentes</span>
-                      </v-expansion-panel-title>
-                      <v-expansion-panel-text class="pa-2">
-                        <div v-for="signer in doc.pendingSigners" :key="signer.id" class="text-caption text-grey mb-1">
-                          • {{ signer.name }}
-                        </div>
-                      </v-expansion-panel-text>
-                    </v-expansion-panel>
-                  </v-expansion-panels>
+                  <!-- Outros Pendentes -->
+                  <div v-if="doc.pendingSigners && doc.pendingSigners.length > 0" class="signature-pending-info">
+                    <div class="d-flex align-center justify-space-between mb-2">
+                      <div class="d-flex align-center">
+                        <v-icon size="16" color="grey-darken-1" class="mr-1">mdi-account-clock</v-icon>
+                        <span class="text-caption font-weight-medium text-grey-darken-1">
+                          Aguardando mais {{ doc.pendingSigners.length }} assinatura(s)
+                        </span>
+                      </div>
+                      <v-chip
+                        size="x-small"
+                        variant="tonal"
+                        color="grey"
+                        prepend-icon="mdi-clock-outline"
+                      >
+                        Pendente
+                      </v-chip>
+                    </div>
+
+                    <!-- Lista de pendentes colapsável -->
+                    <v-expansion-panels variant="accordion" class="pending-list-panel">
+                      <v-expansion-panel elevation="0" class="pending-panel">
+                        <v-expansion-panel-title
+                          class="pa-2 text-caption"
+                          expand-icon="mdi-chevron-down"
+                          collapse-icon="mdi-chevron-up"
+                        >
+                          <v-icon size="14" class="mr-1">mdi-account-multiple</v-icon>
+                          Ver quem ainda precisa assinar
+                        </v-expansion-panel-title>
+                        <v-expansion-panel-text class="pa-2 pt-0">
+                          <v-list density="compact" class="pending-signers-list">
+                            <v-list-item
+                              v-for="signer in doc.pendingSigners"
+                              :key="signer.id"
+                              class="px-2"
+                              density="compact"
+                            >
+                              <template v-slot:prepend>
+                                <v-avatar size="24" :color="getAvatarColor(signer.name)">
+                                  <span class="text-caption font-weight-bold text-white">
+                                    {{ getSignerInitials(signer.name) }}
+                                  </span>
+                                </v-avatar>
+                              </template>
+                              <v-list-item-title class="text-caption">
+                                {{ signer.name }}
+                              </v-list-item-title>
+                              <v-list-item-subtitle class="text-caption">
+                                {{ signer.email }}
+                              </v-list-item-subtitle>
+                            </v-list-item>
+                          </v-list>
+                        </v-expansion-panel-text>
+                      </v-expansion-panel>
+                    </v-expansion-panels>
+                  </div>
                 </div>
 
-                <!-- Assinado com sucesso -->
-                <div v-else-if="doc.isSigned" class="signature-status-completed">
-                  <v-divider class="mb-2" />
-                  <div class="d-flex align-center">
-                    <v-icon size="16" color="success" class="mr-1">mdi-check-decagram</v-icon>
-                    <span class="text-caption font-weight-medium text-success">
-                      {{ doc.signatureCount }} assinatura(s) completa(s)
-                    </span>
-                  </div>
+                <!-- Status: Completamente Assinado -->
+                <div v-else-if="doc.isSigned" class="signature-status-completed mt-3">
+                  <v-divider class="mb-3" />
+                  <v-alert
+                    type="success"
+                    variant="tonal"
+                    border="start"
+                    density="compact"
+                  >
+                    <div class="d-flex align-center">
+                      <v-icon size="20" class="mr-2">mdi-check-decagram</v-icon>
+                      <div>
+                        <div class="text-body-2 font-weight-bold">Documento assinado</div>
+                        <div class="text-caption">
+                          {{ doc.signatureCount }} assinatura(s) completa(s)
+                        </div>
+                      </div>
+                    </div>
+                  </v-alert>
                 </div>
               </div>
             </div>
@@ -263,7 +329,6 @@
             class="document-card"
             :class="{ 'document-signed': doc.isSigned }"
             elevation="2"
-            @click="openDocument(doc)"
           >
             <div class="document-preview">
               <v-icon :color="getFileColor(doc.mimeType)" size="64">
@@ -341,7 +406,6 @@
             v-for="doc in filteredDocuments"
             :key="doc.id"
             class="document-list-item"
-            @click="openDocument(doc)"
           >
             <template v-slot:prepend>
               <v-avatar :color="getFileColor(doc.mimeType)" size="56">
@@ -706,6 +770,30 @@ async function handleSigned() {
   // Atualizar a lista de documentos
   await refreshDocuments()
 }
+
+// Funções auxiliares para avatares dos signatários
+function getSignerInitials(name) {
+  if (!name) return '??'
+  const parts = name.trim().split(' ').filter(p => p.length > 0)
+  if (parts.length === 0) return '??'
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+function getAvatarColor(name) {
+  if (!name) return 'grey'
+  const colors = [
+    'blue', 'indigo', 'purple', 'pink', 'red',
+    'orange', 'amber', 'lime', 'green', 'teal',
+    'cyan', 'blue-grey', 'deep-purple', 'deep-orange'
+  ]
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const index = Math.abs(hash) % colors.length
+  return colors[index]
+}
 </script>
 
 <style scoped>
@@ -762,32 +850,68 @@ async function handleSigned() {
   align-items: center;
 }
 
-.signature-status-pending {
-  background: rgba(255, 152, 0, 0.05);
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 152, 0, 0.2);
+/* Status de Assinatura - Design Profissional */
+.signature-status-section {
+  margin-top: 12px;
 }
 
-.sign-button {
+.signature-action-primary {
+  margin-bottom: 12px;
+}
+
+.signature-alert :deep(.v-alert__content) {
+  width: 100%;
+}
+
+.sign-button-primary {
   animation: pulse-glow 2s infinite;
-  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3) !important;
+  box-shadow: 0 4px 16px rgba(255, 152, 0, 0.3) !important;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  flex-shrink: 0;
 }
 
 @keyframes pulse-glow {
   0%, 100% {
-    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+    box-shadow: 0 4px 16px rgba(255, 152, 0, 0.3);
+    transform: scale(1);
   }
   50% {
-    box-shadow: 0 6px 20px rgba(255, 152, 0, 0.5);
+    box-shadow: 0 6px 24px rgba(255, 152, 0, 0.5);
+    transform: scale(1.02);
   }
 }
 
-.signature-status-completed {
-  background: rgba(76, 175, 80, 0.05);
-  padding: 8px;
+.signature-pending-info {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.02);
   border-radius: 8px;
-  border: 1px solid rgba(76, 175, 80, 0.2);
+}
+
+.pending-list-panel {
+  background: transparent;
+}
+
+.pending-panel {
+  background: rgba(255, 255, 255, 0.6) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pending-signers-list {
+  background: transparent;
+  padding: 0;
+}
+
+.pending-signers-list .v-list-item {
+  min-height: 40px;
+  padding: 4px 8px;
+}
+
+.signature-status-completed :deep(.v-alert__content) {
+  width: 100%;
 }
 
 /* Scrollbar do Drawer */

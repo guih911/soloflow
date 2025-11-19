@@ -2,9 +2,9 @@
   <div>
     <div class="d-flex align-center justify-space-between mb-6">
       <div>
-        <h1 class="text-h4 font-weight-bold">Perfis</h1>
+        <h1 class="text-h4 font-weight-bold">Perfis de Acesso</h1>
         <p class="text-subtitle-1 text-medium-emphasis">
-          Cadastre conjuntos de permissões para reutilizar em diferentes usuários.
+          Perfis definem o que os usuários podem fazer no sistema.
         </p>
       </div>
       <v-btn
@@ -78,7 +78,7 @@
               {{ summary }}
             </v-chip>
             <span v-if="!item.permissions?.length" class="text-medium-emphasis text-caption">
-              Padrão do papel
+              Sem permissões de tela configuradas
             </span>
           </div>
         </template>

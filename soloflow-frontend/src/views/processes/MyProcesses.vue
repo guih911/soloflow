@@ -172,9 +172,7 @@ const roleOptions = [
 ]
 
 const headers = [
-  { title: 'Código', key: 'code', width: '120px', align: 'start' },
-  { title: 'Título', key: 'title', width: '280px', align: 'start' },
-  { title: 'Tipo', key: 'processType', width: '220px', align: 'start' },
+  { title: 'Processo', key: 'title', width: '400px', align: 'start' },
   { title: 'Status', key: 'status', width: '150px', align: 'center' },
   { title: 'Meu Papel', key: 'involvement', width: '140px', align: 'center', sortable: false },
   { title: 'Ações Pendentes', key: 'pendingTasks', width: '200px', align: 'start', sortable: false },
@@ -295,10 +293,13 @@ function normalizeProcesses() {
         process.processTypeVersion?.processType?.name ||
         'Processo'
 
+      const processCode = process.code || '-'
+      const processTitle = `${processCode} - ${processTypeName}`
+
       map.set(process.id, {
         id: process.id,
-        code: process.code || '-',
-        title: process.title || processTypeName,
+        code: processCode,
+        title: processTitle,
         processType: processTypeName,
         status: process.status || 'IN_PROGRESS',
         createdBy: process.createdBy?.name || 'Não informado',

@@ -385,8 +385,10 @@ function generateProcessTitle() {
   const now = new Date()
   const dateStr = now.toLocaleDateString('pt-BR')
   const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  
-  return `${selectedProcessType.value?.name} - ${dateStr} ${timeStr}`
+
+  // ✅ CORRIGIDO: Removido 'codigo' que não existe no modelo
+  // Agora usa apenas o nome do tipo de processo
+  return selectedProcessType.value?.name || 'Novo Processo'
 }
 
 

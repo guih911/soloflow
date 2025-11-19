@@ -16,7 +16,8 @@
             </v-avatar>
             <div>
               <h1 class="text-h4 font-weight-bold text-primary">{{ stepExecution.step.name }}</h1>
-              <p class="text-h6 text-medium-emphasis">{{ process.code }} - {{ process.title }}</p>
+              <p class="text-h6 text-medium-emphasis">  {{ process.processType?.name || 'Processo' }}</p>
+              <p v-if="process.title && process.title !== 'undefined'" class="text-body-2 text-medium-emphasis">{{ process.title }}</p>
             </div>
           </div>
           <div class="d-flex flex-wrap mt-3 chips-container">
@@ -183,268 +184,246 @@
                 </v-card>
               </div>
 
-              <!-- Seção de Anexos movida para cima da seção de Comentário -->
+              <!-- Seção de Anexos - Design Profissional Limpo -->
               <div v-if="stepExecution.step.allowAttachment" class="form-section mb-6">
-                <div class="section-header mb-4">
-                  <h3 class="text-h6 font-weight-bold d-flex align-center"><v-icon color="primary" class="mr-2">mdi-paperclip</v-icon>Anexos<v-chip v-if="stepExecution.step.requireAttachment" size="x-small" color="error" class="ml-2">Obrigatório</v-chip></h3>
-                  <p class="text-body-2 text-medium-emphasis">{{ stepExecution.step.requireAttachment ? 'Esta etapa requer pelo menos um anexo' : 'Anexe documentos relacionados' }}</p>
-                </div>
-                <v-card variant="outlined" class="attachment-upload-area mb-4">
-                  <v-card-text class="pa-6 text-center">
-                    <v-btn size="large" color="primary" variant="tonal" @click="$refs.fileInput.click()" class="upload-button"><v-icon start size="24">mdi-cloud-upload</v-icon>Selecionar Arquivos</v-btn>
-                    <input ref="fileInput" type="file" style="display: none" multiple @change="handleFileSelect" :accept="allowedFileTypes" />
-                    <div class="upload-help mt-4">
-                      <p class="text-body-2 text-medium-emphasis">Arraste arquivos aqui ou clique para selecionar</p>
-                      <p class="text-caption text-medium-emphasis">
-                        Formatos aceitos: PDF, Imagens (JPG, PNG, GIF, BMP, WebP), Office (Word, Excel, PowerPoint), Texto (TXT, CSV), Compactados (ZIP, RAR, 7Z)
-                      </p>
-                      <p class="text-caption text-medium-emphasis mt-1">Tamanho máximo: 10MB por arquivo</p>
+                <div class="section-header mb-3">
+                  <div class="d-flex align-center justify-space-between">
+                    <div>
+                      <h3 class="text-subtitle-1 font-weight-bold">Anexos</h3>
+                      <p class="text-caption text-medium-emphasis mt-1">Adicione os documentos necessários</p>
                     </div>
-                  </v-card-text>
-                </v-card>
-                <div v-if="attachments.length > 0" class="attachments-list">
-                  <v-card variant="outlined">
-                    <v-card-title class="text-subtitle-1 pa-4"><v-icon class="mr-2">mdi-attachment</v-icon>Arquivos Anexados ({{ attachments.length }})</v-card-title>
-                    <v-divider />
+                    <v-chip
+                      v-if="stepExecution.step.requireAttachment"
+                      size="small"
+                      color="error"
+                      variant="flat"
+                    >
+                      Obrigatório
+                    </v-chip>
+                  </div>
+                </div>
+
+                <!-- Upload Area - Minimalista -->
+                <div class="upload-zone mb-4" @click="$refs.fileInput.click()">
+                  <input
+                    ref="fileInput"
+                    type="file"
+                    style="display: none"
+                    multiple
+                    @change="handleFileSelect"
+                    :accept="allowedFileTypes"
+                  />
+                  <v-icon size="32" color="primary" class="mb-2">mdi-cloud-upload</v-icon>
+                  <p class="text-body-2 font-weight-medium mb-1">Clique para selecionar arquivos</p>
+                  <p class="text-caption text-medium-emphasis">PDF, Imagens, Office • Máx. 10MB</p>
+                </div>
+                <!-- Lista de Arquivos - Design Limpo -->
+                <div v-if="attachments.length > 0" class="files-list">
+                  <div v-for="(file, index) in attachments" :key="index">
                     <v-list class="pa-0">
-                      <div v-for="(file, index) in attachments" :key="index">
-                        <v-list-item class="attachment-item" :class="{ 'needs-signature-config': file.type === 'application/pdf' && (!file.signers || file.signers.length === 0) }">
-                          <template v-slot:prepend>
-                            <v-badge
-                              v-if="file.type === 'application/pdf' && (!file.signers || file.signers.length === 0)"
-                              dot
-                              color="warning"
-                              overlap
-                              offset-x="8"
-                              offset-y="8"
-                            >
-                              <v-avatar :color="getFileTypeColor(file.type)" size="40">
-                                <v-icon size="20" color="white">{{ getFileIcon(file.type) }}</v-icon>
-                              </v-avatar>
-                            </v-badge>
-                            <v-avatar v-else :color="getFileTypeColor(file.type)" size="40">
-                              <v-icon size="20" color="white">{{ getFileIcon(file.type) }}</v-icon>
-                            </v-avatar>
-                          </template>
-                          <v-list-item-title class="font-weight-medium">
-                            {{ file.name }}
-                            <v-chip
-                              v-if="file.type === 'application/pdf' && (!file.signers || file.signers.length === 0)"
-                              size="x-small"
-                              color="warning"
-                              variant="tonal"
-                              class="ml-2"
-                            >
-                              <v-icon start size="12">mdi-alert</v-icon>
-                              Configurar assinatura
-                            </v-chip>
-                          </v-list-item-title>
-                          <v-list-item-subtitle>
-                            <div class="d-flex align-center">
-                              <span>{{ formatFileSize(file.size) }}</span>
-                              <v-chip v-if="file.signers && file.signers.length > 0" size="x-small" color="success" variant="tonal" class="ml-2">
-                                <v-icon start size="12">mdi-check-circle</v-icon>
-                                {{ file.signers.length }} assinante{{ file.signers.length > 1 ? 's' : '' }} configurado{{ file.signers.length > 1 ? 's' : '' }}
-                              </v-chip>
-                            </div>
-                          </v-list-item-subtitle>
-                          <template v-slot:append>
-                            <div class="attachment-actions d-flex align-center gap-2">
-                              <!-- Botão de configurar assinantes - Disponível para QUALQUER tipo de etapa com PDF -->
-                              <v-btn
-                                v-if="file.type === 'application/pdf'"
-                                @click="toggleSignatureConfig(index)"
-                                :variant="file.showSignatureConfig ? 'elevated' : 'tonal'"
-                                :color="file.signers && file.signers.length > 0 ? 'success' : 'primary'"
-                                size="small"
-                                class="signature-config-btn"
-                                :class="{ 'signature-configured': file.signers && file.signers.length > 0 }"
-                              >
-                                <v-icon start size="18">
-                                  {{ file.signers && file.signers.length > 0 ? 'mdi-check-circle' : 'mdi-draw-pen' }}
-                                </v-icon>
-                                <span class="text-caption font-weight-bold">
-                                  {{ file.signers && file.signers.length > 0
-                                    ? `${file.signers.length} Assinante${file.signers.length > 1 ? 's' : ''}`
-                                    : 'Configurar Assinatura'
-                                  }}
-                                </span>
-                                <v-tooltip activator="parent" location="top">
-                                  {{ file.signers && file.signers.length > 0
-                                    ? 'Clique para editar assinantes'
-                                    : 'Clique para configurar quem irá assinar este documento'
-                                  }}
-                                </v-tooltip>
-                              </v-btn>
+                      <v-list-item class="file-item">
+                        <template v-slot:prepend>
+                          <v-icon :color="getFileTypeColor(file.type)" size="24">
+                            {{ getFileIcon(file.type) }}
+                          </v-icon>
+                        </template>
 
-                              <!-- Botão de remover -->
-                              <v-btn
-                                icon="mdi-delete"
-                                size="small"
-                                variant="text"
-                                color="error"
-                                @click="removeFile(index)"
-                              >
-                                <v-tooltip activator="parent" location="top">Remover Arquivo</v-tooltip>
-                              </v-btn>
-                            </div>
-                          </template>
-                        </v-list-item>
+                        <v-list-item-title class="text-body-2">
+                          {{ file.name }}
+                        </v-list-item-title>
 
-                        <!-- Lista de assinantes configurados (sempre visível quando há assinantes) -->
-                        <div
-                          v-if="file.signers && file.signers.length > 0 && !file.showSignatureConfig"
-                          class="signers-summary pa-3"
-                          style="background: #f9fafb; border-left: 3px solid #4caf50;"
-                        >
-                          <div class="d-flex align-center mb-2">
-                            <v-icon size="18" color="success" class="mr-2">mdi-account-check</v-icon>
-                            <span class="text-body-2 font-weight-medium text-success">
-                              Assinantes Configurados ({{ file.signatureType === 'SEQUENTIAL' ? 'Sequencial' : 'Paralelo' }})
-                            </span>
-                          </div>
-                          <v-chip-group column>
-                            <v-chip
-                              v-for="(signerId, signerIndex) in file.signers"
-                              :key="signerId"
+                        <v-list-item-subtitle class="text-caption">
+                          {{ formatFileSize(file.size) }}
+                          <span v-if="file.signers && file.signers.length > 0" class="ml-2 text-success">
+                            • {{ file.signers.length }} assinante(s)
+                          </span>
+                        </v-list-item-subtitle>
+
+                        <template v-slot:append>
+                          <div class="d-flex align-center ga-1">
+                            <v-btn
+                              v-if="file.type === 'application/pdf'"
+                              @click="toggleSignatureConfig(index)"
+                              :color="file.signers && file.signers.length > 0 ? 'success' : 'primary'"
+                              variant="text"
                               size="small"
-                              :prepend-icon="file.signatureType === 'SEQUENTIAL' ? `mdi-numeric-${signerIndex + 1}-circle` : 'mdi-account'"
-                              color="success"
-                              variant="tonal"
+                              icon
                             >
-                              {{ getSignerName(signerId) }}
-                            </v-chip>
-                          </v-chip-group>
+                              <v-icon size="20">
+                                {{ file.signers && file.signers.length > 0 ? 'mdi-account-check' : 'mdi-file-sign' }}
+                              </v-icon>
+                              <v-tooltip activator="parent" location="top">
+                                {{ file.signers && file.signers.length > 0 ? 'Editar assinantes' : 'Configurar assinantes' }}
+                              </v-tooltip>
+                            </v-btn>
+
+                            <v-btn
+                              icon
+                              size="small"
+                              variant="text"
+                              color="error"
+                              @click="removeFile(index)"
+                            >
+                              <v-icon size="20">mdi-delete</v-icon>
+                              <v-tooltip activator="parent" location="top">Remover</v-tooltip>
+                            </v-btn>
+                          </div>
+                        </template>
+                      </v-list-item>
+                    </v-list>
+
+                    <!-- Lista de assinantes configurados (sempre visível quando há assinantes) -->
+                    <div
+                      v-if="file.signers && file.signers.length > 0 && !file.showSignatureConfig"
+                      class="signers-summary pa-3"
+                      style="background: #f9fafb; border-left: 3px solid #4caf50;"
+                    >
+                      <div class="d-flex align-center mb-2">
+                        <v-icon size="18" color="success" class="mr-2">mdi-account-check</v-icon>
+                        <span class="text-body-2 font-weight-medium text-success">
+                          Assinantes Configurados ({{ file.signatureType === 'SEQUENTIAL' ? 'Sequencial' : 'Paralelo' }})
+                        </span>
+                      </div>
+                      <v-chip-group column>
+                        <v-chip
+                          v-for="(signerId, signerIndex) in file.signers"
+                          :key="signerId"
+                          size="small"
+                          :prepend-icon="file.signatureType === 'SEQUENTIAL' ? `mdi-numeric-${signerIndex + 1}-circle` : 'mdi-account'"
+                          color="success"
+                          variant="tonal"
+                        >
+                          {{ getSignerName(signerId) }}
+                        </v-chip>
+                      </v-chip-group>
+                    </div>
+
+                    <!-- Painel de configuração de assinantes (aparece quando expandido) -->
+                    <v-expand-transition>
+                      <div v-if="file.showSignatureConfig" class="signature-config-panel pa-4">
+                        <div class="d-flex align-center justify-space-between mb-4">
+                          <div class="d-flex align-center">
+                            <v-icon color="primary" class="mr-2" size="24">mdi-file-sign</v-icon>
+                            <div>
+                              <h4 class="text-subtitle-1 font-weight-bold">Assinatura Digital</h4>
+                              <p class="text-caption text-medium-emphasis ma-0">Configure quem deve assinar este documento</p>
+                            </div>
+                          </div>
+                          <v-chip
+                            size="small"
+                            :color="stepExecution.step.requiresSignature ? 'error' : 'primary'"
+                            variant="flat"
+                            prepend-icon="mdi-information"
+                          >
+                            {{ stepExecution.step.requiresSignature ? 'Obrigatório' : 'Opcional' }}
+                          </v-chip>
                         </div>
 
-                        <!-- Painel de configuração de assinantes (aparece quando expandido) -->
-                        <v-expand-transition>
-                          <div v-if="file.showSignatureConfig" class="signature-config-panel pa-4" style="background: #f5f5f5; border-top: 1px solid #e0e0e0;">
-                            <div class="d-flex align-center mb-3">
-                              <v-icon color="primary" class="mr-2">mdi-draw-pen</v-icon>
-                              <h4 class="text-subtitle-1 font-weight-bold">Configurar Assinatura Digital</h4>
-                              <v-chip size="x-small" :color="stepExecution.step.requiresSignature ? 'error' : 'info'" class="ml-2">
-                                {{ stepExecution.step.requiresSignature ? 'Obrigatório' : 'Opcional' }}
-                              </v-chip>
-                            </div>
+                        <!-- Tipo de assinatura - Design minimalista -->
+                        <div class="mb-4">
+                          <label class="text-caption font-weight-medium mb-2 d-block text-medium-emphasis">Tipo de Assinatura</label>
+                          <v-btn-toggle
+                            v-model="file.signatureType"
+                            mandatory
+                            divided
+                            variant="outlined"
+                            color="primary"
+                            density="compact"
+                            class="w-100"
+                          >
+                            <v-btn value="SEQUENTIAL" size="small" class="text-none flex-1">
+                              <v-icon start size="18">mdi-order-numeric-ascending</v-icon>
+                              <span class="text-body-2">Sequencial</span>
+                            </v-btn>
+                            <v-btn value="PARALLEL" size="small" class="text-none flex-1">
+                              <v-icon start size="18">mdi-account-multiple</v-icon>
+                              <span class="text-body-2">Paralelo</span>
+                            </v-btn>
+                          </v-btn-toggle>
+                        </div>
 
-                            <!-- Tipo de assinatura -->
-                            <v-radio-group v-model="file.signatureType" label="Tipo de Assinatura" density="compact" class="mb-3">
-                              <v-radio value="SEQUENTIAL">
-                                <template v-slot:label>
-                                  <div>
-                                    <div class="text-body-2 font-weight-medium">Sequencial</div>
-                                    <div class="text-caption text-medium-emphasis">Assinaturas em ordem específica</div>
-                                  </div>
-                                </template>
-                              </v-radio>
-                              <v-radio value="PARALLEL">
-                                <template v-slot:label>
-                                  <div>
-                                    <div class="text-body-2 font-weight-medium">Paralelo</div>
-                                    <div class="text-caption text-medium-emphasis">Qualquer ordem</div>
-                                  </div>
-                                </template>
-                              </v-radio>
-                            </v-radio-group>
-
-                            <!-- Autocomplete de assinantes - MELHORADO com busca por nome e email -->
-                            <v-autocomplete
-                              v-model="file.signers"
-                              :items="availableSigners"
-                              :item-title="getSignerDisplayName"
-                              item-value="id"
-                              label="Selecionar Assinantes"
-                              placeholder="Digite nome ou email para buscar..."
-                              multiple
-                              chips
-                              closable-chips
-                              variant="outlined"
-                              density="comfortable"
-                              @update:model-value="onSignersChanged(index)"
-                              prepend-inner-icon="mdi-account-search"
-                              clearable
-                              :hint="stepExecution.step.requiresSignature ? 'Obrigatório selecionar pelo menos 1 assinante para cada PDF' : 'Opcional - selecione quem deve assinar este documento'"
-                              persistent-hint
-                              :custom-filter="customSignerFilter"
-                            >
-                              <template v-slot:chip="{ props, item }">
-                                <v-chip v-bind="props" size="small" color="primary" class="signer-chip">
-                                  <v-avatar start :color="getAvatarColor(item.raw.name)">
-                                    <span class="text-caption font-weight-bold text-white">
-                                      {{ getInitials(item.raw.name) }}
-                                    </span>
-                                  </v-avatar>
-                                  <span class="ml-1">{{ item.raw.name }}</span>
-                                </v-chip>
+                        <!-- Autocomplete de assinantes - Design Profissional Minimalista -->
+                        <v-autocomplete
+                          v-model="file.signers"
+                          :items="availableSigners"
+                          item-value="id"
+                          item-title="name"
+                          label="Assinantes"
+                          placeholder="Digite para buscar..."
+                          multiple
+                          chips
+                          closable-chips
+                          variant="outlined"
+                          density="compact"
+                          @update:model-value="onSignersChanged(index)"
+                          clearable
+                          :custom-filter="customSignerFilter"
+                          hide-details
+                        >
+                          <template v-slot:chip="{ props, item }">
+                            <v-chip v-bind="props" size="small" class="signer-chip-minimal">
+                              <v-avatar :color="getAvatarColor(item.raw.name)" size="20" class="mr-1">
+                                <span style="font-size: 9px; font-weight: bold;" class="text-white">
+                                  {{ getInitials(item.raw.name) }}
+                                </span>
+                              </v-avatar>
+                              {{ item.raw.name }}
+                            </v-chip>
+                          </template>
+                          <template v-slot:item="{ props, item }">
+                            <v-list-item v-bind="props" :title="null" :subtitle="null" class="signer-item-minimal">
+                              <template v-slot:prepend>
+                                <v-avatar :color="getAvatarColor(item.raw.name)" size="32">
+                                  <span class="text-caption font-weight-bold text-white">
+                                    {{ getInitials(item.raw.name) }}
+                                  </span>
+                                </v-avatar>
                               </template>
-                              <template v-slot:item="{ props, item }">
-                                <v-list-item
-                                  v-bind="props"
-                                  :title="item.raw.name"
-                                  class="signer-list-item"
-                                >
-                                  <template v-slot:prepend>
-                                    <v-avatar :color="getAvatarColor(item.raw.name)" size="40">
-                                      <span class="text-subtitle-2 font-weight-bold text-white">
-                                        {{ getInitials(item.raw.name) }}
-                                      </span>
-                                    </v-avatar>
-                                  </template>
+                              <v-list-item-title class="text-body-2 font-weight-medium">
+                                {{ item.raw.name }}
+                              </v-list-item-title>
+                              <v-list-item-subtitle class="text-caption text-medium-emphasis">
+                                {{ item.raw.email }}
+                              </v-list-item-subtitle>
+                            </v-list-item>
+                          </template>
+                        </v-autocomplete>
 
-                                  <v-list-item-title class="font-weight-medium">
-                                    {{ item.raw.name }}
-                                  </v-list-item-title>
-
-                                  <v-list-item-subtitle class="d-flex align-center mt-1">
-                                    <v-icon size="14" class="mr-1">mdi-email</v-icon>
-                                    <span class="text-caption">{{ item.raw.email }}</span>
-                                  </v-list-item-subtitle>
-                                </v-list-item>
-                              </template>
-                            </v-autocomplete>
-
-                            <!-- Lista ordenável (modo sequencial) -->
-                            <div v-if="file.signatureType === 'SEQUENTIAL' && file.signers && file.signers.length > 0" class="mt-3">
-                              <div class="d-flex align-center mb-2">
-                                <v-icon size="18" class="mr-1">mdi-order-numeric-ascending</v-icon>
-                                <span class="text-body-2 font-weight-medium">Ordem de Assinatura</span>
-                              </div>
-                              <v-list density="compact" class="signature-order-list-compact">
-                                <v-list-item v-for="(signerId, signerIndex) in file.signers" :key="signerId" class="pa-2">
-                                  <template v-slot:prepend>
-                                    <v-avatar color="primary" size="28" class="mr-2">
-                                      <span class="text-caption font-weight-bold">{{ signerIndex + 1 }}</span>
-                                    </v-avatar>
-                                  </template>
-                                  <v-list-item-title class="text-body-2">{{ getSignerName(signerId) }}</v-list-item-title>
-                                  <v-list-item-subtitle class="text-caption">{{ getSignerEmail(signerId) }}</v-list-item-subtitle>
-                                  <template v-slot:append>
-                                    <v-btn-group density="compact" variant="text">
-                                      <v-btn v-if="signerIndex > 0" icon="mdi-arrow-up" size="x-small" @click="moveSignerUpInFile(index, signerIndex)" />
-                                      <v-btn v-if="signerIndex < file.signers.length - 1" icon="mdi-arrow-down" size="x-small" @click="moveSignerDownInFile(index, signerIndex)" />
-                                    </v-btn-group>
-                                  </template>
-                                </v-list-item>
-                              </v-list>
-                            </div>
-
-                            <!-- Resumo (modo paralelo) -->
-                            <div v-else-if="file.signatureType === 'PARALLEL' && file.signers && file.signers.length > 0" class="mt-3">
-                              <v-alert type="info" density="compact" variant="tonal">
-                                <v-icon start size="18">mdi-information</v-icon>
-                                <span class="text-body-2">{{ file.signers.length }} pessoa(s) poderá(ão) assinar em qualquer ordem</span>
-                              </v-alert>
-                            </div>
+                        <!-- Lista ordenável (modo sequencial) - Minimalista -->
+                        <div v-if="file.signatureType === 'SEQUENTIAL' && file.signers && file.signers.length > 0" class="mt-3">
+                          <div class="d-flex align-center mb-2">
+                            <v-icon size="16" class="mr-1">mdi-order-numeric-ascending</v-icon>
+                            <span class="text-caption font-weight-medium">Ordem de Assinatura</span>
                           </div>
-                        </v-expand-transition>
+                          <v-list density="compact" class="signature-order-list-minimal">
+                            <v-list-item v-for="(signerId, signerIndex) in file.signers" :key="signerId" class="px-2 py-1">
+                              <template v-slot:prepend>
+                                <span class="order-number">{{ signerIndex + 1 }}</span>
+                              </template>
+                              <v-list-item-title class="text-body-2">{{ getSignerName(signerId) }}</v-list-item-title>
+                              <v-list-item-subtitle class="text-caption">{{ getSignerEmail(signerId) }}</v-list-item-subtitle>
+                              <template v-slot:append>
+                                <v-btn-group density="compact" variant="text">
+                                  <v-btn v-if="signerIndex > 0" icon="mdi-arrow-up" size="x-small" @click="moveSignerUpInFile(index, signerIndex)" />
+                                  <v-btn v-if="signerIndex < file.signers.length - 1" icon="mdi-arrow-down" size="x-small" @click="moveSignerDownInFile(index, signerIndex)" />
+                                </v-btn-group>
+                              </template>
+                            </v-list-item>
+                          </v-list>
+                        </div>
 
-                        <v-divider v-if="index < attachments.length - 1" />
+                        <!-- Resumo (modo paralelo) -->
+                        <div v-else-if="file.signatureType === 'PARALLEL' && file.signers && file.signers.length > 0" class="mt-3">
+                          <v-alert type="info" density="compact" variant="tonal">
+                            <span class="text-caption">{{ file.signers.length }} pessoa(s) poderá(ão) assinar em qualquer ordem</span>
+                          </v-alert>
+                        </div>
                       </div>
-                    </v-list>
-                  </v-card>
+                    </v-expand-transition>
+
+                    <v-divider v-if="index < attachments.length - 1" />
+                  </div>
                 </div>
-                <v-alert v-if="stepExecution.step.requiresSignature" type="warning" variant="tonal" class="mt-4" rounded="lg"><v-icon start>mdi-draw-pen</v-icon><div class="ml-2"><div class="font-weight-medium">Assinatura Digital Obrigatória</div><div class="mt-1">Todos os documentos PDF devem ser assinados digitalmente.</div></div></v-alert>
               </div>
 
               <div v-if="showReviewField" class="form-section mb-6">
@@ -1587,16 +1566,8 @@ function toggleSignatureConfig(fileIndex) {
 }
 
 function onSignersChanged(fileIndex) {
-  const file = attachments.value[fileIndex]
-
-  // Fechar automaticamente a configuração após selecionar pelo menos 1 assinante
-  if (file.signers && file.signers.length > 0) {
-    // Dar um pequeno delay para o usuário ver a seleção
-    setTimeout(() => {
-      file.showSignatureConfig = false
-      window.showSnackbar?.(`${file.signers.length} assinante${file.signers.length > 1 ? 's' : ''} configurado${file.signers.length > 1 ? 's' : ''} para ${file.name}`, 'success')
-    }, 800)
-  }
+  // Não fecha mais automaticamente - usuário controla quando fechar
+  // A configuração permanece aberta para ajustes
 }
 
 function moveSignerUpInFile(fileIndex, signerIndex) {
@@ -2238,6 +2209,40 @@ onUnmounted(() => {
   background-color: rgba(25, 118, 210, 0.04);
 }
 
+/* Lista de ordem minimalista - sem avatares */
+.signature-order-list-minimal {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.signature-order-list-minimal .v-list-item {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  transition: background-color 0.2s;
+}
+
+.signature-order-list-minimal .v-list-item:last-child {
+  border-bottom: none;
+}
+
+.signature-order-list-minimal .v-list-item:hover {
+  background-color: rgba(25, 118, 210, 0.04);
+}
+
+/* Número de ordem simples - sem avatar circular */
+.order-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgba(var(--v-theme-primary));
+  margin-right: 8px;
+}
+
 .attachment-item {
   transition: all 0.3s ease;
   position: relative;
@@ -2274,6 +2279,104 @@ onUnmounted(() => {
 
 .gap-2 {
   gap: 8px;
+}
+
+/* Painel de configuração de assinatura - Design Profissional */
+.signature-config-panel {
+  background: linear-gradient(to bottom, #fafbfc 0%, #f5f7fa 100%);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0 0 12px 12px;
+}
+
+.signature-type-toggle {
+  width: 100%;
+}
+
+.signature-type-toggle .v-btn {
+  flex: 1 1 0;
+  height: auto !important;
+  padding: 12px 16px !important;
+  border-radius: 8px !important;
+}
+
+.signature-type-toggle .v-btn .v-icon {
+  margin-right: 8px;
+}
+
+/* ============================================================
+   🎨 DESIGN PROFISSIONAL MINIMALISTA
+   ============================================================ */
+
+/* Upload Zone - Área de Upload Limpa */
+.upload-zone {
+  border: 2px dashed rgba(var(--v-theme-primary), 0.3);
+  border-radius: 12px;
+  padding: 40px 24px;
+  text-align: center;
+  cursor: pointer;
+  background: rgba(var(--v-theme-primary), 0.02);
+  transition: all 0.3s ease;
+}
+
+.upload-zone:hover {
+  border-color: rgba(var(--v-theme-primary), 0.6);
+  background: rgba(var(--v-theme-primary), 0.05);
+  transform: translateY(-2px);
+}
+
+.upload-zone:active {
+  transform: translateY(0);
+}
+
+/* File Item - Item de Arquivo Minimalista */
+.file-item {
+  padding: 12px 16px !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  transition: background-color 0.2s ease;
+}
+
+.file-item:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.file-item:last-child {
+  border-bottom: none;
+}
+
+/* Signer Item Minimal - Item de Assinante no Dropdown */
+.signer-item-minimal {
+  padding: 8px 12px !important;
+}
+
+.signer-item-minimal .v-list-item-title {
+  font-weight: 500 !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+  margin-bottom: 2px;
+}
+
+.signer-item-minimal .v-list-item-subtitle {
+  color: rgba(0, 0, 0, 0.6) !important;
+  font-size: 0.75rem !important;
+}
+
+/* Signer Chip Minimal - Chip de Assinante Selecionado */
+.signer-chip-minimal {
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+}
+
+/* Signers Summary - Resumo de Assinantes Configurados */
+.signers-summary {
+  margin-top: 8px;
+  border-radius: 0 0 12px 12px;
+}
+
+/* Files List - Container da Lista de Arquivos */
+.files-list {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
 }
 
 @media (max-width: 768px) {

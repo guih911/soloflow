@@ -56,10 +56,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Token inválido: usuário ou empresa inativos/inexistentes');
     }
 
+    // ✅ Resolve permissões baseadas nos perfis personalizados
     const resolvedPermissions = await this.profilesService.resolveUserPermissions(
       userCompany.userId,
       payload.companyId,
-      payload.role as UserRole,
     );
 
     return {

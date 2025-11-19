@@ -176,9 +176,16 @@
         <!-- ✨ Navigation Items com Ícones Corrigidos -->
         <v-list nav density="comfortable" class="navigation-list">
           <!-- Dashboard -->
-          <v-tooltip :disabled="drawer" location="right" text="Dashboard" content-class="nav-tooltip" open-delay="120">
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'dashboard', action: 'view' } })"
+            :disabled="drawer"
+            location="right"
+            text="Dashboard"
+            content-class="nav-tooltip"
+            open-delay="120"
+          >
             <template #activator="{ props }">
-              <v-list-item 
+              <v-list-item
                 v-bind="props"
                 :to="{ name: 'Dashboard' }"
                 :exact="true"
@@ -194,7 +201,14 @@
           </v-tooltip>
 
           <!-- Criar Processo -->
-          <v-tooltip :disabled="drawer" location="right" text="Criar Processo" content-class="nav-tooltip" open-delay="120">
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'processes', action: 'create' } })"
+            :disabled="drawer"
+            location="right"
+            text="Criar Processo"
+            content-class="nav-tooltip"
+            open-delay="120"
+          >
             <template #activator="{ props }">
               <v-list-item 
                 v-bind="props"
@@ -235,9 +249,16 @@
           </v-tooltip>
 
           <!-- Minhas Tarefas -->
-          <v-tooltip :disabled="drawer" location="right" text="Minhas Tarefas" content-class="nav-tooltip" open-delay="120">
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'tasks', action: 'view' } })"
+            :disabled="drawer"
+            location="right"
+            text="Minhas Tarefas"
+            content-class="nav-tooltip"
+            open-delay="120"
+          >
             <template #activator="{ props }">
-              <v-list-item 
+              <v-list-item
                 v-bind="props"
                 :to="{ name: 'MyTasks' }"
                 class="nav-item"
@@ -257,9 +278,16 @@
           </v-tooltip>
 
           <!-- Meus Processos -->
-          <v-tooltip :disabled="drawer" location="right" text="Meus Processos" content-class="nav-tooltip" open-delay="120">
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'processes', action: 'view' } })"
+            :disabled="drawer"
+            location="right"
+            text="Meus Processos"
+            content-class="nav-tooltip"
+            open-delay="120"
+          >
             <template #activator="{ props }">
-              <v-list-item 
+              <v-list-item
                 v-bind="props"
                 :to="{ name: 'MyProcesses' }"
                 class="nav-item"
@@ -274,7 +302,14 @@
           </v-tooltip>
 
           <!-- Assinaturas Pendentes -->
-          <v-tooltip :disabled="drawer" location="right" text="Assinaturas" content-class="nav-tooltip" open-delay="120">
+          <v-tooltip
+            v-if="canAccess({ permissions: { resource: 'signatures', action: 'view' } })"
+            :disabled="drawer"
+            location="right"
+            text="Assinaturas"
+            content-class="nav-tooltip"
+            open-delay="120"
+          >
             <template #activator="{ props }">
               <v-list-item 
                 v-bind="props"

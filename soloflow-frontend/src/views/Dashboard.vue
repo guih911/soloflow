@@ -307,13 +307,13 @@
               </template>
 
               <v-list-item-title class="text-body-2 font-weight-medium">
-                {{ process.title || process.code }}
+                {{ process.code }} - {{ process.processType.name }}
               </v-list-item-title>
-              
+
               <v-list-item-subtitle class="text-caption">
-                <div>
-                  <v-icon size="12">mdi-file-document-outline</v-icon>
-                  {{ process.processType.name }}
+                <div v-if="process.title">
+                  <v-icon size="12">mdi-text</v-icon>
+                  {{ process.title }}
                 </div>
                 <div class="mt-1">
                   <v-icon size="12">mdi-calendar</v-icon>
@@ -404,7 +404,15 @@ const userPendingTasks = computed(() => {
 
 const userPendingSignatures = computed(() => {
   if (!myTasks.value) return 0
-  return myTasks.value.filter(task => task.step?.requiresSignature === true).length
+
+  // ✅ MESMA LÓGICA DA PÁGINA PendingSignatures.vue
+  // Contar apenas tarefas que TÊM PDFs NÃO ASSINADOS
+  return myTasks.value.filter(task => {
+    const hasPdfAttachments = task.attachments && task.attachments.some(att =>
+      att.mimeType === 'application/pdf' && !att.isSigned
+    )
+    return hasPdfAttachments
+  }).length
 })
 
 const userActiveProcesses = computed(() => {

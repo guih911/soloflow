@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsEnum, Length, IsUUID, IsOptional, IsBoolean, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsEmail, IsEnum, Length, IsUUID, IsOptional, IsBoolean, IsArray, ValidateNested, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 import { UserRole } from '@prisma/client';
 
@@ -6,17 +6,17 @@ export class UserCompanyAssignmentDto {
   @IsUUID()
   companyId: string;
 
+  @IsOptional()
   @IsEnum(UserRole)
-  role: UserRole;
+  role?: UserRole = UserRole.USER; // ✅ Opcional, padrão USER (mantido para compatibilidade de API)
 
   @IsOptional()
   @IsUUID()
   sectorId?: string;
 
-
-  @IsOptional()
   @IsUUID()
-  profileId?: string;
+  profileId: string; // ✅ Obrigatório - Perfil controla TODAS as permissões
+
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
@@ -34,9 +34,11 @@ export class CreateUserCompanyDto {
   @Length(6, 50)
   password: string;
 
-  @IsOptional()
   @IsString()
-  cpf?: string; // CPF para assinatura digital
+  @Matches(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, {
+    message: 'CPF deve estar no formato XXX.XXX.XXX-XX'
+  })
+  cpf: string; // ✅ CPF obrigatório para assinatura digital
 
   @IsOptional()
   @IsEnum(UserRole)

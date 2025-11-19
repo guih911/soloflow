@@ -88,12 +88,12 @@
             </v-sheet>
 
             <v-card-title class="pb-1">
-              {{ process.title || process.processType.name }}
+              {{ process.code }} - {{ process.processType.name }}
             </v-card-title>
 
-            <v-card-subtitle>
-              <v-icon size="16">mdi-file-document-outline</v-icon>
-              {{ process.processType.name }}
+            <v-card-subtitle v-if="process.title && process.title !== 'undefined'">
+              <v-icon size="16">mdi-text</v-icon>
+              {{ process.title }}
             </v-card-subtitle>
 
             <v-card-text class="flex-grow-1">

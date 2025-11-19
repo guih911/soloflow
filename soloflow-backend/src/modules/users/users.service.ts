@@ -7,6 +7,7 @@ import { UpdateUserCompaniesDto } from './dto/update-user-companies.dto';
 import { AssignUserCompanyDto } from './dto/assign-user-company.dto';
 import { Prisma, User, UserCompany, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class UsersService {
@@ -14,9 +15,9 @@ export class UsersService {
 
 
   private async validateProfileForCompany(profileId: string, companyId: string) {
-    const profile = await this.prisma.profile.findUnique({
+    const profile = await this.prisma.profiles.findUnique({
       where: { id: profileId },
-      select: { id: true, companyId: true, name: true },
+      select: { id: true, companyId: true, name: true, isDefault: true },
     });
 
     if (!profile) {
@@ -31,24 +32,26 @@ export class UsersService {
   }
 
   private async upsertUserProfile(tx: Prisma.TransactionClient, params: { userId: string; companyId: string; profileId: string; assignedBy?: string }) {
-    await tx.userProfile.upsert({
+    // Verifica se o perfil já está atribuído ao usuário nesta empresa
+    const existing = await tx.user_profiles.findFirst({
       where: {
-        userId_companyId: {
-          userId: params.userId,
-          companyId: params.companyId,
-        },
-      },
-      create: {
         userId: params.userId,
         companyId: params.companyId,
         profileId: params.profileId,
-        assignedBy: params.assignedBy,
-      },
-      update: {
-        profileId: params.profileId,
-        assignedBy: params.assignedBy,
       },
     });
+
+    if (!existing) {
+      await tx.user_profiles.create({
+        data: {
+          id: randomUUID(),
+          userId: params.userId,
+          companyId: params.companyId,
+          profileId: params.profileId,
+          assignedBy: params.assignedBy,
+        },
+      });
+    }
   }
 
   async create(createUserDto: CreateUserCompanyDto, assignedBy?: string): Promise<any> {
@@ -69,14 +72,6 @@ export class UsersService {
 
     if (createUserDto.companies && createUserDto.companies.length > 0) {
       companiesToAssign = createUserDto.companies;
-    } else if (createUserDto.companyId) {
-      companiesToAssign = [{
-        companyId: createUserDto.companyId,
-        role: createUserDto.role || UserRole.USER,
-        sectorId: createUserDto.sectorId,
-        profileId: undefined,
-        isDefault: createUserDto.isDefault ?? true,
-      }];
     } else {
       throw new BadRequestException('Pelo menos uma empresa deve ser especificada');
     }
@@ -223,9 +218,9 @@ export class UsersService {
                 }
               }
             },
-            profileAssignments: {
+            user_profiles: {
               include: {
-                profile: true,
+                profiles: true,
               }
             }
           }
@@ -246,7 +241,7 @@ export class UsersService {
       createdAt: uc.user.createdAt,
       // Todas as empresas do usuário
       companies: uc.user.userCompanies.map(userComp => {
-        const profileAssignment = uc.user.profileAssignments?.find(pa => pa.companyId === userComp.company.id);
+        const profileAssignment = uc.user.user_profiles?.find(pa => pa.companyId === userComp.company.id);
         return {
           companyId: userComp.company.id,
           companyName: userComp.company.name,
@@ -254,7 +249,7 @@ export class UsersService {
           sector: userComp.sector,
           isDefault: userComp.isDefault,
           profileId: profileAssignment?.profileId || null,
-          profileName: profileAssignment?.profile?.name || null,
+          profileName: profileAssignment?.profiles?.name || null,
         };
       }),
     }));
@@ -271,9 +266,9 @@ export class UsersService {
             sector: true,
           },
         },
-        profileAssignments: {
+        user_profiles: {
           include: {
-            profile: true,
+            profiles: true,
           },
         },
       },
@@ -287,7 +282,7 @@ export class UsersService {
     return {
       ...result,
       companies: user.userCompanies.map((uc) => {
-        const profileAssignment = user.profileAssignments.find(pa => pa.companyId === uc.companyId);
+        const profileAssignment = user.user_profiles.find(pa => pa.companyId === uc.companyId);
         return {
           companyId: uc.company.id,
           companyName: uc.company.name,
@@ -295,7 +290,7 @@ export class UsersService {
           sector: uc.sector,
           isDefault: uc.isDefault,
           profileId: profileAssignment?.profileId || null,
-          profileName: profileAssignment?.profile?.name || null,
+          profileName: profileAssignment?.profiles?.name || null,
         };
       }),
     };
@@ -364,7 +359,7 @@ export class UsersService {
         await tx.userCompany.deleteMany({
           where: { userId: id },
         });
-        await tx.userProfile.deleteMany({
+        await tx.user_profiles.deleteMany({
           where: { userId: id },
         });
 
@@ -492,24 +487,25 @@ export class UsersService {
     });
 
     if (assignDto.profileId) {
-      await this.prisma.userProfile.upsert({
+      // Verifica se o perfil já está atribuído ao usuário nesta empresa
+      const existing = await this.prisma.user_profiles.findFirst({
         where: {
-          userId_companyId: {
-            userId: assignDto.userId,
-            companyId: assignDto.companyId,
-          },
-        },
-        create: {
           userId: assignDto.userId,
           companyId: assignDto.companyId,
           profileId: assignDto.profileId,
-          assignedBy: undefined,
-        },
-        update: {
-          profileId: assignDto.profileId,
-          assignedBy: undefined,
         },
       });
+
+      if (!existing) {
+        await this.prisma.user_profiles.create({
+          data: {
+            id: randomUUID(),
+            userId: assignDto.userId,
+            companyId: assignDto.companyId,
+            profileId: assignDto.profileId,
+          },
+        });
+      }
     }
 
     return created;
@@ -585,8 +581,64 @@ export class UsersService {
       },
     });
 
-    await this.prisma.userProfile.deleteMany({
+    await this.prisma.user_profiles.deleteMany({
       where: { userId, companyId },
+    });
+  }
+
+  /**
+   * Reset de senha (admin pode resetar qualquer usuário)
+   */
+  async resetPassword(userId: string, newPassword: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+  }
+
+  /**
+   * Troca de senha (usuário precisa informar senha atual)
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    // Validar senha atual
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      throw new BadRequestException('Senha atual incorreta');
+    }
+
+    // Verificar se nova senha é diferente da atual
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      throw new BadRequestException('A nova senha deve ser diferente da senha atual');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
     });
   }
 }

@@ -27,13 +27,18 @@ function normalizeProcessTypePermission(permission) {
 }
 
 function normalizeProfile(profile) {
+  // Backend retorna profile_permissions e profile_process_types (nomes das tabelas)
+  // Frontend usa permissions e processTypePermissions (camelCase)
+  const permissions = profile.permissions || profile.profile_permissions || []
+  const processTypePermissions = profile.processTypePermissions || profile.profile_process_types || []
+
   return {
     ...profile,
-    permissions: Array.isArray(profile.permissions)
-      ? profile.permissions.map(normalizePermission)
+    permissions: Array.isArray(permissions)
+      ? permissions.map(normalizePermission)
       : [],
-    processTypePermissions: Array.isArray(profile.processTypePermissions)
-      ? profile.processTypePermissions.map(normalizeProcessTypePermission)
+    processTypePermissions: Array.isArray(processTypePermissions)
+      ? processTypePermissions.map(normalizeProcessTypePermission)
       : [],
     assignments: profile.assignments ?? [],
     createdAt: profile.createdAt ? new Date(profile.createdAt) : null,

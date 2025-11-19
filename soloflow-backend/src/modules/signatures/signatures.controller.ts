@@ -13,6 +13,9 @@ import {
 import { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 import { SignaturesService } from './signatures.service';
 import { SignDocumentSimpleDto } from './dto/sign-document-simple.dto';
 import { CreateSignatureRequirementDto } from './dto/create-signature-requirement.dto';
@@ -20,6 +23,8 @@ import { ValidateSignaturePublicDto } from './dto/validate-signature-public.dto'
 import { IpService } from '../../common/services/ip-service';
 
 @Controller('signatures')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
 export class SignaturesController {
   constructor(
     private readonly signaturesService: SignaturesService,
@@ -30,7 +35,6 @@ export class SignaturesController {
    * Assina um documento (requer autenticação)
    */
   @Post('sign')
-  @UseGuards(JwtAuthGuard)
   async signDocument(@Req() req, @Body() dto: SignDocumentSimpleDto) {
     try {
       // Capturar IP público real e User-Agent automaticamente

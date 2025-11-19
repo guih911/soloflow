@@ -21,6 +21,10 @@ import { UpdateProcessTypeDto } from './dto/update-process-type.dto';
 import { CreateStepDto } from './dto/create-step.dto';
 import { CreateFormFieldDto } from './dto/create-form-field.dto';
 import { UpdateFormFieldDto } from './dto/update-form-field.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 // Interface estendida para updates com versionamento
 interface UpdateProcessTypeWithVersioningDto extends UpdateProcessTypeDto {
@@ -29,6 +33,7 @@ interface UpdateProcessTypeWithVersioningDto extends UpdateProcessTypeDto {
 }
 
 @Controller('process-types')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ProcessTypesController {
   private readonly logger = new Logger(ProcessTypesController.name);
 
@@ -37,6 +42,7 @@ export class ProcessTypesController {
   }
 
   @Post()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() createProcessTypeDto: CreateProcessTypeDto, @Request() req?: any) {
     this.logger.log(`POST /process-types - Creating process type: ${createProcessTypeDto.name}`);
@@ -62,6 +68,7 @@ export class ProcessTypesController {
   }
 
   @Get()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
   async findAll(@Query('companyId') companyId?: string) {
     this.logger.log(`GET /process-types - Finding all process types for company: ${companyId}`);
     
@@ -85,6 +92,7 @@ export class ProcessTypesController {
   }
 
   @Get(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
   async findOne(@Param('id') id: string) {
     this.logger.log(`GET /process-types/${id} - Finding process type`);
     
@@ -112,6 +120,7 @@ export class ProcessTypesController {
   }
 
   @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @HttpCode(HttpStatus.OK)
   async update(
     @Param('id') id: string, 
@@ -162,6 +171,7 @@ export class ProcessTypesController {
   }
 
   @Delete(':id')
+  @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param('id') id: string) {
     this.logger.log(`DELETE /process-types/${id} - Removing process type`);
@@ -194,6 +204,7 @@ export class ProcessTypesController {
   // ==================== FORM FIELDS ENDPOINTS ====================
 
   @Post(':processTypeId/form-fields')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @HttpCode(HttpStatus.CREATED)
   async addFormField(
     @Param('processTypeId') processTypeId: string,
@@ -216,6 +227,7 @@ export class ProcessTypesController {
   }
 
   @Patch('form-fields/:fieldId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async updateFormField(
     @Param('fieldId') fieldId: string,
     @Body() updateFormFieldDto: UpdateFormFieldDto
@@ -237,6 +249,7 @@ export class ProcessTypesController {
   }
 
   @Delete('form-fields/:fieldId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @HttpCode(HttpStatus.NO_CONTENT)
   async removeFormField(@Param('fieldId') fieldId: string) {
     this.logger.log(`DELETE /process-types/form-fields/${fieldId} - Removing form field`);
@@ -257,6 +270,7 @@ export class ProcessTypesController {
   // ==================== STEPS ENDPOINTS ====================
 
   @Post(':processTypeId/steps')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @HttpCode(HttpStatus.CREATED)
   async addStep(
     @Param('processTypeId') processTypeId: string,
@@ -279,6 +293,7 @@ export class ProcessTypesController {
   }
 
   @Patch('steps/:stepId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async updateStep(
     @Param('stepId') stepId: string,
     @Body() updateStepDto: Partial<CreateStepDto>
@@ -300,6 +315,7 @@ export class ProcessTypesController {
   }
 
   @Delete('steps/:stepId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @HttpCode(HttpStatus.NO_CONTENT)
   async removeStep(@Param('stepId') stepId: string) {
     this.logger.log(`DELETE /process-types/steps/${stepId} - Removing step`);
