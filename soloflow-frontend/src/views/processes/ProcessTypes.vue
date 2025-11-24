@@ -224,6 +224,20 @@
 
             <!-- 🔧 Actions aprimoradas -->
             <v-card-actions class="pa-4">
+              <!-- Badge de status -->
+              <v-chip
+                :color="processType.isActive ? 'success' : 'error'"
+                size="small"
+                variant="tonal"
+              >
+                <v-icon start size="16">
+                  {{ processType.isActive ? 'mdi-check-circle' : 'mdi-cancel' }}
+                </v-icon>
+                {{ processType.isActive ? 'Ativo' : 'Inativo' }}
+              </v-chip>
+
+              <v-spacer />
+
               <v-btn
                 variant="text"
                 size="small"
@@ -234,8 +248,6 @@
                 <v-icon start>mdi-pencil</v-icon>
                 Editar
               </v-btn>
-              
-              <v-spacer />
               
               <v-menu>
                 <template v-slot:activator="{ props }">
@@ -249,7 +261,15 @@
                 </template>
                 
                 <v-list>
-                  <v-list-item 
+                  <v-list-item
+                    @click="toggleProcessTypeStatus(processType)"
+                  >
+                    <v-list-item-title>
+                      <v-icon start>{{ processType.isActive ? 'mdi-cancel' : 'mdi-check-circle' }}</v-icon>
+                      {{ processType.isActive ? 'Desativar' : 'Ativar' }}
+                    </v-list-item-title>
+                  </v-list-item>
+                  <v-list-item
                     @click="duplicateProcessType(processType)"
                     :disabled="processType.stepsCount === 0"
                   >
@@ -267,39 +287,12 @@
     </v-row>
 
     <!-- ✨ Paginação -->
-    <div v-if="filteredProcessTypes.length > 0" class="pagination-section mt-8">
-      <v-card elevation="0" class="pagination-card">
-        <v-card-text class="d-flex align-center justify-space-between flex-wrap ga-4 py-4">
-          <div class="pagination-info">
-            <span class="text-body-2 text-medium-emphasis">
-              Mostrando {{ paginationStart }} - {{ paginationEnd }} de {{ filteredProcessTypes.length }} tipos de processo
-            </span>
-          </div>
-
-          <div class="pagination-controls d-flex align-center ga-3">
-            <v-select
-              v-model="itemsPerPage"
-              :items="itemsPerPageOptions"
-              density="compact"
-              variant="outlined"
-              hide-details
-              class="items-per-page-select"
-              label="Por página"
-              style="max-width: 130px;"
-            />
-
-            <v-pagination
-              v-model="currentPage"
-              :length="totalPages"
-              :total-visible="5"
-              rounded="circle"
-              density="comfortable"
-              class="pagination-component"
-            />
-          </div>
-        </v-card-text>
-      </v-card>
-    </div>
+    <PaginationControls
+      v-model:current-page="currentPage"
+      v-model:items-per-page="itemsPerPage"
+      :total-items="filteredProcessTypes.length"
+      item-label="tipos de processo"
+    />
 
     <!-- Estado vazio -->
     <v-card
@@ -385,6 +378,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProcessTypeStore } from '@/stores/processTypes'
 import { useAuthStore } from '@/stores/auth'
+import PaginationControls from '@/components/PaginationControls.vue'
 
 const router = useRouter()
 const processTypeStore = useProcessTypeStore()
@@ -400,7 +394,6 @@ const snackbarColor = ref('success')
 const searchQuery = ref('')
 const currentPage = ref(1)
 const itemsPerPage = ref(12)
-const itemsPerPageOptions = [6, 12, 18, 24, 30]
 
 // Computed
 const loading = computed(() => processTypeStore.loading)
@@ -452,20 +445,6 @@ const filteredProcessTypes = computed(() => {
   }
 
   return result
-})
-
-// ✨ Computed de paginação
-const totalPages = computed(() => {
-  return Math.ceil(filteredProcessTypes.value.length / itemsPerPage.value)
-})
-
-const paginationStart = computed(() => {
-  return filteredProcessTypes.value.length === 0 ? 0 : (currentPage.value - 1) * itemsPerPage.value + 1
-})
-
-const paginationEnd = computed(() => {
-  const end = currentPage.value * itemsPerPage.value
-  return Math.min(end, filteredProcessTypes.value.length)
 })
 
 const paginatedProcessTypes = computed(() => {
@@ -546,6 +525,37 @@ async function duplicateProcessType(processType) {
   } catch (error) {
     console.error('❌ Error duplicating process type:', error)
     showMessage('Erro ao duplicar tipo de processo: ' + (error.message || 'Erro desconhecido'), 'error')
+  } finally {
+    refreshing.value = false
+  }
+}
+
+// Toggle de status ativo/inativo
+async function toggleProcessTypeStatus(processType) {
+  const newStatus = !processType.isActive
+  const action = newStatus ? 'ativar' : 'desativar'
+
+  try {
+    console.log(`${newStatus ? '✅' : '❌'} Toggling process type status:`, processType.name, 'to', newStatus)
+
+    refreshing.value = true
+
+    await processTypeStore.updateProcessType(processType.id, {
+      isActive: newStatus
+    })
+
+    const message = newStatus
+      ? `Tipo de processo "${processType.name}" ativado. Usuários podem criar novas solicitações.`
+      : `Tipo de processo "${processType.name}" desativado. Novas solicitações não poderão ser criadas, mas processos em andamento continuam.`
+
+    showMessage(message, 'success')
+
+    // Atualizar lista
+    await refreshData()
+
+  } catch (error) {
+    console.error(`❌ Error ${action}ing process type:`, error)
+    showMessage(`Erro ao ${action} tipo de processo: ` + (error.message || 'Erro desconhecido'), 'error')
   } finally {
     refreshing.value = false
   }

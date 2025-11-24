@@ -13,7 +13,6 @@
             <v-tab value="basic">Informações Básicas</v-tab>
             <v-tab value="instructions">Instruções e Prazo</v-tab>
             <v-tab value="attachment">Anexos</v-tab>
-          <v-tab value="flow">Fluxo e Condições</v-tab>
           <v-tab v-if="localStepData.type === 'REVIEW'" value="review-config">
             Revisão de Anexos
           </v-tab>
@@ -143,7 +142,7 @@
                   </h3>
                   <v-text-field v-model.number="localStepData.slaDays" label="Prazo em dias" type="number" min="1"
                     max="365" :rules="slaRules" hint="Tempo limite para conclusão desta etapa (1 a 365 dias)"
-                    persistent-hint suffix="dias" />
+                    persistent-hint suffix="dias" required />
                 </v-col>
 
                 <v-col cols="12" md="6">
@@ -259,40 +258,6 @@
                 </template>
               </v-row>
             </v-window-item>
-
-        <v-window-item value="flow">
-          <v-row>
-            <v-col cols="12">
-              <v-card variant="outlined" class="mb-4">
-                <v-card-title class="text-subtitle-1">
-                  Ações disponíveis
-                </v-card-title>
-                <v-card-text>
-                  <v-combobox
-                    v-model="localStepData.actions"
-                    label="Ações disponíveis"
-                    multiple
-                    chips
-                    closable-chips
-                    hint="Digite e pressione Enter para adicionar (ex: aprovar, rejeitar, devolver)"
-                    persistent-hint
-                  />
-                </v-card-text>
-              </v-card>
-            </v-col>
-
-            <v-col cols="12">
-              <StepTransitionEditor
-                v-model="localStepData.flowConditions"
-                :source-step-order="currentStepOrder"
-                :available-steps="availableStepsForTransitions"
-                :available-fields="availableFieldsForConditions"
-                :step-type="localStepData.type"
-                :sectors="sectors"
-              />
-            </v-col>
-          </v-row>
-        </v-window-item>
 
         <v-window-item value="review-config">
           <v-row>
@@ -595,6 +560,79 @@
               <v-col cols="12">
                 <v-textarea v-model="fieldData.helpText" label="Texto de Ajuda" rows="2" />
               </v-col>
+
+              <!-- Opções para Lista Suspensa -->
+              <v-col v-if="fieldData.type === 'DROPDOWN'" cols="12">
+                <v-divider class="my-4" />
+                <div class="d-flex align-center justify-space-between mb-4">
+                  <div>
+                    <h4 class="text-h6 mb-1">Opções da Lista Suspensa</h4>
+                    <p class="text-caption text-medium-emphasis">Configure as opções que aparecerão no campo</p>
+                  </div>
+                  <v-btn
+                    color="primary"
+                    size="small"
+                    prepend-icon="mdi-plus"
+                    variant="elevated"
+                    @click="addDropdownOption"
+                  >
+                    Adicionar Opção
+                  </v-btn>
+                </div>
+
+                <v-alert v-if="!fieldData.options || fieldData.options.length === 0"
+                  type="info"
+                  variant="tonal"
+                  density="compact"
+                  class="mb-3"
+                  icon="mdi-information"
+                >
+                  Clique em "Adicionar Opção" para criar as opções da lista suspensa
+                </v-alert>
+
+                <div v-if="fieldData.options && fieldData.options.length > 0" class="options-container">
+                  <v-card
+                    v-for="(option, idx) in fieldData.options"
+                    :key="idx"
+                    variant="outlined"
+                    class="mb-3 pa-3"
+                  >
+                    <v-row dense align="center">
+                      <v-col cols="12" sm="5">
+                        <v-text-field
+                          v-model="option.label"
+                          label="Texto exibido ao usuário"
+                          density="comfortable"
+                          variant="outlined"
+                          hide-details="auto"
+                          :rules="[v => !!v?.trim() || 'Campo obrigatório']"
+                          prepend-inner-icon="mdi-format-text"
+                        />
+                      </v-col>
+                      <v-col cols="12" sm="5">
+                        <v-text-field
+                          v-model="option.value"
+                          label="Valor interno (identificador)"
+                          density="comfortable"
+                          variant="outlined"
+                          hide-details="auto"
+                          :rules="[v => !!v?.trim() || 'Campo obrigatório']"
+                          prepend-inner-icon="mdi-code-tags"
+                        />
+                      </v-col>
+                      <v-col cols="12" sm="2" class="text-center">
+                        <v-btn
+                          icon="mdi-delete"
+                          size="small"
+                          color="error"
+                          variant="tonal"
+                          @click="removeDropdownOption(idx)"
+                        />
+                      </v-col>
+                    </v-row>
+                  </v-card>
+                </div>
+              </v-col>
             </v-row>
           </v-card-text>
 
@@ -867,6 +905,7 @@ const fileTypes = [
 
 const slaRules = computed(() => {
   return [
+    v => !!v || 'Prazo é obrigatório',
     v => !v || (v >= 1 && v <= 365) || 'Prazo deve estar entre 1 e 365 dias',
     v => !v || Number.isInteger(Number(v)) || 'Prazo deve ser um número inteiro'
   ]
@@ -1005,13 +1044,40 @@ function closeFieldDialog() {
   resetFieldData()
 }
 
+// Dropdown options management
+function addDropdownOption() {
+  if (!fieldData.value.options) {
+    fieldData.value.options = []
+  }
+  fieldData.value.options.push({ label: '', value: '' })
+}
+
+function removeDropdownOption(index) {
+  fieldData.value.options.splice(index, 1)
+}
+
 function saveInputField() {
   if (!fieldValid.value) return
 
+  // Validar opções para DROPDOWN
+  if (fieldData.value.type === 'DROPDOWN') {
+    if (!fieldData.value.options || fieldData.value.options.length === 0) {
+      window.showSnackbar?.('Adicione pelo menos uma opção para a lista suspensa', 'error')
+      return
+    }
+
+    // Validar se todas as opções têm label e value
+    const hasEmptyOptions = fieldData.value.options.some(opt => !opt.label?.trim() || !opt.value?.trim())
+    if (hasEmptyOptions) {
+      window.showSnackbar?.('Todas as opções devem ter texto exibido e valor interno preenchidos', 'error')
+      return
+    }
+  }
+
   const field = {
     ...fieldData.value,
-    tempId: editingFieldIndex.value !== null 
-      ? inputConfig.value.fields[editingFieldIndex.value].tempId 
+    tempId: editingFieldIndex.value !== null
+      ? inputConfig.value.fields[editingFieldIndex.value].tempId
       : Date.now() + Math.random()
   }
 

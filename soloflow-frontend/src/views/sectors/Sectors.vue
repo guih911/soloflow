@@ -132,39 +132,12 @@
     </v-row>
 
     <!-- ✨ Paginação -->
-    <div v-if="filteredSectors.length > 0" class="pagination-section mt-8">
-      <v-card elevation="0" class="pagination-card">
-        <v-card-text class="d-flex align-center justify-space-between flex-wrap ga-4 py-4">
-          <div class="pagination-info">
-            <span class="text-body-2 text-medium-emphasis">
-              Mostrando {{ paginationStart }} - {{ paginationEnd }} de {{ filteredSectors.length }} setores
-            </span>
-          </div>
-
-          <div class="pagination-controls d-flex align-center ga-3">
-            <v-select
-              v-model="itemsPerPage"
-              :items="itemsPerPageOptions"
-              density="compact"
-              variant="outlined"
-              hide-details
-              class="items-per-page-select"
-              label="Por página"
-              style="max-width: 130px;"
-            />
-
-            <v-pagination
-              v-model="currentPage"
-              :length="totalPages"
-              :total-visible="5"
-              rounded="circle"
-              density="comfortable"
-              class="pagination-component"
-            />
-          </div>
-        </v-card-text>
-      </v-card>
-    </div>
+    <PaginationControls
+      v-model:current-page="currentPage"
+      v-model:items-per-page="itemsPerPage"
+      :total-items="filteredSectors.length"
+      item-label="setores"
+    />
 
     <!-- Estado vazio -->
     <v-card
@@ -307,6 +280,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useSectorStore } from '@/stores/sectors'
+import PaginationControls from '@/components/PaginationControls.vue'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -327,7 +301,6 @@ const deletingItem = ref(null)
 // ✨ Estado de paginação
 const currentPage = ref(1)
 const itemsPerPage = ref(12)
-const itemsPerPageOptions = [6, 12, 18, 24, 30]
 
 const form = ref(null)
 const formData = ref({
@@ -358,20 +331,6 @@ const filteredSectors = computed(() => {
   }
 
   return result
-})
-
-// ✨ Computed de paginação
-const totalPages = computed(() => {
-  return Math.ceil(filteredSectors.value.length / itemsPerPage.value)
-})
-
-const paginationStart = computed(() => {
-  return filteredSectors.value.length === 0 ? 0 : (currentPage.value - 1) * itemsPerPage.value + 1
-})
-
-const paginationEnd = computed(() => {
-  const end = currentPage.value * itemsPerPage.value
-  return Math.min(end, filteredSectors.value.length)
 })
 
 const paginatedSectors = computed(() => {

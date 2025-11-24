@@ -69,6 +69,45 @@
               <div v-else class="text-body-2 text-medium-emphasis">
                 Nenhum dado específico foi registrado nesta etapa.
               </div>
+
+              <!-- Anexos da etapa -->
+              <div v-if="stepData.attachments && stepData.attachments.length > 0" class="attachments-section mt-4">
+                <v-divider class="mb-3" />
+                <h5 class="text-subtitle-2 font-weight-bold mb-2 d-flex align-center">
+                  <v-icon size="18" class="mr-2" color="primary">mdi-paperclip</v-icon>
+                  Anexos desta etapa ({{ stepData.attachments.length }})
+                </h5>
+                <v-list density="compact" class="bg-transparent">
+                  <v-list-item
+                    v-for="attachment in stepData.attachments"
+                    :key="attachment.id"
+                    class="attachment-item"
+                  >
+                    <template v-slot:prepend>
+                      <v-icon :color="getFileIconColor(attachment.filename)">
+                        {{ getFileIcon(attachment.filename) }}
+                      </v-icon>
+                    </template>
+                    <v-list-item-title class="text-body-2">
+                      {{ attachment.originalName || attachment.filename }}
+                    </v-list-item-title>
+                    <v-list-item-subtitle class="text-caption">
+                      {{ formatFileSize(attachment.size) }}
+                      <span v-if="attachment.isSigned" class="ml-2">
+                        <v-icon size="14" color="success">mdi-check-decagram</v-icon> Assinado
+                      </span>
+                    </v-list-item-subtitle>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-download"
+                        variant="text"
+                        size="small"
+                        @click="downloadAttachment(attachment)"
+                      />
+                    </template>
+                  </v-list-item>
+                </v-list>
+              </div>
             </div>
           </v-card>
         </v-col>
@@ -111,6 +150,53 @@ function formatTimeAgo(date) {
 
 function formatDate(date) {
   return date ? dayjs(date).format('DD/MM/YYYY HH:mm') : 'Data não informada';
+}
+
+// Funções para anexos
+function getFileIcon(filename) {
+  const ext = filename?.toLowerCase().split('.').pop() || ''
+  const iconMap = {
+    pdf: 'mdi-file-pdf-box',
+    doc: 'mdi-file-word',
+    docx: 'mdi-file-word',
+    xls: 'mdi-file-excel',
+    xlsx: 'mdi-file-excel',
+    jpg: 'mdi-file-image',
+    jpeg: 'mdi-file-image',
+    png: 'mdi-file-image',
+    zip: 'mdi-folder-zip',
+    txt: 'mdi-file-document',
+  }
+  return iconMap[ext] || 'mdi-file'
+}
+
+function getFileIconColor(filename) {
+  const ext = filename?.toLowerCase().split('.').pop() || ''
+  const colorMap = {
+    pdf: 'error',
+    doc: 'primary',
+    docx: 'primary',
+    xls: 'success',
+    xlsx: 'success',
+    jpg: 'warning',
+    jpeg: 'warning',
+    png: 'warning',
+  }
+  return colorMap[ext] || 'grey'
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+function downloadAttachment(attachment) {
+  const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+  const url = `${baseURL}/attachments/${attachment.id}/download`
+  window.open(url, '_blank')
 }
 </script>
 

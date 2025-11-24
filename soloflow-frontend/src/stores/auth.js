@@ -128,6 +128,10 @@ export const useAuthStore = defineStore('auth', () => {
     const { access_token, user: userData } = response.data
 
     console.log('Login response:', response.data)
+    console.log('🔍 DEBUG - userData.permissions:', userData.permissions)
+    console.log('🔍 DEBUG - userData.processTypePermissions:', userData.processTypePermissions)
+    console.log('🔍 DEBUG - userData.profileIds:', userData.profileIds)
+    console.log('🔍 DEBUG - userData.activeCompany:', userData.activeCompany)
 
     if (!access_token || !userData?.id || !userData?.companies?.length) {
       throw new Error('Resposta inválida do servidor')
@@ -136,6 +140,8 @@ export const useAuthStore = defineStore('auth', () => {
     applySession(access_token, userData)
 
     console.log('Login successful, active company:', activeCompany.value?.name)
+    console.log('🔍 DEBUG APÓS applySession - permissions:', permissions.value)
+    console.log('🔍 DEBUG APÓS applySession - profileIds:', profileIds.value)
 
     const redirectPath = sessionStorage.getItem('redirectAfterLogin') || '/dashboard'
     sessionStorage.removeItem('redirectAfterLogin')
@@ -425,6 +431,10 @@ function hasPermission(resource, action) {
 
   let effectivePermissions = permissions.value
 
+  console.log('🔎 hasPermission - Buscando:', { resource: normalizedResource, action: normalizedAction })
+  console.log('🔎 hasPermission - Total de permissões:', effectivePermissions.length)
+  console.log('🔎 hasPermission - Primeira permissão:', effectivePermissions[0])
+
   if (!effectivePermissions.length) {
     if (profileIds.value.length === 0) {
       effectivePermissions = normalizePermissions(fallbackPermissionMatrix[userRole.value] || [])
@@ -433,13 +443,16 @@ function hasPermission(resource, action) {
     }
   }
 
-  return effectivePermissions.some((permission) => {
+  const result = effectivePermissions.some((permission) => {
     const permResource = String(permission.resource || '*').toLowerCase()
     const permAction = String(permission.action || '*').toLowerCase()
 
     return (permResource === '*' || permResource === normalizedResource) &&
       (permAction === '*' || permAction === normalizedAction)
   })
+
+  console.log('🔎 hasPermission - Resultado:', result)
+  return result
 }
 
   function matchesPermissionRequirement(requirement) {

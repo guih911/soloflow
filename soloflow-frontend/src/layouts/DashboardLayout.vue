@@ -629,7 +629,14 @@ function getRoleText(role) {
 }
 
 function canAccess(requirement) {
-  return authStore.canAccessRoute(requirement)
+  const result = authStore.canAccessRoute(requirement)
+  if (!result) {
+    console.log('🚫 Acesso negado para:', requirement)
+    console.log('   📋 Requirement completo:', JSON.stringify(requirement, null, 2))
+    console.log('   ✅ Permissões do usuário:', authStore.permissions.slice(0, 5))
+    console.log('   👤 Role do usuário:', authStore.userRole)
+  }
+  return result
 }
 
 // ✨ Carregar notificações ao montar e quando trocar empresa

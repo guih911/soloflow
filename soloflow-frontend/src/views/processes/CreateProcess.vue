@@ -335,7 +335,7 @@ const formData = ref({})
 
 
 const loadingTypes = computed(() => processTypeStore.loading)
-const processTypes = computed(() => processTypeStore.processTypes)
+const processTypes = computed(() => processTypeStore.processTypes.filter(pt => pt.isActive !== false))
 const preselectedType = computed(() => props.typeId || route.params.typeId)
 const selectedProcessType = computed(() => {
   if (selectedProcessTypeId.value) {

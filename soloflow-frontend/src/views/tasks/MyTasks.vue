@@ -122,48 +122,12 @@
     </div>
 
     <!-- Paginação -->
-    <div v-if="!loading && filteredTasks.length > 0" class="pagination-section">
-      <v-card class="pagination-card">
-        <v-card-text>
-          <v-row align="center" justify="space-between">
-            <!-- Informação de registros -->
-            <v-col cols="12" md="4">
-              <div class="pagination-info text-body-2">
-                Mostrando {{ startItem }} - {{ endItem }} de {{ totalItems }} tarefas
-              </div>
-            </v-col>
-
-            <!-- Controles de paginação -->
-            <v-col cols="12" md="8">
-              <div class="d-flex align-center justify-end pagination-controls">
-                <!-- Itens por página -->
-                <div class="d-flex align-center mr-4">
-                  <span class="text-body-2 mr-2">Por pág.:</span>
-                  <v-select
-                    v-model="itemsPerPage"
-                    :items="itemsPerPageOptions"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    class="items-per-page-select"
-                    style="width: 80px;"
-                  />
-                </div>
-
-                <!-- Componente de paginação -->
-                <v-pagination
-                  v-model="currentPage"
-                  :length="totalPages"
-                  :total-visible="5"
-                  class="pagination-component"
-                  density="comfortable"
-                />
-              </div>
-            </v-col>
-          </v-row>
-        </v-card-text>
-      </v-card>
-    </div>
+    <PaginationControls
+      v-model:current-page="currentPage"
+      v-model:items-per-page="itemsPerPage"
+      :total-items="filteredTasks.length"
+      item-label="tarefas"
+    />
   </div>
 </template>
 
@@ -172,6 +136,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
 import { useProcessTypeStore } from '@/stores/processTypes'
+import PaginationControls from '@/components/PaginationControls.vue'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/pt-br'
@@ -237,23 +202,6 @@ const filteredTasks = computed(() => {
   return tasks.sort((a, b) =>
     new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   )
-})
-
-// Computed de paginação
-const totalItems = computed(() => filteredTasks.value.length)
-
-const totalPages = computed(() => {
-  return Math.ceil(totalItems.value / itemsPerPage.value)
-})
-
-const startItem = computed(() => {
-  if (totalItems.value === 0) return 0
-  return (currentPage.value - 1) * itemsPerPage.value + 1
-})
-
-const endItem = computed(() => {
-  const end = currentPage.value * itemsPerPage.value
-  return end > totalItems.value ? totalItems.value : end
 })
 
 const paginatedTasks = computed(() => {
