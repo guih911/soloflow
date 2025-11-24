@@ -51,6 +51,19 @@ export class CompaniesService {
     return this.prisma.company.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
+      include: {
+        _count: {
+          select: {
+            userCompanies: {
+              where: {
+                user: {
+                  isActive: true,
+                },
+              },
+            },
+          },
+        },
+      },
     });
   }
 

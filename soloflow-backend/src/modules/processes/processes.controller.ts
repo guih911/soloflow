@@ -22,14 +22,10 @@ import { ExecuteStepDto } from './dto/execute-step.dto';
 import { UploadAttachmentDto, ProcessFileUploadDto } from './dto/upload-attachment.dto';
 import { CancelProcessDto } from './dto/cancel-process.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
 import { multerConfig } from '../../config/multer.config';
 
 @Controller('processes')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
+@UseGuards(JwtAuthGuard)
 export class ProcessesController {
   constructor(private readonly processesService: ProcessesService) {}
 
@@ -106,10 +102,12 @@ export class ProcessesController {
     }
 
     return this.processesService.uploadAttachment(
-      stepExecutionId, 
-      file, 
+      stepExecutionId,
+      file,
       uploadDto.description,
-      req.user.id
+      req.user.id,
+      uploadDto.fieldName,
+      uploadDto.isStepFormField === true || uploadDto.isStepFormField === 'true' as any
     );
   }
 

@@ -1,7 +1,9 @@
 <template>
-  <v-container class="pa-8">
-    <v-row justify="center">
-      <v-col cols="12" md="8" lg="6">
+  <v-app>
+    <v-main class="bg-grey-lighten-4">
+      <v-container class="pa-8">
+        <v-row justify="center">
+          <v-col cols="12" md="8" lg="6">
         <!-- Card Principal -->
         <v-card elevation="2">
           <!-- Cabeçalho Profissional -->
@@ -181,15 +183,7 @@
                 <v-list-item-subtitle>{{ result.signature.documentName }}</v-list-item-subtitle>
               </v-list-item>
 
-              <v-list-item v-if="result.signature.reason">
-                <template #prepend>
-                  <v-avatar color="orange" size="40">
-                    <v-icon color="white">mdi-text</v-icon>
-                  </v-avatar>
-                </template>
-                <v-list-item-title class="font-weight-medium">Motivo</v-list-item-title>
-                <v-list-item-subtitle>{{ result.signature.reason }}</v-list-item-subtitle>
-              </v-list-item>
+              
 
               <v-list-item>
                 <template #prepend>
@@ -259,10 +253,7 @@
               Nova Validação
             </v-btn>
             <v-spacer />
-            <v-btn color="primary" variant="elevated" @click="printResult" v-if="result.valid">
-              <v-icon start>mdi-printer</v-icon>
-              Imprimir Comprovante
-            </v-btn>
+            
           </v-card-actions>
         </v-card>
 
@@ -277,9 +268,11 @@
             </div>
           </v-card-text>
         </v-card>
-      </v-col>
-    </v-row>
-  </v-container>
+          </v-col>
+        </v-row>
+      </v-container>
+    </v-main>
+  </v-app>
 </template>
 
 <script setup>

@@ -14,13 +14,9 @@ import { CreateProfileDto } from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AssignProfileDto } from './dto/assign-profile.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
 
 @Controller('profiles')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN, UserRole.MANAGER)
+@UseGuards(JwtAuthGuard)
 export class ProfilesController {
   constructor(private readonly profilesService: ProfilesService) {}
 

@@ -15,4 +15,8 @@ export class CreateUserDto {
   @IsString()
   @IsOptional()
   cpf?: string; // CPF necessário para assinatura digital
+
+  @IsString()
+  @IsOptional()
+  phone?: string; // Telefone do usuário
 }

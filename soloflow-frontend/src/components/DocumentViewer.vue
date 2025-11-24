@@ -88,6 +88,11 @@
                   <div class="text-subtitle-1 font-weight-bold" :style="{ color: `rgb(var(--v-theme-${getStepColor(doc.stepType)}))` }">
                     {{ doc.stepName }}
                   </div>
+                  <!-- ✅ Mostrar nome do campo quando for arquivo do formulário -->
+                  <div v-if="doc.isFormField && doc.formFieldName" class="text-caption text-medium-emphasis mt-1">
+                    <v-icon size="14" class="mr-1">mdi-form-textbox</v-icon>
+                    Campo: {{ doc.formFieldName }}
+                  </div>
                 </div>
 
                 <!-- Nome do PDF -->
@@ -104,10 +109,10 @@
                 </div>
 
                 <!-- Status de Assinatura - Design Profissional -->
-                <div v-if="doc.canSign || (doc.pendingSigners && doc.pendingSigners.length > 0)" class="signature-status-section mt-3">
+                <div v-if="doc.canSign || doc.waitingForSigner || (doc.pendingSigners && doc.pendingSigners.length > 0)" class="signature-status-section mt-3">
                   <v-divider class="mb-3" />
 
-                  <!-- Ação Principal: Assinar (se pode assinar) -->
+                  <!-- Ação Principal: Assinar (se pode assinar AGORA) -->
                   <div v-if="doc.canSign" class="signature-action-primary mb-3">
                     <v-alert
                       type="warning"
@@ -134,6 +139,28 @@
                           <v-icon start size="20">mdi-pen</v-icon>
                           Assinar Agora
                         </v-btn>
+                      </div>
+                    </v-alert>
+                  </div>
+
+                  <!-- Aguardando outro assinante (assinatura sequencial - não é sua vez) -->
+                  <div v-else-if="doc.waitingForSigner" class="signature-waiting-info mb-3">
+                    <v-alert
+                      type="info"
+                      variant="tonal"
+                      border="start"
+                      density="compact"
+                      class="signature-alert"
+                    >
+                      <div class="d-flex align-center">
+                        <v-icon size="20" class="mr-2">mdi-timer-sand</v-icon>
+                        <div>
+                          <div class="text-body-2 font-weight-bold">Aguardando assinatura anterior</div>
+                          <div class="text-caption">
+                            <v-icon size="14" class="mr-1">mdi-account-clock</v-icon>
+                            {{ doc.waitingForSigner }} precisa assinar primeiro
+                          </div>
+                        </div>
                       </div>
                     </v-alert>
                   </div>
@@ -540,14 +567,50 @@ const allDocuments = computed(() => {
   props.process.stepExecutions.forEach(execution => {
     if (execution.attachments && execution.attachments.length > 0) {
       execution.attachments.forEach(attachment => {
+        // ✅ Verificar se é um arquivo de campo do formulário (criação ou etapa)
+        let isFormField = false
+        let isStepFormField = false
+        let formFieldName = null
+        if (attachment.signatureData) {
+          try {
+            const sigData = typeof attachment.signatureData === 'string'
+              ? JSON.parse(attachment.signatureData)
+              : attachment.signatureData
+            // isFormField = campo FILE do formulário de criação do processo
+            // isStepFormField = campo FILE do formulário da etapa
+            if (sigData?.isFormField) {
+              isFormField = true
+              formFieldName = sigData.fieldName || null
+            } else if (sigData?.isStepFormField) {
+              isStepFormField = true
+              formFieldName = sigData.fieldName || null
+            }
+          } catch (e) {
+            // Se não conseguir parsear, continua normalmente
+          }
+        }
         // Buscar requisitos de assinatura pendentes para este anexo
         const pendingSigners = []
         let canSign = false
         let userRequirement = null
+        let waitingForSigner = null // Nome do assinante que o usuário está aguardando (sequencial)
 
-        // Se a etapa requer assinatura, aplicar todos os requisitos a TODOS os anexos
-        if (execution.stepVersion?.requiresSignature && execution.stepVersion?.signatureRequirements) {
-          execution.stepVersion.signatureRequirements.forEach(req => {
+        // Buscar requisitos de assinatura da etapa
+        // NOTA: Todo anexo PDF pode ser assinado se houver requisitos configurados
+        // O backend retorna step (mapeado de stepVersion), então devemos procurar em step primeiro
+        const allSignatureRequirements = execution.step?.signatureRequirements || execution.stepVersion?.signatureRequirements || []
+        const currentUserSectorId = authStore.activeSectorId
+
+        // Filtrar requisitos para este anexo específico OU requisitos globais (attachmentId = null)
+        const signatureRequirements = allSignatureRequirements.filter(req =>
+          !req.attachmentId || req.attachmentId === attachment.id
+        )
+
+        if (signatureRequirements.length > 0) {
+          // Ordenar requisitos por ordem
+          const sortedRequirements = [...signatureRequirements].sort((a, b) => a.order - b.order)
+
+          sortedRequirements.forEach(req => {
             // Verificar se já foi assinado neste anexo para este requisito
             const signatureRecord = attachment.signatureRecords?.find(
               record => record.requirementId === req.id
@@ -557,22 +620,57 @@ const allDocuments = computed(() => {
 
             if (!hasSignature) {
               // Verificar se o usuário atual pode assinar
-              // O usuário só pode assinar se:
-              // 1. É o userId do requisito
-              // 2. Ainda não assinou (não tem registro OU registro está PENDING)
-              if (req.userId === currentUserId) {
+              const isUserResponsible = req.userId === currentUserId
+              const isSectorResponsible = req.sectorId && req.sectorId === currentUserSectorId
+
+              if (isUserResponsible || isSectorResponsible) {
+                // Verificar se é assinatura sequencial e se é a vez do usuário
+                let canSignNow = true
+
+                if (req.type === 'SEQUENTIAL') {
+                  // Verificar se todos os anteriores já assinaram
+                  const previousRequirements = sortedRequirements.filter(r => r.order < req.order)
+                  const allPreviousSigned = previousRequirements.every(prevReq => {
+                    const prevRecord = attachment.signatureRecords?.find(
+                      record => record.requirementId === prevReq.id && record.status === 'COMPLETED'
+                    )
+                    return !!prevRecord
+                  })
+
+                  if (!allPreviousSigned) {
+                    canSignNow = false
+                    // Encontrar quem está na frente na fila
+                    const waitingFor = previousRequirements.find(prevReq => {
+                      const prevRecord = attachment.signatureRecords?.find(
+                        record => record.requirementId === prevReq.id && record.status === 'COMPLETED'
+                      )
+                      return !prevRecord
+                    })
+                    if (waitingFor) {
+                      waitingForSigner = waitingFor.user?.name || waitingFor.sector?.name || 'Assinante anterior'
+                    }
+                  }
+                }
+
                 const isPending = !signatureRecord || signatureRecord.status === 'PENDING'
-                if (isPending) {
+                if (isPending && canSignNow) {
                   canSign = true
                   userRequirement = req
                 }
               } else {
-                // Adicionar à lista de pendentes (apenas outros usuários, não o atual)
+                // Adicionar à lista de pendentes (apenas outros usuários/setores, não o atual)
                 if (req.user) {
                   pendingSigners.push({
                     id: req.userId,
                     name: req.user.name,
                     email: req.user.email,
+                    requirementId: req.id
+                  })
+                } else if (req.sector) {
+                  pendingSigners.push({
+                    id: req.sectorId,
+                    name: `Setor: ${req.sector.name}`,
+                    email: '',
                     requirementId: req.id
                   })
                 }
@@ -581,16 +679,35 @@ const allDocuments = computed(() => {
           })
         }
 
+        // ✅ Definir nome e tipo da etapa baseado na origem do arquivo
+        let docStepName = execution.step?.name || 'Etapa sem nome'
+        let docStepType = execution.step?.type || 'INPUT'
+        let docStepOrder = execution.step?.order || 0
+
+        if (isFormField) {
+          // Arquivo do formulário de CRIAÇÃO do processo
+          docStepName = 'Criação do Processo'
+          docStepType = 'FORM_FIELD'
+          docStepOrder = -1 // Aparece primeiro
+        } else if (isStepFormField) {
+          // Arquivo do formulário da ETAPA - mantém o nome da etapa
+          docStepType = 'STEP_FORM_FIELD'
+        }
+
         docs.push({
           ...attachment,
-          stepName: execution.step?.name || 'Etapa sem nome',
-          stepType: execution.step?.type || 'INPUT',
-          stepOrder: execution.step?.order || 0,
+          stepName: docStepName,
+          stepType: docStepType,
+          stepOrder: docStepOrder,
           executionId: execution.id,
           signatureCount: attachment.signatureRecords?.filter(r => r.status === 'COMPLETED').length || 0,
           pendingSigners,
           canSign,
-          userRequirement
+          userRequirement,
+          waitingForSigner, // Nome de quem o usuário está aguardando (sequencial)
+          isFormField: isFormField || isStepFormField, // Ambos são campos de formulário
+          isStepFormField, // Flag específico para campo de etapa
+          formFieldName
         })
       })
     }
@@ -658,7 +775,9 @@ function getStepColor(stepType) {
     APPROVAL: 'orange',
     UPLOAD: 'purple',
     REVIEW: 'teal',
-    SIGNATURE: 'red'
+    SIGNATURE: 'red',
+    FORM_FIELD: 'indigo', // Cor para campos do formulário de criação
+    STEP_FORM_FIELD: 'cyan' // Cor para campos do formulário de etapa
   }
   return colors[stepType] || 'grey'
 }
@@ -669,7 +788,9 @@ function getStepIcon(stepType) {
     APPROVAL: 'mdi-check-decagram',
     UPLOAD: 'mdi-upload',
     REVIEW: 'mdi-eye-check',
-    SIGNATURE: 'mdi-draw-pen'
+    SIGNATURE: 'mdi-draw-pen',
+    FORM_FIELD: 'mdi-file-document-edit', // Ícone para campos do formulário de criação
+    STEP_FORM_FIELD: 'mdi-form-textbox' // Ícone para campos do formulário de etapa
   }
   return icons[stepType] || 'mdi-help-circle'
 }
@@ -680,7 +801,9 @@ function getStepTypeText(stepType) {
     APPROVAL: 'Aprovação',
     UPLOAD: 'Upload de Arquivos',
     REVIEW: 'Revisão',
-    SIGNATURE: 'Assinatura'
+    SIGNATURE: 'Assinatura',
+    FORM_FIELD: 'Dados do Processo', // Texto para campos do formulário de criação
+    STEP_FORM_FIELD: 'Campo da Etapa' // Texto para campos do formulário de etapa
   }
   return types[stepType] || stepType
 }

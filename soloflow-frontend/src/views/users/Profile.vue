@@ -41,7 +41,7 @@
                     persistent-hint
                   />
                 </v-col>
-                <v-col cols="12" md="4">
+                <v-col cols="12" md="6">
                   <v-text-field
                     v-model="profileData.cpf"
                     label="CPF"
@@ -50,17 +50,13 @@
                     v-mask="'###.###.###-##'"
                   />
                 </v-col>
-                <v-col cols="12" md="4">
-                  <v-text-field
-                    v-model="profileData.rg"
-                    label="RG (Opcional)"
-                  />
-                </v-col>
-                <v-col cols="12" md="4">
+                <v-col cols="12" md="6">
                   <v-text-field
                     v-model="profileData.phone"
                     label="Telefone (Opcional)"
-                    v-mask="'(##) #####-####'"
+                    placeholder="Digite apenas números"
+                    @blur="formatPhoneField"
+                    @input="onPhoneInput"
                   />
                 </v-col>
               </v-row>
@@ -339,6 +335,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import api from '@/services/api'
 
 const authStore = useAuthStore()
 
@@ -360,7 +357,6 @@ const profileData = ref({
   name: '',
   email: '',
   cpf: '',
-  rg: '',
   phone: ''
 })
 
@@ -426,12 +422,43 @@ watch(() => authStore.user, (newUser) => {
       name: newUser.name,
       email: newUser.email,
       cpf: newUser.cpf || '',
-      rg: newUser.rg || '',
       phone: newUser.phone || ''
+    }
+    // Formatar telefone se já existir
+    if (profileData.value.phone) {
+      profileData.value.phone = formatPhone(profileData.value.phone)
     }
     originalProfileData.value = { ...profileData.value }
   }
 }, { immediate: true })
+
+// Funções para formatação de telefone
+function formatPhone(value) {
+  if (!value) return ''
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 0) return ''
+  if (digits.length <= 2) {
+    return `(${digits}`
+  } else if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+  } else if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  } else {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`
+  }
+}
+
+function formatPhoneField() {
+  if (profileData.value.phone) {
+    profileData.value.phone = formatPhone(profileData.value.phone)
+  }
+}
+
+function onPhoneInput(event) {
+  const value = event.target?.value || profileData.value.phone || ''
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  profileData.value.phone = digits
+}
 
 // Métodos auxiliares
 function getUserInitials(name) {
@@ -518,15 +545,24 @@ async function switchToCompany(companyId) {
 
 async function loadUserStats() {
   try {
-    // Aqui você pode fazer chamadas para APIs específicas para buscar estatísticas
-    // Por enquanto, vamos simular
-    userStats.value = {
-      pendingTasks: 5,
-      completedTasks: 23,
-      createdProcesses: 8
+    const response = await api.get('/processes/stats/dashboard')
+    if (response.data?.userStats) {
+      userStats.value = response.data.userStats
+    } else {
+      // Fallback para formato antigo
+      userStats.value = {
+        pendingTasks: response.data?.pendingTasks || 0,
+        completedTasks: 0,
+        createdProcesses: 0
+      }
     }
   } catch (error) {
     console.error('Error loading user stats:', error)
+    userStats.value = {
+      pendingTasks: 0,
+      completedTasks: 0,
+      createdProcesses: 0
+    }
   }
 }
 

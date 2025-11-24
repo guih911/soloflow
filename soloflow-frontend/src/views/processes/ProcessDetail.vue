@@ -511,13 +511,84 @@ const formattedFormData = computed(() => {
 
   Object.keys(formData).forEach(key => {
     const field = formFields.find(f => f.name === key)
-    const label = field?.label || key
-    const value = formData[key]
+
+    // Mostrar apenas campos que existem no formFields (vieram do CreateProcess)
+    if (!field) return
+
+    const label = field.label || key
+    let value = formData[key]
 
     // Pular campos de arquivo (serão mostrados separadamente)
-    if (field?.type === 'FILE') return
+    if (field.type === 'FILE') return
 
     if (value !== null && value !== undefined && value !== '') {
+      // Formatar data para PT-BR (dia/mês/ano)
+      if (field?.type === 'DATE' && value) {
+        try {
+          const date = new Date(value)
+          if (!isNaN(date.getTime())) {
+            value = date.toLocaleDateString('pt-BR', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric'
+            })
+          }
+        } catch (e) {
+          console.warn('Erro ao formatar data:', e)
+        }
+      }
+
+      // Formatar valores monetários
+      if (field?.type === 'CURRENCY' && value) {
+        try {
+          const numValue = typeof value === 'string' ? parseFloat(value) : value
+          if (!isNaN(numValue)) {
+            value = numValue.toLocaleString('pt-BR', {
+              style: 'currency',
+              currency: 'BRL'
+            })
+          }
+        } catch (e) {
+          console.warn('Erro ao formatar valor monetário:', e)
+        }
+      }
+
+      // Corrigir SELECT/DROPDOWN que vem como objeto JSON ou objeto direto
+      if (field?.type === 'SELECT' || field?.type === 'DROPDOWN') {
+        // Se for objeto direto com label/value
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          value = value.label || value.value || JSON.stringify(value)
+        }
+        // Se for string JSON (inclui casos com aspas extras)
+        else if (typeof value === 'string') {
+          try {
+            // Tentar parse direto primeiro
+            let parsed = JSON.parse(value)
+            // Se ainda for string (JSON duplamente escapado), fazer parse novamente
+            if (typeof parsed === 'string') {
+              try {
+                parsed = JSON.parse(parsed)
+              } catch (e2) {
+                // Ignorar se segundo parse falhar
+              }
+            }
+            if (parsed && typeof parsed === 'object' && (parsed.label || parsed.value)) {
+              value = parsed.label || parsed.value
+            }
+          } catch (e) {
+            // Se não for JSON válido, tentar extrair valor via regex
+            // Padrão: { "label": "Sim", "value": "Sim" } ou {"label":"Sim","value":"Sim"}
+            const labelMatch = value.match(/"label"\s*:\s*"([^"]+)"/)
+            const valueMatch = value.match(/"value"\s*:\s*"([^"]+)"/)
+            if (labelMatch) {
+              value = labelMatch[1]
+            } else if (valueMatch) {
+              value = valueMatch[1]
+            }
+          }
+        }
+      }
+
       formatted[label] = Array.isArray(value) ? value.join(', ') : value
     }
   })
@@ -663,6 +734,14 @@ function getStepTypeIcon(type) {
 }
 
 function getResponsibleName(execution) {
+  // Se a etapa está atribuída ao criador do processo
+  if (execution.step.assignedToCreator) {
+    // Se temos informação do criador do processo, mostra o nome
+    if (process.value?.createdBy?.name) {
+      return `${process.value.createdBy.name} (Criador)`
+    }
+    return 'Criador do Processo'
+  }
   if (execution.step.assignedToUser) {
     return execution.step.assignedToUser.name
   }
@@ -717,10 +796,18 @@ function canExecuteStep(execution) {
     'Nome da Etapa': step.name,
     'ID Setor da Etapa': stepSectorId,
     'ID Usuário da Etapa': stepUserId,
+    'assignedToCreator': step.assignedToCreator,
+    'ID Criador do Processo': process.value?.createdBy?.id,
     'ID Usuário Logado': user?.id,
     'ID Setor do Usuário': authStore.activeSectorId,
     'É Admin?': authStore.isAdmin,
   })
+
+  // ✅ Verificar se a etapa é atribuída ao criador do processo
+  if (step.assignedToCreator && process.value?.createdBy?.id === user?.id) {
+    console.warn('✅ PODE EXECUTAR: Etapa atribuída ao criador e usuário é o criador do processo')
+    return true
+  }
 
   // Verificar se é responsável direto
   if (stepUserId && stepUserId === user?.id) {
@@ -749,12 +836,30 @@ function canExecuteStep(execution) {
 }
 
 // ✅ MÉTODOS PARA ANEXOS DAS ETAPAS
+// Filtra anexos que NÃO são de campos do formulário (isFormField)
+function getStepRealAttachments(execution) {
+  if (!execution.attachments) return []
+  return execution.attachments.filter(att => {
+    if (att.signatureData) {
+      try {
+        const sigData = typeof att.signatureData === 'string'
+          ? JSON.parse(att.signatureData)
+          : att.signatureData
+        if (sigData?.isFormField) {
+          return false // Excluir - é anexo do formulário de criação
+        }
+      } catch (e) { /* ignora */ }
+    }
+    return true
+  })
+}
+
 function hasStepAttachments(execution) {
-  return execution.attachments && execution.attachments.length > 0
+  return getStepRealAttachments(execution).length > 0
 }
 
 function getStepAttachmentsCount(execution) {
-  return execution.attachments ? execution.attachments.length : 0
+  return getStepRealAttachments(execution).length
 }
 
 function formatDate(date) {

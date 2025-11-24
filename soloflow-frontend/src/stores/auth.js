@@ -26,29 +26,18 @@ export const useAuthStore = defineStore('auth', () => {
   const userRole = computed(() => activeCompany.value?.role || null)
   const activeCompanyId = computed(() => activeCompany.value?.companyId || null)
   const activeSectorId = computed(() => activeCompany.value?.sector?.id || null)
+  // ⚠️ REMOVIDO: Fallback de permissões por role
+  // O sistema agora é 100% baseado em Perfis de Acesso
+  // Se o usuário não tiver perfil com permissões, ele não terá acesso a nada
   const fallbackPermissionMatrix = {
-    ADMIN: [{ resource: '*', action: '*' }],
-  MANAGER: [
-      { resource: 'dashboard', action: 'view' },
-      { resource: 'processes', action: 'manage' },
-      { resource: 'profiles', action: 'manage' },
-      { resource: 'users', action: 'manage' },
-      { resource: 'sectors', action: 'manage' },
-      { resource: 'processTypes', action: 'manage' },
-      { resource: 'reports', action: 'view' },
-    ],
-    USER: [
-      { resource: 'dashboard', action: 'view' },
-      { resource: 'processes', action: 'create' },
-      { resource: 'tasks', action: 'execute' },
-      { resource: 'processes', action: 'view' },
-    ],
+    // Fallback removido - sistema agora é 100% baseado em perfis
   }
 
-  const isAdmin = computed(() => hasPermission('*', '*') || userRole.value === 'ADMIN')
-  const isManager = computed(() => hasPermission('users', 'manage') || userRole.value === 'MANAGER')
+  // ⚠️ CORRIGIDO: Verificar apenas permissões, não mais roles
+  const isAdmin = computed(() => hasPermission('*', '*'))
+  const isManager = computed(() => hasPermission('users', 'manage'))
   const canManageUsers = computed(() => hasPermission('users', 'manage'))
-  const canManageProcessTypes = computed(() => hasPermission('processTypes', 'manage'))
+  const canManageProcessTypes = computed(() => hasPermission('process_types', 'manage'))
 
   function normalizePermissions(rawPermissions = []) {
     return rawPermissions
@@ -69,6 +58,55 @@ export const useAuthStore = defineStore('auth', () => {
         canCreate: permission.canCreate ?? false,
         canExecute: permission.canExecute ?? false,
       }))
+  }
+
+  /**
+   * ✅ Encontra a primeira rota disponível baseada nas permissões do usuário
+   * Segue EXATAMENTE a ordem do menu lateral (sidebar) no DashboardLayout.vue
+   */
+  function findFirstAvailableRouteFromPermissions() {
+    // Ordem de prioridade EXATA do menu lateral (sidebar)
+    const routePriority = [
+      // === SEÇÃO PRINCIPAL ===
+      { path: '/dashboard', resource: 'dashboard', action: 'view' },
+      { path: '/processes', resource: 'processes', action: 'create' },
+      { path: '/manage-processes', resource: 'processes', action: 'manage' },
+      { path: '/my-tasks', resource: 'tasks', action: 'view' },
+      { path: '/my-processes', resource: 'processes', action: 'view' },
+      { path: '/signatures/pending', resource: 'signatures', action: 'view' },
+      // === SEÇÃO CONFIGURAÇÕES ===
+      { path: '/process-types', resource: 'process_types', action: 'manage' },
+      { path: '/sectors', resource: 'sectors', action: 'manage' },
+      { path: '/users', resource: 'users', action: 'manage' },
+      { path: '/profiles', resource: 'profiles', action: 'manage' },
+      { path: '/companies', resource: 'companies', action: 'manage' },
+      // === FALLBACK FINAL ===
+      { path: '/profile', resource: null, action: null }, // Sempre disponível
+    ]
+
+    console.log('🔍 findFirstAvailableRoute - Buscando primeira rota disponível...')
+    console.log('🔍 findFirstAvailableRoute - Total de permissões:', permissions.value.length)
+
+    for (const route of routePriority) {
+      // Rotas sem requisito de permissão (sempre disponíveis)
+      if (!route.resource) {
+        console.log('🔍 findFirstAvailableRoute - Fallback para rota sem permissão:', route.path)
+        return route.path
+      }
+
+      // Verificar se tem permissão para a rota
+      const hasPerm = hasPermission(route.resource, route.action)
+      console.log(`🔍 findFirstAvailableRoute - Verificando ${route.resource}:${route.action} = ${hasPerm}`)
+
+      if (hasPerm) {
+        console.log('🔍 findFirstAvailableRoute - ✅ Primeira rota com permissão:', route.path)
+        return route.path
+      }
+    }
+
+    // Fallback final - perfil do usuário
+    console.log('🔍 findFirstAvailableRoute - Nenhuma permissão encontrada, indo para /profile')
+    return '/profile'
   }
 
   function applySession(accessToken, userData) {
@@ -143,8 +181,25 @@ export const useAuthStore = defineStore('auth', () => {
     console.log('🔍 DEBUG APÓS applySession - permissions:', permissions.value)
     console.log('🔍 DEBUG APÓS applySession - profileIds:', profileIds.value)
 
-    const redirectPath = sessionStorage.getItem('redirectAfterLogin') || '/dashboard'
+    // ✅ CORRIGIDO: Verificar permissão do dashboard antes de redirecionar
+    // Se o usuário não tiver permissão de dashboard, encontrar primeira rota disponível
+    const savedRedirect = sessionStorage.getItem('redirectAfterLogin')
     sessionStorage.removeItem('redirectAfterLogin')
+
+    let redirectPath = savedRedirect || '/dashboard'
+
+    // Se o destino for dashboard, verificar se tem permissão
+    if (redirectPath === '/dashboard' || redirectPath === '/') {
+      const hasDashboardPermission = hasPermission('dashboard', 'view')
+      console.log('🔍 DEBUG - hasDashboardPermission:', hasDashboardPermission)
+
+      if (!hasDashboardPermission) {
+        // Encontrar a primeira rota disponível baseada nas permissões
+        redirectPath = findFirstAvailableRouteFromPermissions()
+        console.log('🔍 DEBUG - Sem permissão de dashboard, redirecionando para:', redirectPath)
+      }
+    }
+
     router.push(redirectPath)
 
     window.showSnackbar?.('Login realizado com sucesso!', 'success')
@@ -201,7 +256,9 @@ export const useAuthStore = defineStore('auth', () => {
 
     applySession(access_token, newUser)
 
-    router.push('/dashboard')
+    // ✅ CORRIGIDO: Usar primeira rota disponível após registro
+    const firstRoute = findFirstAvailableRouteFromPermissions()
+    router.push(firstRoute)
     window.showSnackbar?.('Conta criada com sucesso!', 'success')
 
     return response.data
@@ -241,8 +298,10 @@ export const useAuthStore = defineStore('auth', () => {
 
     window.showSnackbar?.(`Empresa alterada para: ${activeCompany.value.name}`, 'success')
 
-    if (router.currentRoute.value.path !== '/dashboard') {
-      router.push('/dashboard')
+    // ✅ CORRIGIDO: Usar primeira rota disponível ao trocar de empresa
+    const firstRoute = findFirstAvailableRouteFromPermissions()
+    if (router.currentRoute.value.path !== firstRoute) {
+      router.push(firstRoute)
     }
 
     return response.data
@@ -314,7 +373,9 @@ export const useAuthStore = defineStore('auth', () => {
     return true
   } catch (err) {
     console.error('Refresh token error:', err)
-    logout()
+    // NÃO faz logout aqui - apenas retorna false
+    // O logout só deve acontecer quando o usuário clicar em sair
+    // ou quando o interceptor detectar 401 em uma requisição real
     return false
   }
 }
@@ -382,8 +443,13 @@ export const useAuthStore = defineStore('auth', () => {
         companies: companies.value?.length,
       })
 
-      refreshToken().catch(() => {
-        console.warn('Stored token is invalid, user needs to login again')
+      // Tenta refresh em background - não faz logout se falhar
+      // O interceptor de 401 no api.js vai tratar tokens expirados
+      refreshToken().catch((err) => {
+        console.warn('Token refresh failed, will retry on next request:', err.message)
+        // NÃO faz logout aqui - deixa o usuário continuar
+        // Se o token estiver realmente expirado, o backend vai retornar 401
+        // e o interceptor vai redirecionar para login
       })
     } catch (error) {
       console.error('Error parsing stored auth data:', error)
@@ -400,7 +466,7 @@ export const useAuthStore = defineStore('auth', () => {
   manage_companies: { resource: 'companies', action: 'manage' },
   manage_users: { resource: 'users', action: 'manage' },
   manage_sectors: { resource: 'sectors', action: 'manage' },
-  manage_process_types: { resource: 'processtypes', action: 'manage' },
+  manage_process_types: { resource: 'process_types', action: 'manage' },
   manage_profiles: { resource: 'profiles', action: 'manage' },
   manage_processes: { resource: 'processes', action: 'manage' },
   view_all_processes: { resource: 'processes', action: 'view' },
@@ -435,12 +501,10 @@ function hasPermission(resource, action) {
   console.log('🔎 hasPermission - Total de permissões:', effectivePermissions.length)
   console.log('🔎 hasPermission - Primeira permissão:', effectivePermissions[0])
 
+  // ⚠️ REMOVIDO: Não usar mais fallback baseado em role
+  // Sistema 100% baseado em perfis - se não tem permissões, não tem acesso
   if (!effectivePermissions.length) {
-    if (profileIds.value.length === 0) {
-      effectivePermissions = normalizePermissions(fallbackPermissionMatrix[userRole.value] || [])
-    } else {
-      effectivePermissions = []
-    }
+    effectivePermissions = []
   }
 
   const result = effectivePermissions.some((permission) => {
@@ -476,6 +540,7 @@ function hasPermission(resource, action) {
   }
 function canAccessProcessType(processTypeId, capability = 'view') {
   const normalizedCapability = String(capability || 'view').toLowerCase()
+
   const candidates = processTypePermissions.value.length
     ? processTypePermissions.value
     : [{
@@ -574,7 +639,7 @@ function canAccessProcessType(processTypeId, capability = 'view') {
     error.value = null
     
     try {
-      await api.patch('/auth/change-password', passwordData)
+      await api.patch('/users/me/change-password', passwordData)
       window.showSnackbar?.('Senha alterada com sucesso!', 'success')
     } catch (err) {
       error.value = err.response?.data?.message || 'Erro ao alterar senha'

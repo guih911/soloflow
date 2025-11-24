@@ -75,7 +75,7 @@
                 <div class="d-flex align-center mb-2">
                   <v-icon size="20" class="mr-2">mdi-account-group</v-icon>
                   <span class="text-body-2">
-                    {{ company._count?.users || 0 }} usuários
+                    {{ company._count?.userCompanies || 0 }} usuários
                   </span>
                 </div>
                 <div class="d-flex align-center">

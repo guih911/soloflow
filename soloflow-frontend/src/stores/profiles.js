@@ -103,6 +103,16 @@ export const useProfileStore = defineStore('profiles', () => {
     try {
       const response = await api.post('/profiles', payload)
       const profile = normalizeProfile(response.data)
+
+      // ✅ Se o novo perfil é padrão, desmarcar os outros perfis da mesma empresa
+      if (profile.isDefault) {
+        profiles.value.forEach((p) => {
+          if (p.id !== profile.id && p.companyId === profile.companyId) {
+            p.isDefault = false
+          }
+        })
+      }
+
       profiles.value.push(profile)
       return profile
     } catch (err) {
@@ -121,6 +131,16 @@ export const useProfileStore = defineStore('profiles', () => {
     try {
       const response = await api.patch(`/profiles/${id}`, payload)
       const profile = normalizeProfile(response.data)
+
+      // ✅ Se o perfil atualizado é padrão, desmarcar os outros perfis da mesma empresa
+      if (profile.isDefault) {
+        profiles.value.forEach((p) => {
+          if (p.id !== profile.id && p.companyId === profile.companyId) {
+            p.isDefault = false
+          }
+        })
+      }
+
       const index = profiles.value.findIndex((item) => item.id === id)
       if (index !== -1) {
         profiles.value[index] = profile

@@ -1,26 +1,34 @@
 <template>
   <v-dialog :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" max-width="900"
     persistent>
-    <v-card>
-      <v-card-title>
-        {{ editingIndex !== null ? 'Editar' : 'Nova' }} Etapa
+    <v-card class="step-dialog-card">
+      <v-card-title class="d-flex align-center py-4 px-6 bg-primary">
+        <v-icon class="mr-3" color="white">mdi-debug-step-over</v-icon>
+        <span class="text-white font-weight-medium">{{ editingIndex !== null ? 'Editar' : 'Nova' }} Etapa</span>
       </v-card-title>
-      <v-divider />
 
       <v-form ref="stepForm" v-model="stepValid">
-        <v-card-text>
-          <v-tabs v-model="tab" class="mb-4">
-            <v-tab value="basic">Informações Básicas</v-tab>
-            <v-tab value="instructions">Instruções e Prazo</v-tab>
-            <v-tab value="attachment">Anexos</v-tab>
-          <v-tab v-if="localStepData.type === 'REVIEW'" value="review-config">
-            Revisão de Anexos
-          </v-tab>
-          <v-tab v-if="localStepData.type === 'INPUT'" value="input-config">
-            Formulário da Etapa
-          </v-tab>
-          <v-tab v-if="localStepData.requiresSignature || localStepData.type === 'SIGNATURE'" value="signature-config">
-            Assinaturas Digitais
+        <v-card-text class="pa-6">
+          <v-tabs v-model="tab" class="mb-6" color="primary" slider-color="primary">
+            <v-tab value="basic">
+              <v-icon start size="18">mdi-information</v-icon>
+              Informações Básicas
+            </v-tab>
+            <v-tab value="instructions">
+              <v-icon start size="18">mdi-text-box</v-icon>
+              Instruções e Prazo
+            </v-tab>
+            <v-tab value="attachment">
+              <v-icon start size="18">mdi-paperclip</v-icon>
+              Anexos
+            </v-tab>
+            <v-tab v-if="localStepData.type === 'REVIEW'" value="review-config">
+              <v-icon start size="18">mdi-file-search</v-icon>
+              Revisão de Anexos
+            </v-tab>
+            <v-tab v-if="localStepData.type === 'INPUT'" value="input-config">
+              <v-icon start size="18">mdi-form-textbox</v-icon>
+              Formulário da Etapa
             </v-tab>
           </v-tabs>
 
@@ -36,8 +44,7 @@
                     { title: 'Entrada de Dados', value: 'INPUT' },
                     { title: 'Aprovação', value: 'APPROVAL' },
                     { title: 'Upload de Arquivo', value: 'UPLOAD' },
-                    { title: 'Revisão', value: 'REVIEW' },
-                    { title: 'Assinatura', value: 'SIGNATURE' }
+                    { title: 'Revisão', value: 'REVIEW' }
                   ]" item-title="title" item-value="value" label="Tipo de Etapa" :rules="[v => !!v || 'Tipo é obrigatório']"
                     required />
                 </v-col>
@@ -45,24 +52,33 @@
                   <v-textarea v-model="localStepData.description" label="Descrição" rows="2" />
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-select v-model="responsibleType" :items="['user', 'sector']" label="Tipo de Responsável"
-                    @update:modelValue="onResponsibleTypeChange">
+                  <v-select
+                    v-model="responsibleType"
+                    :items="responsibleTypeOptions"
+                    item-title="title"
+                    item-value="value"
+                    label="Tipo de Responsável"
+                    @update:modelValue="onResponsibleTypeChange"
+                  >
                     <template v-slot:item="{ item, props }">
-                      <v-list-item v-bind="props">
+                      <v-list-item v-bind="props" :title="undefined" :subtitle="undefined">
                         <template v-slot:prepend>
-                          <v-icon>
-                            {{ item === 'user' ? 'mdi-account' : 'mdi-office-building' }}
-                          </v-icon>
+                          <v-icon :color="item.raw.color">{{ item.raw.icon }}</v-icon>
                         </template>
-                        <v-list-item-title>
-                          {{ item === 'user' ? 'Usuário' : 'Setor' }}
-                        </v-list-item-title>
+                        <v-list-item-title>{{ item.raw.title }}</v-list-item-title>
+                        <v-list-item-subtitle class="text-caption">{{ item.raw.description }}</v-list-item-subtitle>
                       </v-list-item>
+                    </template>
+                    <template v-slot:selection="{ item }">
+                      <div class="d-flex align-center">
+                        <v-icon :color="item.raw.color" size="20" class="mr-2">{{ item.raw.icon }}</v-icon>
+                        <span>{{ item.raw.title }}</span>
+                      </div>
                     </template>
                   </v-select>
                 </v-col>
                 <v-col cols="12" md="6">
-                  <!-- Autocomplete aprimorado para usuário -->
+                  <!-- Autocomplete para usuário -->
                   <v-autocomplete
                     v-if="responsibleType === 'user'"
                     v-model="localStepData.assignedToUserId"
@@ -72,11 +88,10 @@
                     label="Usuário Responsável"
                     placeholder="Digite nome ou email..."
                     :custom-filter="customUserFilter"
-                    variant="outlined"
                     clearable
                   >
                     <template v-slot:item="{ props, item }">
-                      <v-list-item v-bind="props" :title="null" :subtitle="null">
+                      <v-list-item v-bind="props" :title="undefined" :subtitle="undefined">
                         <template v-slot:prepend>
                           <v-avatar :color="getAvatarColor(item.raw.name)" size="36">
                             <span class="text-caption font-weight-bold text-white">
@@ -104,6 +119,7 @@
                     </template>
                   </v-autocomplete>
 
+                  <!-- Select para setor -->
                   <v-select
                     v-else-if="responsibleType === 'sector'"
                     v-model="localStepData.assignedToSectorId"
@@ -111,13 +127,19 @@
                     item-title="name"
                     item-value="id"
                     label="Setor Responsável"
-                    variant="outlined"
                     clearable
                   />
-                </v-col>
-                <v-col cols="12">
-                  <v-switch v-model="localStepData.requiresSignature" label="Requer assinatura digital" color="primary"
-                    hint="O usuário deverá assinar digitalmente os documentos" persistent-hint />
+
+                  <!-- Info para Criador do Processo -->
+                  <v-alert
+                    v-else-if="responsibleType === 'creator'"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                  >
+                    <v-icon start size="18">mdi-account-plus</v-icon>
+                    A tarefa será atribuída automaticamente ao usuário que criou o processo.
+                  </v-alert>
                 </v-col>
               </v-row>
             </v-window-item>
@@ -262,7 +284,7 @@
         <v-window-item value="review-config">
           <v-row>
             <v-col cols="12">
-              <v-card variant="outlined" class="mb-4">
+              <v-card variant="flat" class="mb-4 card-soft-border">
                 <v-card-title class="d-flex align-center">
                   <v-icon start color="primary">mdi-note-text</v-icon>
                   Registro da Revisão
@@ -319,7 +341,7 @@
             </v-col>
 
             <v-col cols="12">
-              <v-card>
+              <v-card variant="flat" class="card-soft-border">
                 <v-card-title class="d-flex align-center">
                   <v-icon start color="primary">mdi-file-search</v-icon>
                   Reutilização de Anexos
@@ -368,7 +390,7 @@
                     Estes campos são independentes do formulário principal do processo.
                   </p>
 
-                  <v-card variant="outlined" class="mb-4">
+                  <v-card variant="flat" class="mb-4 card-soft-border">
                     <v-card-title class="text-subtitle-1 d-flex align-center justify-space-between">
                       <span>
                         <v-icon start color="primary">mdi-form-textbox</v-icon>
@@ -421,88 +443,18 @@
               </v-row>
             </v-window-item>
 
-            <v-window-item value="signature-config">
-              <v-row>
-                <v-col cols="12">
-                  <h3 class="text-h6 mb-4 d-flex align-center">
-                    <v-icon color="primary" class="mr-2">mdi-draw-pen</v-icon>
-                    Configuração de Assinaturas Digitais
-                  </h3>
-                  <p class="text-body-2 text-medium-emphasis mb-4">
-                    Configure quem deve assinar os documentos desta etapa e em qual ordem.
-                    As assinaturas serão feitas com certificados digitais ICP-Brasil tipo A1.
-                  </p>
-
-                  <v-card variant="outlined" class="mb-4">
-                    <v-card-title class="text-subtitle-1 d-flex align-center justify-space-between">
-                      <span>
-                        <v-icon start color="primary">mdi-account-group</v-icon>
-                        Assinantes Configurados ({{ signatureConfig.requirements.length }})
-                      </span>
-                      <v-btn
-                        color="primary"
-                        size="small"
-                        @click="openSignatureRequirementsDialog"
-                        prepend-icon="mdi-plus"
-                      >
-                        Gerenciar Assinantes
-                      </v-btn>
-                    </v-card-title>
-
-                    <v-card-text v-if="signatureConfig.requirements.length === 0" class="text-center py-6">
-                      <v-icon size="48" color="grey-lighten-1">mdi-file-sign</v-icon>
-                      <p class="text-body-1 text-grey mt-2">Nenhum assinante configurado</p>
-                      <p class="text-body-2 text-grey">
-                        Clique em "Gerenciar Assinantes" para adicionar assinantes
-                      </p>
-                    </v-card-text>
-
-                    <v-list v-else lines="two" class="py-0">
-                      <template v-for="(req, index) in sortedSignatureRequirements" :key="req.tempId || index">
-                        <v-list-item>
-                          <template #prepend>
-                            <v-avatar :color="req.type === 'SEQUENTIAL' ? 'primary' : 'secondary'" size="36">
-                              <span class="text-h6">{{ req.order }}</span>
-                            </v-avatar>
-                          </template>
-
-                          <v-list-item-title class="font-weight-medium">
-                            {{ getSignerDisplayName(req) }}
-                            <v-chip
-                              size="x-small"
-                              :color="req.type === 'SEQUENTIAL' ? 'primary' : 'secondary'"
-                              class="ml-2"
-                            >
-                              {{ req.type === 'SEQUENTIAL' ? 'Sequencial' : 'Paralelo' }}
-                            </v-chip>
-                            <v-chip v-if="req.isRequired" size="x-small" color="error" class="ml-1">
-                              Obrigatório
-                            </v-chip>
-                          </v-list-item-title>
-
-                          <v-list-item-subtitle>
-                            {{ req.description || 'Assinatura digital do documento' }}
-                          </v-list-item-subtitle>
-                        </v-list-item>
-                        <v-divider v-if="index < signatureConfig.requirements.length - 1" />
-                      </template>
-                    </v-list>
-                  </v-card>
-                </v-col>
-              </v-row>
-            </v-window-item>
           </v-window>
         </v-card-text>
 
         <v-divider />
 
-        <v-card-actions>
+        <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="close">
+          <v-btn variant="text" @click="close" class="mr-2">
             Cancelar
           </v-btn>
-          <v-btn color="primary" variant="elevated" :disabled="!stepValid" @click="save">
-            {{ editingIndex !== null ? 'Salvar' : 'Adicionar' }}
+          <v-btn color="primary" variant="elevated" :disabled="!stepValid" @click="save" prepend-icon="mdi-check">
+            {{ editingIndex !== null ? 'Salvar Alterações' : 'Adicionar Etapa' }}
           </v-btn>
         </v-card-actions>
       </v-form>
@@ -760,6 +712,30 @@ const fieldTypes = [
   { title: 'Arquivo', value: 'FILE' }
 ]
 
+const responsibleTypeOptions = [
+  {
+    value: 'creator',
+    title: 'Criador do Processo',
+    icon: 'mdi-account-plus',
+    color: 'purple',
+    description: 'Atribuído automaticamente a quem iniciou o processo'
+  },
+  {
+    value: 'user',
+    title: 'Usuário Específico',
+    icon: 'mdi-account',
+    color: 'blue',
+    description: 'Selecione um usuário específico'
+  },
+  {
+    value: 'sector',
+    title: 'Setor',
+    icon: 'mdi-office-building',
+    color: 'teal',
+    description: 'Qualquer usuário do setor pode executar'
+  }
+]
+
 function resolveStepOrder(step, index) {
   if (step?.order) return step.order
   return index + 1
@@ -886,13 +862,49 @@ const availableFieldsForConditions = computed(() => {
   return fields
 })
 
+// Opções de campos de arquivo para reutilização em etapas de revisão
 const reviewAttachmentOptions = computed(() => {
-  return orderedSteps.value
-    .filter(step => step.order < currentStepOrder.value && (step.allowAttachment || step.type === 'UPLOAD'))
-    .map(step => ({
-      title: `${step.order}. ${step.name}`,
-      value: step.order
-    }))
+  const options = []
+
+  // Campos FILE do formulário principal
+  if (Array.isArray(props.formFields)) {
+    props.formFields
+      .filter(f => f.type === 'FILE')
+      .forEach(field => {
+        options.push({
+          title: `Formulário: ${field.label || field.name}`,
+          value: JSON.stringify({ source: 'form', fieldName: field.name })
+        })
+      })
+  }
+
+  // Campos FILE de etapas anteriores (do conditions.fields de cada etapa)
+  orderedSteps.value
+    .filter(step => step.order < currentStepOrder.value)
+    .forEach(step => {
+      // Campos FILE definidos no conditions da etapa
+      const stepConditions = toObject(step.conditions, {})
+      if (Array.isArray(stepConditions.fields)) {
+        stepConditions.fields
+          .filter(f => f.type === 'FILE')
+          .forEach(field => {
+            options.push({
+              title: `${step.order}. ${step.name}: ${field.label || field.name}`,
+              value: JSON.stringify({ sourceStep: step.order, fieldName: field.name })
+            })
+          })
+      }
+
+      // Etapas de UPLOAD ou com allowAttachment - opção "todos os anexos"
+      if (step.allowAttachment || step.type === 'UPLOAD') {
+        options.push({
+          title: `${step.order}. ${step.name} (todos os anexos)`,
+          value: JSON.stringify({ sourceStep: step.order })
+        })
+      }
+    })
+
+  return options
 })
 
 const fileTypes = [
@@ -979,9 +991,10 @@ function getFieldTypeText(type) {
   return field?.title || type
 }
 
-function onResponsibleTypeChange() {
+function onResponsibleTypeChange(newType) {
   localStepData.value.assignedToUserId = null
   localStepData.value.assignedToSectorId = null
+  localStepData.value.assignedToCreator = newType === 'creator'
 }
 
 // Funções para assinaturas
@@ -1195,7 +1208,14 @@ watch(() => props.modelValue, (isOpen) => {
       localStepData.value.slaDays = Math.ceil(props.stepData.slaHours / 24)
     }
 
-    responsibleType.value = props.stepData.assignedToUserId ? 'user' : 'sector'
+    // Determinar o tipo de responsável baseado nos dados
+    if (props.stepData.assignedToCreator) {
+      responsibleType.value = 'creator'
+    } else if (props.stepData.assignedToUserId) {
+      responsibleType.value = 'user'
+    } else {
+      responsibleType.value = 'sector'
+    }
 
     if (localStepData.value.type === 'INPUT') {
       inputConfig.value = {
@@ -1209,12 +1229,21 @@ watch(() => props.modelValue, (isOpen) => {
       requirements: normalizedSignatures
     }
 
+    // Carregar seleções de reutilização de anexos no novo formato
     reviewAttachmentSelection.value = normalizedReuse
-      .filter(item => item && item.type === 'attachment' && item.sourceStep)
-      .map(item => item.sourceStep)
+      .filter(item => item && item.type === 'attachment')
+      .map(item => {
+        if (item.source === 'form') {
+          return JSON.stringify({ source: 'form', fieldName: item.fieldName })
+        }
+        if (item.fieldName) {
+          return JSON.stringify({ sourceStep: item.sourceStep, fieldName: item.fieldName })
+        }
+        return JSON.stringify({ sourceStep: item.sourceStep })
+      })
   } else {
     localStepData.value = getEmptyStepData()
-    responsibleType.value = 'sector'
+    responsibleType.value = 'creator'  // Padrão: Criador do Processo
     inputConfig.value = { fields: [] }
     signatureConfig.value = { requirements: [] }
     reviewAttachmentSelection.value = []
@@ -1297,10 +1326,18 @@ watch(reviewAttachmentSelection, (selected) => {
   const existing = Array.isArray(localStepData.value.reuseData)
     ? localStepData.value.reuseData.filter(item => item?.type !== 'attachment')
     : []
-  const attachments = selected.map(order => ({
-    type: 'attachment',
-    sourceStep: order
-  }))
+  // Converter seleções JSON de volta para objetos de reutilização
+  const attachments = selected.map(jsonStr => {
+    try {
+      const config = JSON.parse(jsonStr)
+      return {
+        type: 'attachment',
+        ...config
+      }
+    } catch {
+      return { type: 'attachment', sourceStep: jsonStr }
+    }
+  })
   localStepData.value.reuseData = [...existing, ...attachments]
 })
 
@@ -1366,6 +1403,34 @@ function customUserFilter(itemText, queryText, item) {
 </script>
 
 <style scoped>
+.step-dialog-card {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.card-soft-border {
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px;
+}
+
+.step-dialog-card :deep(.v-field) {
+  border-radius: 8px;
+}
+
+.step-dialog-card :deep(.v-field--variant-outlined .v-field__outline__start),
+.step-dialog-card :deep(.v-field--variant-outlined .v-field__outline__end),
+.step-dialog-card :deep(.v-field--variant-outlined .v-field__outline__notch::before),
+.step-dialog-card :deep(.v-field--variant-outlined .v-field__outline__notch::after) {
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.step-dialog-card :deep(.v-field--focused .v-field__outline__start),
+.step-dialog-card :deep(.v-field--focused .v-field__outline__end),
+.step-dialog-card :deep(.v-field--focused .v-field__outline__notch::before),
+.step-dialog-card :deep(.v-field--focused .v-field__outline__notch::after) {
+  border-color: rgb(var(--v-theme-primary));
+}
+
 .v-expansion-panel-title {
   font-size: 0.875rem;
 }
@@ -1373,5 +1438,15 @@ function customUserFilter(itemText, queryText, item) {
 .v-card-title {
   font-size: 1rem;
   font-weight: 500;
+}
+
+:deep(.v-tabs) {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:deep(.v-tab) {
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: normal;
 }
 </style>

@@ -70,10 +70,79 @@
               </div>
             </div>
 
+            <!-- Seção de Documentos do Processo para etapas de REVISÃO -->
+            <div v-if="stepExecution.step.type === 'REVIEW' && processDocuments.length > 0" class="form-section mb-6">
+              <div class="section-header mb-4">
+                <h3 class="text-subtitle-1 font-weight-bold d-flex align-center">
+                  <v-icon color="teal" class="mr-2">mdi-file-document-multiple</v-icon>
+                  Documentos para Revisão
+                  <v-chip size="x-small" color="teal" variant="tonal" class="ml-2">
+                    {{ processDocuments.length }}
+                  </v-chip>
+                </h3>
+                <p class="text-caption text-medium-emphasis mt-1">
+                  Documentos das etapas anteriores selecionadas para revisão
+                </p>
+              </div>
+
+              <div class="documents-review-list">
+                <div
+                  v-for="(doc, index) in processDocuments"
+                  :key="doc.id || index"
+                  class="document-review-item"
+                >
+                  <div class="d-flex align-center">
+                    <v-avatar :color="getFileTypeColor(doc.mimeType)" size="44" class="mr-3">
+                      <v-icon color="white" size="22">{{ getFileIcon(doc.mimeType) }}</v-icon>
+                    </v-avatar>
+                    <div class="flex-grow-1">
+                      <div class="text-body-2 font-weight-medium">{{ doc.originalName }}</div>
+                      <div class="text-caption text-medium-emphasis d-flex align-center ga-2">
+                        <span class="d-flex align-center">
+                          <v-icon size="12" class="mr-1">mdi-debug-step-over</v-icon>
+                          Etapa {{ doc.stepOrder }}: {{ doc.fieldLabel }}
+                        </span>
+                        <span>•</span>
+                        <span>{{ formatFileSize(doc.size) }}</span>
+                        <template v-if="doc.isSigned">
+                          <span>•</span>
+                          <v-chip size="x-small" color="success" variant="tonal">
+                            <v-icon start size="10">mdi-check</v-icon>
+                            Assinado
+                          </v-chip>
+                        </template>
+                      </div>
+                    </div>
+                    <div class="d-flex align-center ga-1">
+                      <v-btn
+                        size="small"
+                        variant="tonal"
+                        color="primary"
+                        @click="viewProcessDocument(doc)"
+                      >
+                        <v-icon start size="16">mdi-eye</v-icon>
+                        Visualizar
+                      </v-btn>
+                      <v-btn
+                        icon
+                        size="small"
+                        variant="text"
+                        color="grey-darken-1"
+                        @click="downloadProcessDocument(doc)"
+                      >
+                        <v-icon>mdi-download</v-icon>
+                        <v-tooltip activator="parent" location="top">Baixar</v-tooltip>
+                      </v-btn>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <v-form ref="form" v-model="valid" class="execution-form">
               <div v-if="stepExecution.step.type === 'INPUT'" class="form-section mb-2">
-                <v-row v-if="stepFormFields.length > 0">
-                  <v-col v-for="field in stepFormFields" :key="field.name" :cols="getFieldCols(field)">
+                <v-row v-if="stepFormFields.length > 0" dense>
+                  <v-col v-for="field in stepFormFields" :key="field.name" :cols="getFieldCols(field)" class="pa-2">
                     <!-- Campo especial para arquivo -->
                     <template v-if="field.type === 'FILE'">
                       <div class="file-field-container" style="position: relative;">
@@ -204,7 +273,7 @@
                 </div>
 
                 <!-- Upload Area - Minimalista -->
-                <div class="upload-zone mb-4" @click="$refs.fileInput.click()">
+                <div class="upload-zone mb-4" @click="fileInput?.click()">
                   <input
                     ref="fileInput"
                     type="file"
@@ -631,6 +700,96 @@ const stepFormFields = computed(() => {
   }
 })
 
+// Documentos do processo para etapas de REVIEW (baseado em reuseData configurado)
+const processDocuments = computed(() => {
+  if (!process.value || !stepExecution.value?.step) return []
+
+  const docs = []
+  const seenIds = new Set()
+  const step = stepExecution.value.step
+
+  if (step.reuseData) {
+    try {
+      const reuseConfig = typeof step.reuseData === 'string'
+        ? JSON.parse(step.reuseData)
+        : step.reuseData
+
+      if (Array.isArray(reuseConfig)) {
+        reuseConfig.forEach((config) => {
+          if (config.type === 'attachment') {
+            // Anexos do formulário principal (primeira etapa/criação)
+            if (config.source === 'form') {
+              const firstStep = process.value?.stepExecutions?.find(
+                exec => exec.step.order === 1
+              )
+              if (firstStep?.attachments?.length > 0) {
+                firstStep.attachments.forEach(att => {
+                  if (seenIds.has(att.id)) return
+
+                  // Filtrar por campo específico se configurado
+                  if (config.fieldName) {
+                    const sigData = att.signatureData
+                      ? (typeof att.signatureData === 'string' ? JSON.parse(att.signatureData) : att.signatureData)
+                      : {}
+                    const attFieldName = sigData.fieldName || sigData.sourceFieldName || ''
+                    if (attFieldName !== config.fieldName) return
+                  }
+
+                  seenIds.add(att.id)
+                  docs.push({
+                    id: att.id,
+                    originalName: att.originalName || 'Arquivo',
+                    size: att.size || 0,
+                    mimeType: att.mimeType || 'application/octet-stream',
+                    fieldLabel: 'Formulário',
+                    stepOrder: 1,
+                    isSigned: att.isSigned || false
+                  })
+                })
+              }
+            } else {
+              // Anexos de etapas específicas
+              const sourceStep = process.value?.stepExecutions?.find(
+                exec => exec.step.order === config.sourceStep
+              )
+
+              if (sourceStep?.attachments?.length > 0) {
+                sourceStep.attachments.forEach(att => {
+                  if (seenIds.has(att.id)) return
+
+                  // Se fieldName foi especificado, filtrar por ele
+                  if (config.fieldName) {
+                    const sigData = att.signatureData
+                      ? (typeof att.signatureData === 'string' ? JSON.parse(att.signatureData) : att.signatureData)
+                      : {}
+                    const attFieldName = sigData.fieldName || sigData.sourceFieldName || ''
+                    if (attFieldName !== config.fieldName) return
+                  }
+
+                  seenIds.add(att.id)
+                  docs.push({
+                    id: att.id,
+                    originalName: att.originalName || 'Arquivo',
+                    size: att.size || 0,
+                    mimeType: att.mimeType || 'application/octet-stream',
+                    fieldLabel: sourceStep.step.name,
+                    stepOrder: sourceStep.step.order,
+                    isSigned: att.isSigned || false
+                  })
+                })
+              }
+            }
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Error parsing reuseData for processDocuments:', error)
+    }
+  }
+
+  return docs
+})
+
 const availableActions = computed(() => {
   if (!stepExecution.value?.step.actions) return []
   try {
@@ -760,9 +919,11 @@ const previousStepsData = computed(() => {
       return {
         id: exec.id,
         stepName: exec.step.name,
+        stepOrder: exec.step.order,
         completedAt: exec.endTime,
         userName: exec.completedByUser?.name || 'Sistema',
-        data: labeledData
+        data: labeledData,
+        attachments: exec.attachments || []
       }
     })
 })
@@ -903,19 +1064,42 @@ const isCommentRequired = computed(() => {
 
 const allowedFileTypes = computed(() => {
   const types = stepExecution.value?.step.allowedFileTypes
-  if (!types || (Array.isArray(types) && types.length === 0) || types === '[]') {
+  console.log('🔍 allowedFileTypes - raw types:', types)
+
+  // Se não tem tipos definidos, retornar tipos padrão
+  if (!types || types === '[]' || types === '' || types === 'null') {
+    console.log('✅ Sem tipos definidos, usando DEFAULT_FILE_TYPES')
     return DEFAULT_FILE_TYPES
   }
+
   try {
     if (typeof types === 'string') {
       const parsed = JSON.parse(types)
       if (Array.isArray(parsed)) {
-        return parsed.length > 0 ? parsed.join(',') : DEFAULT_FILE_TYPES
+        if (parsed.length === 0) {
+          console.log('✅ Array vazio após parse, usando DEFAULT_FILE_TYPES')
+          return DEFAULT_FILE_TYPES
+        }
+        const joined = parsed.join(',')
+        console.log('✅ Array parseado e juntado:', joined)
+        return joined
       }
+      console.log('✅ String não-array retornada:', types)
       return types
     }
-    return Array.isArray(types) ? (types.length > 0 ? types.join(',') : DEFAULT_FILE_TYPES) : DEFAULT_FILE_TYPES
-  } catch {
+    if (Array.isArray(types)) {
+      if (types.length === 0) {
+        console.log('✅ Array vazio direto, usando DEFAULT_FILE_TYPES')
+        return DEFAULT_FILE_TYPES
+      }
+      const joined = types.join(',')
+      console.log('✅ Array direto juntado:', joined)
+      return joined
+    }
+    console.log('✅ Tipo não reconhecido, usando DEFAULT_FILE_TYPES')
+    return DEFAULT_FILE_TYPES
+  } catch (error) {
+    console.warn('⚠️ Erro ao processar allowedFileTypes:', error)
     return DEFAULT_FILE_TYPES
   }
 })
@@ -988,11 +1172,9 @@ function getFieldInputType(type) {
 function getFieldCols(field) {
   switch (field.type) {
     case 'TEXTAREA':
-      return 12
-    case 'CHECKBOX':
-      return 12
+      return 12  // Largura completa (uma linha inteira)
     default:
-      return { cols: 12, md: 6 }
+      return 6  // 2 campos por linha em desktop (incluindo FILE)
   }
 }
 
@@ -1171,6 +1353,43 @@ function formatFileSize(bytes) {
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+function viewProcessDocument(doc) {
+  // Usar o modal de preview existente
+  selectedAttachment.value = {
+    id: doc.id,
+    originalName: doc.originalName,
+    mimeType: doc.mimeType,
+    size: doc.size
+  }
+  showPreview.value = true
+}
+
+async function downloadProcessDocument(doc) {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+  const token = localStorage.getItem('token')
+
+  try {
+    const response = await fetch(`${API_URL}/attachments/${doc.id}/download`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+
+    if (!response.ok) throw new Error('Erro ao baixar documento')
+
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = doc.originalName || 'documento'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Erro ao baixar documento:', error)
+    window.showSnackbar?.('Erro ao baixar documento', 'error')
+  }
 }
 
 function formatDate(date) { 
@@ -1425,23 +1644,39 @@ function viewFileField(field) {
 }
 
 async function handleFileSelect(event) {
+  console.log('📁 handleFileSelect chamado')
+  console.log('📁 event.target.files:', event.target.files)
+
   const files = Array.from(event.target.files)
+  console.log('📁 Total de arquivos:', files.length)
+
   for (const file of files) {
+    console.log('📁 Processando arquivo:', file.name, 'Tamanho:', file.size, 'Tipo:', file.type)
+
     if (file.size > 10 * 1024 * 1024) {
+      console.warn('⚠️ Arquivo muito grande:', file.name)
       window.showSnackbar?.(`Arquivo ${file.name} muito grande (máx: 10MB)`, 'error')
       continue
     }
+
+    console.log('📁 allowedFileTypes.value:', allowedFileTypes.value)
+
     if (allowedFileTypes.value !== '*') {
       const fileExt = '.' + file.name.split('.').pop().toLowerCase()
       const allowedExts = allowedFileTypes.value.split(',').map(t => t.trim())
+      console.log('📁 fileExt:', fileExt)
+      console.log('📁 allowedExts:', allowedExts)
+      console.log('📁 file.type:', file.type)
+
       if (!allowedExts.includes(file.type) && !allowedExts.includes(fileExt)) {
+        console.warn('⚠️ Tipo de arquivo não permitido:', file.name)
         window.showSnackbar?.(`Tipo de arquivo ${file.name} não permitido`, 'error')
         continue
       }
     }
 
     // Adicionar arquivo com configurações de assinatura
-    attachments.value.push({
+    const newAttachment = {
       file,
       name: file.name,
       size: file.size,
@@ -1451,8 +1686,13 @@ async function handleFileSelect(event) {
       showSignatureConfig: false,
       signatureType: 'SEQUENTIAL',
       signers: []
-    })
+    }
+
+    console.log('✅ Adicionando arquivo:', newAttachment)
+    attachments.value.push(newAttachment)
+    console.log('✅ Total de attachments:', attachments.value.length)
   }
+
   event.target.value = ''
   if (files.length > 0) {
     window.showSnackbar?.(`${files.length} arquivo(s) adicionado(s)`, 'success')
@@ -1674,7 +1914,7 @@ async function executeStep() {
       }
     }
     
-    // Upload dos arquivos de campos FILE
+    // Upload dos arquivos de campos FILE (marcados como isStepFormField para não aparecer em assinaturas)
     const fieldFileUploads = {}
     for (const field of stepFormFields.value) {
       if (field.type === 'FILE') {
@@ -1683,7 +1923,11 @@ async function executeStep() {
           const uploadedFiles = []
           for (const fileObj of files) {
             try {
-              const uploaded = await processStore.uploadAttachment(fileObj.file, stepExecution.value.id)
+              // Marcar como arquivo de campo do formulário da etapa
+              const uploaded = await processStore.uploadAttachment(fileObj.file, stepExecution.value.id, {
+                isStepFormField: true,
+                fieldName: field.name
+              })
               uploadedFiles.push({
                 id: uploaded.id,
                 name: uploaded.originalName || fileObj.name,
@@ -1730,28 +1974,27 @@ async function executeStep() {
         let totalSigners = 0
 
         // Mapear os anexos enviados com os arquivos originais para pegar as configurações
-        for (const uploadedAttachment of uploadedAttachments.value) {
-          console.log(`\n🔎 Processing uploaded file: ${uploadedAttachment.originalName} (ID: ${uploadedAttachment.id})`)
-          console.log(`   📎 Available original files:`, attachments.value.map(f => ({
+        // IMPORTANTE: Usar índice em vez de busca por nome, pois podem existir arquivos com mesmo nome
+        for (let uploadIndex = 0; uploadIndex < uploadedAttachments.value.length; uploadIndex++) {
+          const uploadedAttachment = uploadedAttachments.value[uploadIndex]
+          console.log(`\n🔎 Processing uploaded file [${uploadIndex}]: ${uploadedAttachment.originalName} (ID: ${uploadedAttachment.id})`)
+          console.log(`   📎 Available original files:`, attachments.value.map((f, i) => ({
+            index: i,
             name: f.name,
-            fileName: f.file?.name,
-            hasSigners: !!f.signers?.length,
+            signatureType: f.signatureType,
             signersCount: f.signers?.length || 0
           })))
 
-          // Encontrar o arquivo original pelos dados do arquivo
-          const originalFile = attachments.value.find(f => {
-            const nameMatch = f.name === uploadedAttachment.originalName || f.file?.name === uploadedAttachment.originalName
-            console.log(`   Comparing: "${f.name}" vs "${uploadedAttachment.originalName}" - Match: ${nameMatch}`)
-            return nameMatch
-          })
+          // Usar índice correspondente - os arquivos são enviados na mesma ordem
+          const originalFile = attachments.value[uploadIndex]
 
           if (!originalFile) {
-            console.log(`   ❌ No matching original file found for ${uploadedAttachment.originalName}`)
+            console.log(`   ❌ No matching original file found at index ${uploadIndex}`)
             continue
           }
 
           console.log(`   ✅ Found original file: ${originalFile.name}`)
+          console.log(`   📝 Signature type: ${originalFile.signatureType}`)
           console.log(`   👥 Signers configured: ${originalFile.signers?.length || 0}`)
 
           if (originalFile.signers && originalFile.signers.length > 0) {
@@ -1880,10 +2123,29 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.step-execution-container { 
-  max-width: 1400px; 
-  margin: 0 auto; 
-  padding: 0 16px; 
+.step-execution-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* Documentos para Revisão */
+.documents-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.document-review-item {
+  background: #f8fafb;
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.2s ease;
+}
+
+.document-review-item:hover {
+  background: #f0f4f5;
+  transform: translateX(4px);
 }
 
 .execution-header { 

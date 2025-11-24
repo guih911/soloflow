@@ -371,14 +371,22 @@ async function executeStep(data) {
     }
   }
 
-  async function uploadAttachment(file, stepExecutionId) {
+  async function uploadAttachment(file, stepExecutionId, options = {}) {
     loading.value = true
     error.value = null
 
     try {
       const formData = new FormData()
-      formData.append('file', file)                 
+      formData.append('file', file)
       formData.append('stepExecutionId', stepExecutionId)
+
+      // Se é um arquivo de campo do formulário da etapa, marcar para não aparecer em assinaturas
+      if (options.isStepFormField) {
+        formData.append('isStepFormField', 'true')
+      }
+      if (options.fieldName) {
+        formData.append('fieldName', options.fieldName)
+      }
 
       const response = await api.post('/attachments/upload', formData)
       return response.data

@@ -328,10 +328,9 @@
             <!-- Left Side: PDF Viewer -->
             <v-col cols="12" md="8" class="pdf-viewer-section">
               <div class="pdf-viewer-container">
-                <!-- Document Navigation -->
-                <div class="document-navigation">
+                <!-- Document Navigation - só mostra se houver mais de 1 documento -->
+                <div v-if="documentsToSign.length > 1" class="document-navigation">
                   <v-btn
-                    v-if="documentsToSign.length > 1"
                     icon
                     size="small"
                     :disabled="currentDocumentIndex === 0"
@@ -353,7 +352,6 @@
                     </v-chip>
                   </div>
                   <v-btn
-                    v-if="documentsToSign.length > 1"
                     icon
                     size="small"
                     :disabled="currentDocumentIndex === documentsToSign.length - 1"
@@ -399,13 +397,6 @@
                       <label class="text-caption text-grey">Tipo:</label>
                       <p class="text-body-1">
                         {{ selectedTask.processInstance.processType?.name || 'Tipo de Processo' }}
-                      </p>
-                    </div>
-
-                    <div v-if="selectedTask.processInstance.title && selectedTask.processInstance.title !== 'undefined'" class="info-item mb-3">
-                      <label class="text-caption text-grey">Título:</label>
-                      <p class="text-body-1">
-                        {{ selectedTask.processInstance.title }}
                       </p>
                     </div>
 
@@ -478,39 +469,145 @@
                     </v-list>
                   </div>
 
-                  <!-- Signature Form -->
-                  <div class="mb-6">
-                    <h3 class="text-h6 mb-2 font-weight-bold">Dados da Assinatura</h3>
+                  <!-- Status de Assinaturas (Sequencial/Paralelo) -->
+                  <div v-if="signatureStatus" class="mb-6">
+                    <h3 class="text-h6 mb-2 font-weight-bold d-flex align-center">
+                      <v-icon start color="primary">mdi-signature-freehand</v-icon>
+                      Assinaturas
+                      <v-chip
+                        size="x-small"
+                        :color="signatureStatus.signatureType === 'SEQUENTIAL' ? 'warning' : 'info'"
+                        class="ml-2"
+                        variant="tonal"
+                      >
+                        {{ signatureStatus.signatureType === 'SEQUENTIAL' ? 'Sequencial' : 'Paralelo' }}
+                      </v-chip>
+                    </h3>
                     <v-divider class="mb-3" />
 
-                    <v-text-field
-                      v-model="password"
-                      label="Senha de confirmação *"
-                      type="password"
-                      :rules="passwordRules"
-                      prepend-inner-icon="mdi-lock"
-                      variant="outlined"
-                      density="comfortable"
-                      required
-                      autofocus
-                    />
+                    <!-- Card de Sucesso - Documento Assinado -->
+                    <div v-if="signedDocuments.includes(documentsToSign[currentDocumentIndex]?.id)" class="signature-completed mb-4">
+                      <v-alert
+                        type="success"
+                        variant="tonal"
+                        border="start"
+                        density="compact"
+                      >
+                        <div class="d-flex align-center">
+                          <v-icon size="24" class="mr-3">mdi-check-circle</v-icon>
+                          <div>
+                            <div class="text-body-2 font-weight-bold">Documento assinado!</div>
+                            <div class="text-caption">Sua assinatura foi aplicada com sucesso</div>
+                          </div>
+                        </div>
+                      </v-alert>
+                    </div>
+
+                    <div class="signature-progress mb-3">
+                      <div class="d-flex justify-space-between text-caption mb-1">
+                        <span>Progresso</span>
+                        <span>{{ signatureStatus.completedSignatures }}/{{ signatureStatus.totalSignatures }}</span>
+                      </div>
+                      <v-progress-linear
+                        :model-value="(signatureStatus.completedSignatures / signatureStatus.totalSignatures) * 100"
+                        color="success"
+                        height="8"
+                        rounded
+                      />
+                    </div>
+
+                    <v-list density="compact" class="signature-status-list">
+                      <v-list-item
+                        v-for="detail in signatureStatus.signatureDetails"
+                        :key="detail.order"
+                        :class="getSignatureStatusClass(detail)"
+                        class="signature-status-item mb-2"
+                      >
+                        <template v-slot:prepend>
+                          <v-avatar
+                            :color="getSignatureStatusColor(detail)"
+                            size="32"
+                            variant="tonal"
+                          >
+                            <v-icon size="18">{{ getSignatureStatusIcon(detail) }}</v-icon>
+                          </v-avatar>
+                        </template>
+
+                        <v-list-item-title class="text-body-2 font-weight-medium">
+                          <span v-if="detail.isCurrentUser" class="text-primary">(Você)</span>
+                          {{ detail.responsible.name }}
+                        </v-list-item-title>
+
+                        <v-list-item-subtitle class="text-caption">
+                          {{ detail.statusMessage }}
+                        </v-list-item-subtitle>
+
+                        <template v-slot:append>
+                          <v-chip
+                            size="x-small"
+                            :color="getSignatureStatusColor(detail)"
+                            variant="tonal"
+                          >
+                            {{ getSignatureStatusText(detail) }}
+                          </v-chip>
+                        </template>
+                      </v-list-item>
+                    </v-list>
                   </div>
 
-                  <!-- Action Buttons -->
+                  <!-- Carregando status -->
+                  <div v-else-if="loadingStatus" class="mb-6 text-center py-4">
+                    <v-progress-circular indeterminate color="primary" size="32" />
+                    <p class="text-caption mt-2">Carregando informações de assinatura...</p>
+                  </div>
+
+                  <!-- Action Buttons com formulário de assinatura -->
                   <div class="signature-actions">
-                    <v-btn
-                      block
-                      size="large"
-                      color="primary"
-                      variant="elevated"
-                      :loading="signing"
-                      :disabled="!password || signedDocuments.includes(documentsToSign[currentDocumentIndex]?.id)"
-                      @click="signCurrentDocument"
+                    <!-- Alerta quando não pode assinar (sequencial) -->
+                    <v-alert
+                      v-if="signatureStatus && !canSignCurrentDocument && !signedDocuments.includes(documentsToSign[currentDocumentIndex]?.id)"
+                      type="warning"
+                      variant="tonal"
+                      density="compact"
                       class="mb-3"
                     >
-                      <v-icon start>mdi-pen</v-icon>
-                      {{ signedDocuments.includes(documentsToSign[currentDocumentIndex]?.id) ? 'Documento Assinado' : 'Assinar Documento' }}
-                    </v-btn>
+                      <template v-slot:prepend>
+                        <v-icon>mdi-clock-outline</v-icon>
+                      </template>
+                      <div class="text-body-2">
+                        {{ getWaitingMessage() }}
+                      </div>
+                    </v-alert>
+
+                    <!-- Campo de senha (só mostra quando pode assinar) -->
+                    <template v-if="canSignCurrentDocument && !signedDocuments.includes(documentsToSign[currentDocumentIndex]?.id)">
+                      <v-text-field
+                        v-model="password"
+                        label="Senha de confirmação *"
+                        type="password"
+                        :rules="passwordRules"
+                        prepend-inner-icon="mdi-lock"
+                        variant="outlined"
+                        density="comfortable"
+                        required
+                        class="mb-3"
+                        hide-details="auto"
+                      />
+
+                      <v-btn
+                        block
+                        size="large"
+                        color="primary"
+                        variant="elevated"
+                        :loading="signing"
+                        :disabled="!password"
+                        @click="signCurrentDocument"
+                        class="mb-3"
+                      >
+                        <v-icon start>mdi-pen</v-icon>
+                        Assinar Documento
+                      </v-btn>
+                    </template>
 
                     <v-btn
                       block
@@ -538,6 +635,7 @@ import { useRouter } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
 import { useAuthStore } from '@/stores/auth'
 import PaginationControls from '@/components/PaginationControls.vue'
+import api from '@/services/api'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/pt-br'
@@ -563,6 +661,10 @@ const signingTasks = ref([])
 const currentDocumentIndex = ref(0)
 const signedDocuments = ref([])
 const currentDocumentUrl = ref(null)
+
+// Estado para status detalhado das assinaturas
+const signatureStatus = ref(null)
+const loadingStatus = ref(false)
 
 // Estado de paginação
 const currentPage = ref(1)
@@ -738,10 +840,25 @@ function isHighPriority(task) {
 }
 
 function getDocumentsToSign(task) {
-  // Simular documentos para assinar
-  return task.attachments?.filter(att => 
-    att.mimeType === 'application/pdf' && !att.isSigned
-  ) || []
+  // Filtrar documentos para assinar, excluindo arquivos de campos FILE
+  return task.attachments?.filter(att => {
+    // Só PDFs não assinados
+    if (att.mimeType !== 'application/pdf' || att.isSigned) return false
+
+    // Excluir attachments que são de campos FILE do formulário (criação ou etapa)
+    if (att.signatureData) {
+      try {
+        const metadata = JSON.parse(att.signatureData)
+        // isFormField = campo FILE do formulário de criação do processo
+        // isStepFormField = campo FILE do formulário da etapa
+        if (metadata.isFormField || metadata.isStepFormField) return false
+      } catch (e) {
+        // Se não conseguir parsear, continua normalmente
+      }
+    }
+
+    return true
+  }) || []
 }
 
 function formatFileSize(bytes) {
@@ -787,6 +904,7 @@ async function refreshData() {
 async function loadCurrentDocument() {
   if (!documentsToSign.value[currentDocumentIndex.value]) {
     currentDocumentUrl.value = null
+    signatureStatus.value = null
     return
   }
 
@@ -802,6 +920,9 @@ async function loadCurrentDocument() {
       currentDocumentUrl.value = null
       return
     }
+
+    // Buscar status detalhado das assinaturas
+    await loadSignatureStatus(doc.id)
 
     // Fazer requisição com autenticação para baixar o PDF
     const response = await fetch(`${API_URL}/attachments/${doc.id}/download`, {
@@ -830,6 +951,109 @@ async function loadCurrentDocument() {
     currentDocumentUrl.value = null
     window.showSnackbar?.('Erro ao carregar documento', 'error')
   }
+}
+
+// Função para buscar status detalhado das assinaturas
+async function loadSignatureStatus(attachmentId) {
+  loadingStatus.value = true
+  try {
+    const response = await api.get(`/signatures/status/${attachmentId}`)
+    signatureStatus.value = response.data
+  } catch (error) {
+    console.error('Error loading signature status:', error)
+    signatureStatus.value = null
+  } finally {
+    loadingStatus.value = false
+  }
+}
+
+// Computed para verificar se o usuário pode assinar o documento atual
+const canSignCurrentDocument = computed(() => {
+  // Se já assinou localmente (nesta sessão), não pode assinar de novo
+  if (signedDocuments.value.includes(documentsToSign.value[currentDocumentIndex.value]?.id)) {
+    return false
+  }
+  // Sem status carregado, permitir (fallback para comportamento anterior)
+  if (!signatureStatus.value) return true
+  return signatureStatus.value.canSign
+})
+
+// Funções auxiliares para exibição do status de assinaturas
+function getSignatureStatusColor(detail) {
+  switch (detail.status) {
+    case 'completed':
+      return 'success'
+    case 'available':
+      return detail.isCurrentUser ? 'primary' : 'info'
+    case 'waiting':
+      return 'warning'
+    default:
+      return 'grey'
+  }
+}
+
+function getSignatureStatusIcon(detail) {
+  switch (detail.status) {
+    case 'completed':
+      return 'mdi-check-circle'
+    case 'available':
+      return detail.isCurrentUser ? 'mdi-pen' : 'mdi-clock-outline'
+    case 'waiting':
+      return 'mdi-timer-sand'
+    default:
+      return 'mdi-help-circle'
+  }
+}
+
+function getSignatureStatusText(detail) {
+  switch (detail.status) {
+    case 'completed':
+      return 'Assinado'
+    case 'available':
+      return detail.isCurrentUser ? 'Sua vez' : 'Aguardando'
+    case 'waiting':
+      return 'Na fila'
+    default:
+      return 'Pendente'
+  }
+}
+
+function getSignatureStatusClass(detail) {
+  if (detail.isCurrentUser && detail.status === 'available') {
+    return 'current-user-turn'
+  }
+  return ''
+}
+
+function getWaitingMessage() {
+  if (!signatureStatus.value) return ''
+
+  const userDetail = signatureStatus.value.signatureDetails?.find(d => d.isCurrentUser)
+  if (userDetail && userDetail.status === 'waiting') {
+    return userDetail.statusMessage
+  }
+
+  // Verificar se usuário não é assinante
+  if (!userDetail) {
+    return 'Você não está configurado como assinante deste documento.'
+  }
+
+  return 'Aguardando sua vez na fila de assinaturas.'
+}
+
+function getSignButtonText() {
+  const currentDoc = documentsToSign.value[currentDocumentIndex.value]
+  if (!currentDoc) return 'Assinar Documento'
+
+  if (signedDocuments.value.includes(currentDoc.id)) {
+    return 'Documento Assinado'
+  }
+
+  if (!canSignCurrentDocument.value) {
+    return 'Aguardando vez'
+  }
+
+  return 'Assinar Documento'
 }
 
 function previousDocument() {
@@ -869,7 +1093,17 @@ function closeSignatureDialog() {
 }
 
 async function signCurrentDocument() {
-  if (!selectedTask.value || !password.value) return
+  console.log('🔐 signCurrentDocument chamada')
+  console.log('  selectedTask:', selectedTask.value?.id)
+  console.log('  password:', password.value ? '***preenchida***' : 'VAZIA')
+
+  if (!selectedTask.value || !password.value) {
+    console.warn('❌ Retornando cedo: selectedTask ou password vazios')
+    if (!password.value) {
+      window.showSnackbar?.('Digite sua senha para assinar o documento', 'warning')
+    }
+    return
+  }
 
   const currentDoc = documentsToSign.value[currentDocumentIndex.value]
   if (!currentDoc) {
@@ -892,25 +1126,41 @@ async function signCurrentDocument() {
     const { useSignaturesStore } = await import('@/stores/signatures')
     const signaturesStore = useSignaturesStore()
 
-    // Garantir que o usuário atual está configurado como assinante desta etapa
-    try {
-      const stepVersionId = selectedTask.value.step?.id || selectedTask.value.stepVersion?.id
-      if (!stepVersionId) {
-        console.warn('Step version ID não encontrado no task para checagem de requisitos de assinatura')
-      } else {
-        const requirements = await signaturesStore.fetchSignatureRequirements(stepVersionId)
-        const myRequirements = Array.isArray(requirements)
-          ? requirements.filter(r => r.userId === authStore.user?.id)
-          : []
+    // Validar usando o signatureStatus que já foi carregado (considera userId E sectorId)
+    // Se signatureStatus existe e canSign é false, não permitir assinatura
+    if (signatureStatus.value && !signatureStatus.value.canSign) {
+      const waitingMsg = getWaitingMessage()
+      window.showSnackbar?.(waitingMsg || 'Você não pode assinar este documento no momento.', 'warning')
+      return
+    }
 
-        if (myRequirements.length === 0) {
-          window.showSnackbar?.('Você não está configurado como assinante para este documento.', 'warning')
-          return
+    // Fallback: Se não temos signatureStatus, verificar requisitos diretamente
+    if (!signatureStatus.value) {
+      try {
+        const stepVersionId = selectedTask.value.step?.id || selectedTask.value.stepVersion?.id
+        if (!stepVersionId) {
+          console.warn('Step version ID não encontrado no task para checagem de requisitos de assinatura')
+        } else {
+          const requirements = await signaturesStore.fetchSignatureRequirements(stepVersionId)
+          const userSectorId = authStore.activeSectorId
+
+          // Verificar se o usuário está nos requisitos (por userId OU por sectorId)
+          const myRequirements = Array.isArray(requirements)
+            ? requirements.filter(r =>
+                r.userId === authStore.user?.id ||
+                (r.sectorId && r.sectorId === userSectorId)
+              )
+            : []
+
+          if (myRequirements.length === 0) {
+            window.showSnackbar?.('Você não está configurado como assinante para este documento.', 'warning')
+            return
+          }
         }
+      } catch (e) {
+        console.warn('Não foi possível validar requisitos de assinatura antes de prosseguir:', e)
+        // Prossegue mesmo assim; backend ainda validará permissões
       }
-    } catch (e) {
-      console.warn('Não foi possível validar requisitos de assinatura antes de prosseguir:', e)
-      // Prossegue mesmo assim; backend ainda validará permissões
     }
 
     // Assinar o documento atual
@@ -929,6 +1179,9 @@ async function signCurrentDocument() {
 
     // Adicionar documento à lista de assinados
     signedDocuments.value.push(currentDoc.id)
+
+    // Limpar senha após assinatura bem-sucedida (segurança)
+    password.value = ''
 
     window.showSnackbar?.(`Documento "${currentDoc.originalName}" assinado com sucesso!`, 'success')
 
@@ -1169,6 +1422,8 @@ onMounted(() => {
 
 .signature-form-card {
   height: 100%;
+  min-height: fit-content;
+  padding-bottom: 24px;
 }
 
 .info-item label {
@@ -1198,11 +1453,34 @@ onMounted(() => {
 }
 
 .signature-actions {
+  background: white;
+  padding: 16px;
+  border-top: 1px solid #e0e0e0;
   position: sticky;
   bottom: 0;
-  background: white;
-  padding-top: 16px;
-  border-top: 1px solid #e0e0e0;
+  z-index: 1;
+}
+
+/* Status de assinaturas */
+.signature-status-list {
+  background: transparent;
+}
+
+.signature-status-item {
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+}
+
+.signature-status-item.current-user-turn {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.04);
+}
+
+.signature-progress {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
 }
 
 /* Responsive adjustments */
@@ -1217,6 +1495,13 @@ onMounted(() => {
 
   .signature-form-section {
     height: auto;
+    max-height: none;
+    padding-bottom: 32px;
   }
+}
+
+/* Ajuste para garantir visibilidade do campo de senha e botões */
+.signature-form-card :deep(.v-card-text) {
+  padding-bottom: 32px !important;
 }
 </style>

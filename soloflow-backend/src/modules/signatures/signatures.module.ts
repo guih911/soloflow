@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SignaturesController } from './signatures.controller';
+import { SignaturesPublicController } from './signatures-public.controller';
 import { SignaturesService } from './signatures.service';
 import { SimpleSignatureService } from './simple-signature.service';
 import { ModernSignatureService } from './modern-signature.service';
@@ -7,7 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { IpService } from '../../common/services/ip-service';
 
 @Module({
-  controllers: [SignaturesController],
+  controllers: [SignaturesController, SignaturesPublicController],
   providers: [
     SignaturesService,
     SimpleSignatureService,

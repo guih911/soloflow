@@ -1,13 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(del prismaworkflow.db)",
-      "Bash(npx prisma migrate reset:*)",
-      "Bash(npm run prisma:seed:*)",
-      "Bash(npx prisma migrate:*)",
-      "Bash(npx prisma db push:*)",
-      "Bash(npx prisma studio:*)",
-      "Bash(sqlite3:*)"
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []

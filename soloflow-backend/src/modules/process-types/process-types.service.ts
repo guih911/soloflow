@@ -222,13 +222,47 @@ export class ProcessTypesService {
           }
         }
 
+        // ✅ Vincular automaticamente o tipo de processo aos perfis que têm permissão de gerenciar process_types
+        const profilesWithPermission = await tx.profiles.findMany({
+          where: {
+            companyId: processTypeData.companyId,
+            profile_permissions: {
+              some: {
+                OR: [
+                  { resource: 'process_types', action: 'manage' },
+                  { resource: 'process_types', action: 'create' },
+                  { resource: '*', action: '*' },
+                ],
+              },
+            },
+          },
+        });
+
+        // Criar vinculação com cada perfil que tem permissão
+        for (const profile of profilesWithPermission) {
+          const { v4: uuidv4 } = await import('uuid');
+          await tx.profile_process_types.create({
+            data: {
+              id: uuidv4(),
+              profileId: profile.id,
+              processTypeId: processType.id,
+              canView: true,
+              canCreate: true,
+              canExecute: true,
+              updatedAt: new Date(),
+            },
+          });
+        }
+
+        console.log(`✅ Tipo de processo vinculado a ${profilesWithPermission.length} perfil(is)`);
+
         const fullProcessType = await tx.processType.findUnique({
           where: { id: processType.id },
           include: {
             versions: {
               where: { isActive: true },
               include: {
-                steps: { 
+                steps: {
                   orderBy: { order: 'asc' },
                   include: {
                     assignments: {
@@ -271,15 +305,14 @@ export class ProcessTypesService {
     console.log('Finding process types for company:', companyId);
 
     const processTypes = await this.prisma.processType.findMany({
-      where: { 
-        companyId, 
-        isActive: true 
+      where: {
+        companyId
       },
       include: {
         versions: {
           where: { isActive: true },
           include: {
-            steps: { 
+            steps: {
               orderBy: { order: 'asc' },
               include: {
                 assignments: {
@@ -337,6 +370,16 @@ export class ProcessTypesService {
   async update(id: string, dto: UpdateProcessTypeWithVersioningDto): Promise<ProcessType> {
     console.log('Updating process type with versioning:', id, dto);
 
+    // Se está apenas atualizando isActive ou name/description sem steps/formFields, usar updateBasic
+    const isSimpleUpdate = !dto.steps && !dto.formFields && (
+      dto.isActive !== undefined || dto.name !== undefined || dto.description !== undefined
+    );
+
+    if (isSimpleUpdate) {
+      console.log('Detected simple update (isActive/name/description only), using updateBasic');
+      return this.updateBasic(id, dto);
+    }
+
     try {
       return await this.prisma.$transaction(async (tx) => {
         // 1. Encontrar o ProcessType principal
@@ -346,7 +389,7 @@ export class ProcessTypesService {
             versions: {
               where: { isActive: true },
               include: {
-                steps: { 
+                steps: {
                   orderBy: { order: 'asc' },
                   include: {
                     assignments: true
@@ -1008,9 +1051,8 @@ export class ProcessTypesService {
     console.log('Validating steps for company:', companyId);
 
     for (const step of steps) {
-      if (!step.assignedToUserId && !step.assignedToSectorId && !step.assignedToCreator && !step.assignmentConditions) {
-        throw new BadRequestException(`Etapa "${step.name}" deve ter um responsável (usuário, setor, criador ou condicional)`);
-      }
+      // Responsável é opcional - se não tiver, a tarefa ficará disponível para qualquer um do setor/empresa
+      // A validação de responsável foi removida para permitir mais flexibilidade
 
       if (step.assignedToUserId && step.assignedToSectorId) {
         throw new BadRequestException(`Etapa "${step.name}" não pode ter usuário E setor responsável simultaneamente`);

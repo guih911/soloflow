@@ -49,6 +49,56 @@ import ValidateSignature from '@/views/public/ValidateSignature.vue'
 // Views - Settings
 import Settings from '@/views/settings/Settings.vue'
 
+/**
+ * Encontra a primeira rota disponível para o usuário baseado em suas permissões
+ * Segue EXATAMENTE a ordem do menu lateral (sidebar) no DashboardLayout.vue
+ * @param {Object} authStore - Store de autenticação
+ * @returns {string} - Path da primeira rota disponível
+ */
+function findFirstAvailableRoute(authStore) {
+  // Ordem de prioridade EXATA do menu lateral (sidebar)
+  const routePriority = [
+    // === SEÇÃO PRINCIPAL ===
+    { path: '/dashboard', permission: { resource: 'dashboard', action: 'view' } },
+    { path: '/processes', permission: { resource: 'processes', action: 'create' } },
+    { path: '/manage-processes', permission: { resource: 'processes', action: 'manage' } },
+    { path: '/my-tasks', permission: { resource: 'tasks', action: 'view' } },
+    { path: '/my-processes', permission: { resource: 'processes', action: 'view' } },
+    { path: '/signatures/pending', permission: { resource: 'signatures', action: 'view' } },
+    // === SEÇÃO CONFIGURAÇÕES ===
+    { path: '/process-types', permission: { resource: 'process_types', action: 'manage' } },
+    { path: '/sectors', permission: { resource: 'sectors', action: 'manage' } },
+    { path: '/users', permission: { resource: 'users', action: 'manage' } },
+    { path: '/profiles', permission: { resource: 'profiles', action: 'manage' } },
+    { path: '/companies', permission: { resource: 'companies', action: 'manage' } },
+    // === FALLBACK FINAL ===
+    { path: '/profile', permission: null }, // Sempre disponível
+  ]
+
+  console.log('🔍 findFirstAvailableRoute (router) - Buscando primeira rota disponível...')
+
+  // Encontrar a primeira rota com permissão
+  for (const route of routePriority) {
+    if (!route.permission) {
+      // Rota sem restrição de permissão
+      console.log('🔍 findFirstAvailableRoute (router) - Fallback:', route.path)
+      return route.path
+    }
+
+    const hasPerm = authStore.hasPermission(route.permission.resource, route.permission.action)
+    console.log(`🔍 findFirstAvailableRoute (router) - ${route.permission.resource}:${route.permission.action} = ${hasPerm}`)
+
+    if (hasPerm) {
+      console.log('🔍 findFirstAvailableRoute (router) - ✅ Primeira rota:', route.path)
+      return route.path
+    }
+  }
+
+  // Fallback: perfil do usuário (sempre disponível)
+  console.log('🔍 findFirstAvailableRoute (router) - Nenhuma permissão, indo para /profile')
+  return '/profile'
+}
+
 const routes = [
   // Redirect principal
   {
@@ -93,6 +143,11 @@ const routes = [
         path: '',
         name: 'Dashboard',
         component: Dashboard,
+        meta: {
+          requiresPermission: { resource: 'dashboard', action: 'view' },
+          title: 'Dashboard',
+          description: 'Painel de controle'
+        }
       },
 
       // EMPRESAS
@@ -124,19 +179,19 @@ const routes = [
         path: '/process-types',
         name: 'ProcessTypes',
         component: ProcessTypes,
-        meta: { requiresPermission: { resource: 'processTypes', action: 'manage' } },
+        meta: { requiresPermission: { resource: 'process_types', action: 'manage' } },
       },
       {
         path: '/process-types/new',
         name: 'ProcessTypeNew',
         component: ProcessTypeEditor,
-        meta: { requiresPermission: { resource: 'processTypes', action: 'manage' } },
+        meta: { requiresPermission: { resource: 'process_types', action: 'manage' } },
       },
       {
         path: '/process-types/:id/edit',
         name: 'ProcessTypeEdit',
         component: ProcessTypeEditor,
-        meta: { requiresPermission: { resource: 'processTypes', action: 'manage' } },
+        meta: { requiresPermission: { resource: 'process_types', action: 'manage' } },
         props: true,
       },
 
@@ -281,7 +336,17 @@ const routes = [
   // Catch-all para rotas inexistentes
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/dashboard',
+    name: 'NotFound',
+    beforeEnter: (to, from, next) => {
+      const authStore = useAuthStore()
+      if (authStore.isAuthenticated) {
+        const firstAvailableRoute = findFirstAvailableRoute(authStore)
+        console.log('404 - Redirecting to first available route:', firstAvailableRoute)
+        next(firstAvailableRoute)
+      } else {
+        next('/login')
+      }
+    },
   },
 ]
 
@@ -336,8 +401,9 @@ router.beforeEach(async (to, from, next) => {
 
   // Rota requer que seja visitante (não autenticado)
   if (to.meta.requiresGuest && isAuthenticated) {
-    console.log('Redirecting to dashboard - already authenticated')
-    next('/dashboard')
+    console.log('Redirecting to first available route - already authenticated')
+    const firstAvailableRoute = findFirstAvailableRoute(authStore)
+    next(firstAvailableRoute)
     return
   }
 
@@ -364,9 +430,11 @@ router.beforeEach(async (to, from, next) => {
     if (!hasPermission) {
       console.log('Access denied - missing permissions', requirements)
       if (window.showSnackbar) {
-        window.showSnackbar('Acesso negado. Você não tem permissão para acessar esta página.', 'error')
+        window.showSnackbar('Acesso negado. Redirecionando para página disponível...', 'warning')
       }
-      next('/dashboard')
+      const firstAvailableRoute = findFirstAvailableRoute(authStore)
+      console.log('Redirecting to first available route:', firstAvailableRoute)
+      next(firstAvailableRoute)
       return
     }
   }
@@ -379,13 +447,15 @@ router.beforeEach(async (to, from, next) => {
     
     if (!allowedRoles.includes(userRole)) {
       console.log(`Access denied - user role ${userRole} not in ${allowedRoles}`)
-      
+
       // Mostrar mensagem de erro se disponível
       if (window.showSnackbar) {
-        window.showSnackbar('Acesso negado. Você não tem permissão para acessar esta página.', 'error')
+        window.showSnackbar('Acesso negado. Redirecionando para página disponível...', 'warning')
       }
 
-      next('/dashboard')
+      const firstAvailableRoute = findFirstAvailableRoute(authStore)
+      console.log('Redirecting to first available route:', firstAvailableRoute)
+      next(firstAvailableRoute)
       return
     }
   }
@@ -394,13 +464,22 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth && isAuthenticated) {
     const activeCompany = authStore.activeCompany
     if (!activeCompany) {
-      console.log('No active company - redirecting to dashboard')
+      console.log('No active company - redirecting to first available route')
       if (window.showSnackbar) {
         window.showSnackbar('Erro: nenhuma empresa ativa encontrada', 'error')
       }
-      next('/dashboard')
+      const firstAvailableRoute = findFirstAvailableRoute(authStore)
+      next(firstAvailableRoute)
       return
     }
+  }
+
+  // Se estiver acessando a raiz '/', redirecionar para primeira rota disponível
+  if (to.path === '/' && isAuthenticated) {
+    const firstAvailableRoute = findFirstAvailableRoute(authStore)
+    console.log('Root access - redirecting to first available route:', firstAvailableRoute)
+    next(firstAvailableRoute)
+    return
   }
 
   next()

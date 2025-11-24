@@ -226,12 +226,14 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
 import { useProcessTypeStore } from '@/stores/processTypes'
+import { useAuthStore } from '@/stores/auth'
 import PaginationControls from '@/components/PaginationControls.vue'
 import dayjs from 'dayjs'
 
 const router = useRouter()
 const processStore = useProcessStore()
 const processTypeStore = useProcessTypeStore()
+const authStore = useAuthStore()
 
 // Estado
 const filters = ref({
@@ -248,7 +250,12 @@ const itemsPerPageOptions = [6, 12, 24, 48]
 // Computed
 const loading = computed(() => processStore.loading)
 const processes = computed(() => processStore.processes)
-const processTypes = computed(() => processTypeStore.processTypes)
+const processTypes = computed(() => {
+  // Filtrar apenas tipos que o usuário tem permissão para visualizar
+  return processTypeStore.processTypes.filter(pt =>
+    authStore.canAccessProcessType(pt.id, 'view')
+  )
+})
 
 const hasFilters = computed(() => {
   return filters.value.search || filters.value.processTypeId || filters.value.status
@@ -257,9 +264,16 @@ const hasFilters = computed(() => {
 const filteredProcesses = computed(() => {
   let result = processes.value
 
+  // Filtrar apenas processos de tipos que o usuário tem permissão para visualizar
+  // O processTypeId pode estar direto no objeto ou dentro de processType.id
+  result = result.filter(p => {
+    const typeId = p.processTypeId || p.processType?.id
+    return typeId ? authStore.canAccessProcessType(typeId, 'view') : true
+  })
+
   if (filters.value.search) {
     const search = filters.value.search.toLowerCase()
-    result = result.filter(p => 
+    result = result.filter(p =>
       p.code.toLowerCase().includes(search) ||
       p.title?.toLowerCase().includes(search) ||
       p.processType.name.toLowerCase().includes(search) ||
@@ -268,7 +282,10 @@ const filteredProcesses = computed(() => {
   }
 
   if (filters.value.processTypeId) {
-    result = result.filter(p => p.processTypeId === filters.value.processTypeId)
+    result = result.filter(p => {
+      const typeId = p.processTypeId || p.processType?.id
+      return typeId === filters.value.processTypeId
+    })
   }
 
   if (filters.value.status) {

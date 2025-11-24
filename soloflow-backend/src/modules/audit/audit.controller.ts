@@ -8,20 +8,16 @@ import {
 } from '@nestjs/common';
 import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
 
 @Controller('audit')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   /**
-   * Listar logs de auditoria (ADMIN e MANAGER podem ver)
+   * Listar logs de auditoria
    */
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async getAuditLogs(
     @Query('userId') userId?: string,
     @Query('companyId') companyId?: string,
@@ -50,7 +46,6 @@ export class AuditController {
    * Ver logs de auditoria de um usuário específico
    */
   @Get('user/:userId')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async getAuditLogsByUser(
     @Param('userId') userId: string,
     @Query('page') page?: string,
@@ -67,7 +62,6 @@ export class AuditController {
    * Ver logs de auditoria de uma empresa específica
    */
   @Get('company/:companyId')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async getAuditLogsByCompany(
     @Param('companyId') companyId: string,
     @Query('page') page?: string,
@@ -84,7 +78,6 @@ export class AuditController {
    * Ver logs de auditoria de um recurso específico
    */
   @Get('resource/:resource/:resourceId')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async getAuditLogsByResource(
     @Param('resource') resource: string,
     @Param('resourceId') resourceId: string,
@@ -103,7 +96,6 @@ export class AuditController {
    * Ver logs de auditoria por ação
    */
   @Get('action/:action')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async getAuditLogsByAction(
     @Param('action') action: string,
     @Query('page') page?: string,
@@ -120,7 +112,6 @@ export class AuditController {
    * Obter estatísticas de auditoria
    */
   @Get('stats')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async getAuditStats(
     @Query('userId') userId?: string,
     @Query('companyId') companyId?: string,
@@ -139,7 +130,6 @@ export class AuditController {
    * Ver meus próprios logs de auditoria (qualquer usuário autenticado)
    */
   @Get('my-logs')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
   async getMyAuditLogs(
     @Request() req,
     @Query('page') page?: string,

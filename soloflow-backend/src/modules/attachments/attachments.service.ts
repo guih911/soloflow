@@ -12,9 +12,28 @@ export class AttachmentsService {
     size: number;
     path: string;
     stepExecutionId: string;
+    fieldName?: string;
+    isStepFormField?: boolean;
   }) {
+    // Se é um arquivo de campo do formulário da etapa, marcar no signatureData
+    const signatureData =
+      data.isStepFormField
+        ? JSON.stringify({
+            isStepFormField: true,
+            fieldName: data.fieldName || null,
+          })
+        : null;
+
     return this.prisma.attachment.create({
-      data,
+      data: {
+        filename: data.filename,
+        originalName: data.originalName,
+        mimeType: data.mimeType,
+        size: data.size,
+        path: data.path,
+        stepExecutionId: data.stepExecutionId,
+        signatureData,
+      },
     });
   }
 

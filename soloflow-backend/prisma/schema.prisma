@@ -34,6 +34,7 @@ model User {
   password              String
   isActive              Boolean                @default(true)
   cpf                   String?
+  phone                 String?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   createdProcesses      ProcessInstance[]
@@ -348,7 +349,7 @@ model SignatureRequirement {
   attachment       Attachment?       @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
   stepVersion      StepVersion       @relation(fields: [stepVersionId], references: [id], onDelete: Cascade)
 
-  @@unique([stepVersionId, order])
+  @@unique([stepVersionId, attachmentId, order])
   @@map("signature_requirements")
 }
 
@@ -415,6 +416,7 @@ model profiles {
   name                  String
   description           String?
   isDefault             Boolean                 @default(false)
+  isActive              Boolean                 @default(true)
   companyId             String?
   parentProfileId       String?
   createdAt             DateTime                @default(now())

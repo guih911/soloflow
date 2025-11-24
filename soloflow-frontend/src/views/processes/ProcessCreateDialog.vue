@@ -232,11 +232,12 @@
                     v-else-if="field.type === 'PHONE'"
                     v-model="formData[field.name]"
                     :label="field.label"
-                    :placeholder="field.placeholder || '(00) 00000-0000'"
-                    v-mask="['(##) ####-####', '(##) #####-####']"
+                    :placeholder="field.placeholder || 'Digite apenas números'"
                     :required="field.required"
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
+                    @blur="formatPhoneField(field.name)"
+                    @input="onPhoneInput(field.name, $event)"
                     persistent-hint
                     variant="outlined"
                   />
@@ -688,6 +689,14 @@ function getFieldRules(field) {
     case 'CNPJ':
       rules.push(v => !v || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'CNPJ inválido')
       break
+    case 'PHONE':
+      // Aceita formato com máscara (XX) XXXXX-XXXX ou apenas números (10-11 dígitos)
+      rules.push(v => {
+        if (!v) return true
+        const digits = v.replace(/\D/g, '')
+        return (digits.length >= 10 && digits.length <= 11) || 'Telefone deve ter 10 ou 11 dígitos'
+      })
+      break
     case 'FILE':
       if (field.validations?.minFiles) {
         rules.push(v => !v || v.length >= field.validations.minFiles || 
@@ -736,6 +745,35 @@ function getFieldRules(field) {
   }
 
   return rules
+}
+
+// Funções para formatação de telefone
+function formatPhone(value) {
+  if (!value) return ''
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 0) return ''
+  if (digits.length <= 2) {
+    return `(${digits}`
+  } else if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+  } else if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  } else {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`
+  }
+}
+
+function formatPhoneField(fieldName) {
+  const value = formData.value[fieldName]
+  if (value) {
+    formData.value[fieldName] = formatPhone(value)
+  }
+}
+
+function onPhoneInput(fieldName, event) {
+  const value = event.target?.value || formData.value[fieldName] || ''
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  formData.value[fieldName] = digits
 }
 
 // ✨ Método para gerar título automaticamente

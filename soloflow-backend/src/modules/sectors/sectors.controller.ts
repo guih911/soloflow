@@ -13,29 +13,19 @@ import { SectorsService } from './sectors.service';
 import { CreateSectorDto } from './dto/create-sector.dto';
 import { UpdateSectorDto } from './dto/update-sector.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
 
 @Controller('sectors')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 export class SectorsController {
   constructor(private readonly sectorsService: SectorsService) {}
 
   /**
-   * Criar setor - ADMIN pode criar em qualquer empresa, MANAGER apenas na sua
+   * Criar setor
    */
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   create(@Body() createSectorDto: CreateSectorDto, @Request() req) {
     console.log('Creating sector with payload:', createSectorDto);
     console.log('Request user:', req.user);
-
-    // MANAGER: Restringir à empresa do usuário logado
-    const isAdmin = req.user.role === UserRole.ADMIN;
-    if (!isAdmin) {
-      createSectorDto.companyId = req.user.companyId;
-    }
 
     // Garantir que companyId está definido
     if (!createSectorDto.companyId) {
@@ -60,19 +50,16 @@ export class SectorsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   update(@Param('id') id: string, @Body() updateSectorDto: UpdateSectorDto) {
     return this.sectorsService.update(id, updateSectorDto);
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
   remove(@Param('id') id: string) {
     return this.sectorsService.remove(id);
   }
 
   @Post(':id/users/:userId')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   addUser(
     @Param('id') sectorId: string,
     @Param('userId') userId: string,
@@ -82,7 +69,6 @@ export class SectorsController {
   }
 
   @Delete(':id/users/:userId')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   removeUser(
     @Param('userId') userId: string,
     @Request() req

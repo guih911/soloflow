@@ -138,7 +138,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import dayjs from 'dayjs'
 import 'dayjs/locale/pt-br'
 
@@ -146,15 +146,17 @@ import { useAuthStore } from '@/stores/auth'
 import { useProcessStore } from '@/stores/processes'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const processStore = useProcessStore()
 
 const loading = ref(false)
 const processes = ref([])
 
+// Inicializar filtros com parâmetros da URL (se existirem)
 const filters = ref({
   search: '',
-  status: null,
+  status: route.query.status || null,
   role: null,
   onlyPending: false,
 })

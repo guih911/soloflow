@@ -26,6 +26,16 @@
         density="comfortable"
         item-key="id"
         hover
+        items-per-page-text="Itens por página"
+        :items-per-page-options="[
+          { value: 5, title: '5' },
+          { value: 10, title: '10' },
+          { value: 25, title: '25' },
+          { value: -1, title: 'Todos' }
+        ]"
+        no-data-text="Nenhum perfil encontrado"
+        loading-text="Carregando..."
+        page-text="{0}-{1} de {2}"
       >
         <template #top>
           <v-card-title class="d-flex align-center pe-2">
@@ -62,6 +72,12 @@
         <template #item.isDefault="{ item }">
           <v-chip :color="item.isDefault ? 'primary' : 'grey'" size="small" variant="flat">
             {{ item.isDefault ? 'Padrão' : 'Não' }}
+          </v-chip>
+        </template>
+
+        <template #item.isActive="{ item }">
+          <v-chip :color="item.isActive !== false ? 'success' : 'error'" size="small" variant="flat">
+            {{ item.isActive !== false ? 'Ativo' : 'Inativo' }}
           </v-chip>
         </template>
 
@@ -115,16 +131,16 @@
                 />
               </template>
             </v-tooltip>
-            <v-tooltip text="Apagar perfil">
+            <v-tooltip :text="item.isActive ? 'Desativar perfil' : 'Ativar perfil'">
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
-                  icon="mdi-delete"
+                  :icon="item.isActive ? 'mdi-toggle-switch' : 'mdi-toggle-switch-off'"
                   size="small"
                   variant="text"
-                  color="error"
-                  :disabled="!canManageProfiles || item.isDefault"
-                  @click="confirmRemove(item)"
+                  :color="item.isActive ? 'success' : 'grey'"
+                  :disabled="!canManageProfiles"
+                  @click="toggleProfileStatus(item)"
                 />
               </template>
             </v-tooltip>
@@ -171,6 +187,7 @@ const headers = [
   { title: 'Nome', key: 'name' },
   { title: 'Empresa', key: 'company', sortable: false },
   { title: 'Padrão', key: 'isDefault', align: 'center' },
+  { title: 'Status', key: 'isActive', align: 'center' },
   { title: 'Telas liberadas', key: 'screens', sortable: false },
   { title: 'Tipos de processo', key: 'processTypes', sortable: false },
   { title: 'Ações', key: 'actions', align: 'center', sortable: false },
@@ -250,18 +267,10 @@ function summarizeProcessTypes(profile) {
   if (!permissions.length) return []
 
   return permissions.map((permission) => {
-    const label =
-      permission.processTypeId === '*'
-        ? 'Todos os tipos'
-        : processTypes.value.find((type) => type.id === permission.processTypeId)?.name ||
+    return permission.processTypeId === '*'
+      ? 'Todos os tipos'
+      : processTypes.value.find((type) => type.id === permission.processTypeId)?.name ||
           'Tipo desconhecido'
-
-    const capabilities = []
-    if (permission.canView) capabilities.push('Ver')
-    if (permission.canCreate) capabilities.push('Criar')
-    if (permission.canExecute) capabilities.push('Executar')
-
-    return `${label}: ${capabilities.join(', ') || 'Sem ações'}`
   })
 }
 
@@ -297,21 +306,19 @@ async function handleSaveProfile({ id, payload }) {
   }
 }
 
-async function confirmRemove(profile) {
+async function toggleProfileStatus(profile) {
   if (!canManageProfiles.value) return
-  if (profile.isDefault) {
-    window.showSnackbar?.('Não é possível remover o perfil padrão.', 'warning')
-    return
-  }
 
-  const confirmed = window.confirm(`Remover o perfil "${profile.name}"?`)
-  if (!confirmed) return
+  const newStatus = profile.isActive === false ? true : false
+  const action = newStatus ? 'ativar' : 'desativar'
 
   try {
-    await profileStore.deleteProfile(profile.id)
-    window.showSnackbar?.('Perfil removido com sucesso.', 'success')
+    await profileStore.updateProfile(profile.id, { isActive: newStatus })
+    // Recarregar lista de perfis para refletir a mudança
+    await profileStore.fetchProfiles()
+    window.showSnackbar?.(`Perfil ${newStatus ? 'ativado' : 'desativado'} com sucesso.`, 'success')
   } catch (error) {
-    const message = error.response?.data?.message || 'Erro ao remover perfil.'
+    const message = error.response?.data?.message || `Erro ao ${action} perfil.`
     window.showSnackbar?.(message, 'error')
   }
 }

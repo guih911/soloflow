@@ -127,21 +127,11 @@ export class ProcessesService {
       data: stepExecutionsData,
     });
 
-    // Criar assignments para o criador onde necessário
-    for (const step of activeVersion.steps) {
-      if (step.assignedToCreator) {
-        await this.prisma.stepAssignment.create({
-          data: {
-            stepVersionId: step.id,
-            type: 'USER',
-            userId: userId, // Atribuir ao criador
-            priority: 1,
-            isActive: true,
-            dynamicRole: 'PROCESS_CREATOR',
-          },
-        });
-      }
-    }
+    // NOTA: Não criamos StepAssignment dinâmico aqui!
+    // A lógica de "assignedToCreator" é resolvida diretamente na query getMyTasks,
+    // verificando se stepVersion.assignedToCreator = true E processInstance.createdById = userId.
+    // Criar assignments aqui causaria duplicatas, pois StepAssignment é vinculado ao StepVersion
+    // (definição do tipo de processo), não à instância do processo.
     // FIM DA SEÇÃO ATUALIZADA
 
     return this.findOne(createdInstance.id, userId);
@@ -194,6 +184,7 @@ export class ProcessesService {
         size: file.size,
         path: file.path,
         stepExecutionId: stepExecution.id,
+        signatureData: JSON.stringify({ isFormField: true, fieldName }),
       },
     });
 
@@ -339,6 +330,8 @@ export class ProcessesService {
     file: Express.Multer.File,
     description?: string,
     userId?: string,
+    fieldName?: string,
+    isStepFormField?: boolean,
   ): Promise<UploadResponse> {
     const stepExecution = await this.prisma.stepExecution.findUnique({
       where: { id: stepExecutionId },
@@ -356,6 +349,11 @@ export class ProcessesService {
       await this.checkViewPermission(stepExecution.processInstance, userId);
     }
 
+    // Se é um arquivo de campo do formulário da etapa, marcar no signatureData
+    const signatureData = isStepFormField
+      ? JSON.stringify({ isStepFormField: true, fieldName: fieldName || null })
+      : null;
+
     const attachment: Attachment = await this.prisma.attachment.create({
       data: {
         filename: file.filename,
@@ -364,6 +362,7 @@ export class ProcessesService {
         size: file.size,
         path: file.path,
         stepExecutionId,
+        signatureData,
       },
     });
 
@@ -630,6 +629,12 @@ export class ProcessesService {
                         id: true,
                         name: true,
                         email: true,
+                      },
+                    },
+                    sector: {
+                      select: {
+                        id: true,
+                        name: true,
                       },
                     },
                     signatureRecords: {
@@ -906,6 +911,7 @@ export class ProcessesService {
             mimeType: true,
             size: true,
             isSigned: true,
+            signatureData: true,
           },
         },
       },
@@ -915,19 +921,35 @@ export class ProcessesService {
     // 2. Buscar assinaturas pendentes (COMPLETED ou qualquer status) separadamente
     // IMPORTANTE: Filtra apenas execuções com anexos PDF não assinados
     // Isso resolve o problema de assinaturas PARALLEL aparecerem mesmo sem anexos
+    // Considera requisitos por userId OU por sectorId do usuário
     const signatureTasks = await this.prisma.stepExecution.findMany({
       where: {
         processInstance: { companyId },
         stepVersion: {
           signatureRequirements: {
             some: {
-              userId: userId,
-              signatureRecords: {
-                none: {
-                  signerId: userId,
-                  status: 'COMPLETED',
+              OR: [
+                // Requisito direto para o usuário
+                {
+                  userId: userId,
+                  signatureRecords: {
+                    none: {
+                      signerId: userId,
+                      status: 'COMPLETED',
+                    },
+                  },
                 },
-              },
+                // Requisito para o setor do usuário
+                ...(userCompany?.sectorId ? [{
+                  sectorId: userCompany.sectorId,
+                  signatureRecords: {
+                    none: {
+                      signerId: userId,
+                      status: 'COMPLETED',
+                    },
+                  },
+                }] : []),
+              ],
             },
           },
         },
@@ -990,60 +1012,108 @@ export class ProcessesService {
             mimeType: true,
             size: true,
             isSigned: true,
+            signatureData: true,
           },
         },
       },
       orderBy: { createdAt: 'asc' },
     });
 
-    console.log(`Found ${normalTasks.length} normal tasks and ${signatureTasks.length} signature tasks`);
-
     // 3. Filtrar signature tasks para incluir apenas quando é a vez do usuário (assinatura sequencial)
+    // Considera tanto userId quanto sectorId do usuário
     const filteredSignatureTasks: typeof signatureTasks = [];
+    const userSectorId = userCompany?.sectorId;
 
     for (const task of signatureTasks) {
-      // Buscar requisitos de assinatura da step
-      const requirements = await this.prisma.signatureRequirement.findMany({
-        where: { stepVersionId: task.stepVersionId },
-        orderBy: { order: 'asc' },
-      });
+      // IDs dos anexos DESTA stepExecution específica
+      const taskAttachmentIds = task.attachments.map(a => a.id);
 
-      // Encontrar o requisito do usuário atual
-      const userRequirement = requirements.find(r => r.userId === userId);
-
-      if (!userRequirement) {
-        continue; // Usuário não está nos requisitos, pular
+      // Se não tem anexos, não tem o que assinar
+      if (taskAttachmentIds.length === 0) {
+        continue;
       }
 
-      // Se for assinatura sequencial, verificar se é a vez do usuário
-      if (userRequirement.type === 'SEQUENTIAL' && userRequirement.order > 1) {
-        // Buscar assinaturas já concluídas nos anexos desta step execution
-        const completedSignatures = await this.prisma.signatureRecord.findMany({
-          where: {
-            stepExecutionId: task.id,
-            status: 'COMPLETED',
+      // Buscar requisitos de assinatura apenas para os anexos DESTA task
+      // Ou requisitos globais (attachmentId = null)
+      const allRequirements = await this.prisma.signatureRequirement.findMany({
+        where: {
+          stepVersionId: task.stepVersionId,
+          OR: [
+            { attachmentId: { in: taskAttachmentIds } },
+            { attachmentId: null }, // Requisitos globais se existirem
+          ],
+        },
+        orderBy: { order: 'asc' },
+        include: {
+          signatureRecords: {
+            where: { status: 'COMPLETED' },
           },
-          include: {
-            requirement: true,
-          },
-        });
+        },
+      });
 
-        // Verificar se todos os requisitos anteriores foram assinados
-        const previousRequirements = requirements.filter(r => r.order < userRequirement.order);
-        const allPreviousSigned = previousRequirements.every(req =>
-          completedSignatures.some(sig => sig.requirementId === req.id)
+      // Agrupar requisitos por attachmentId
+      const requirementsByAttachment = new Map<string | null, typeof allRequirements>();
+      for (const req of allRequirements) {
+        const key = req.attachmentId;
+        if (!requirementsByAttachment.has(key)) {
+          requirementsByAttachment.set(key, []);
+        }
+        requirementsByAttachment.get(key)!.push(req);
+      }
+
+      // Verificar se o usuário pode assinar ALGUM anexo desta etapa
+      let canSignSomeAttachment = false;
+
+      for (const [attachmentId, requirements] of requirementsByAttachment) {
+        // Se for requisito de anexo específico, verificar se o anexo ainda não foi assinado
+        if (attachmentId) {
+          const attachment = task.attachments.find(a => a.id === attachmentId);
+          if (!attachment || attachment.isSigned) {
+            continue; // Anexo já assinado ou não existe nesta task
+          }
+        }
+
+        // Encontrar o requisito do usuário atual para este anexo
+        const userRequirement = requirements.find(r =>
+          r.userId === userId || (r.sectorId && r.sectorId === userSectorId)
         );
 
-        if (!allPreviousSigned) {
-          continue; // Ainda não é a vez deste usuário, pular
+        if (!userRequirement) {
+          continue; // Usuário não está nos requisitos deste anexo
+        }
+
+        // Verificar se já assinou este anexo
+        const alreadySigned = userRequirement.signatureRecords.length > 0;
+        if (alreadySigned) {
+          continue; // Já assinou este anexo
+        }
+
+        // Se for assinatura PARALELA, pode assinar
+        if (userRequirement.type === 'PARALLEL') {
+          canSignSomeAttachment = true;
+          break;
+        }
+
+        // Se for assinatura SEQUENTIAL...
+        if (userRequirement.type === 'SEQUENTIAL') {
+          // Verificar se todos os anteriores deste anexo já assinaram
+          const previousRequirements = requirements.filter(r => r.order < userRequirement.order);
+          const allPreviousSigned = previousRequirements.every(req =>
+            req.signatureRecords.length > 0
+          );
+
+          if (allPreviousSigned) {
+            // Todos os anteriores assinaram, é a vez deste usuário
+            canSignSomeAttachment = true;
+            break;
+          }
         }
       }
 
-      // É a vez do usuário ou assinatura paralela
-      filteredSignatureTasks.push(task);
+      if (canSignSomeAttachment) {
+        filteredSignatureTasks.push(task);
+      }
     }
-
-    console.log(`After sequential filter: ${filteredSignatureTasks.length} signature tasks`);
 
     // 4. Combinar resultados, removendo duplicatas
     const taskIds = new Set<string>();
@@ -1142,6 +1212,8 @@ export class ProcessesService {
       completedProcesses,
       myTasks,
       recentProcesses,
+      userCompletedTasks,
+      userCreatedProcesses,
     ] = await Promise.all([
       this.prisma.processInstance.count({
         where: { companyId },
@@ -1166,6 +1238,20 @@ export class ProcessesService {
         orderBy: { createdAt: 'desc' },
         take: 5,
       }),
+      // Tarefas concluídas pelo usuário
+      this.prisma.stepExecution.count({
+        where: {
+          executorId: userId,
+          status: 'COMPLETED',
+        },
+      }),
+      // Processos criados pelo usuário
+      this.prisma.processInstance.count({
+        where: {
+          createdById: userId,
+          companyId,
+        },
+      }),
     ]);
 
     return {
@@ -1173,6 +1259,12 @@ export class ProcessesService {
       activeProcesses,
       completedProcesses,
       pendingTasks: myTasks.length,
+      // Estatísticas do usuário
+      userStats: {
+        pendingTasks: myTasks.length,
+        completedTasks: userCompletedTasks,
+        createdProcesses: userCreatedProcesses,
+      },
       recentProcesses: recentProcesses.map(process => ({
         ...process,
         processType: process.processTypeVersion.processType,

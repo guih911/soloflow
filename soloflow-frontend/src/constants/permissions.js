@@ -27,7 +27,7 @@ export const SCREEN_CATALOG = [
     ],
   },
   {
-    id: 'processTypes',
+    id: 'process_types',
     label: 'Tipos de Processo',
     icon: 'mdi-file-cog',
     actions: [
@@ -72,19 +72,12 @@ export const SCREEN_CATALOG = [
     ],
   },
   {
-    id: 'reports',
-    label: 'Relatórios',
-    icon: 'mdi-chart-box',
+    id: 'signatures',
+    label: 'Assinaturas',
+    icon: 'mdi-draw-pen',
     actions: [
       { id: 'view', label: 'Visualizar' },
-    ],
-  },
-  {
-    id: 'settings',
-    label: 'Configurações',
-    icon: 'mdi-cog',
-    actions: [
-      { id: 'manage', label: 'Gerenciar' },
+      { id: 'sign', label: 'Assinar' },
     ],
   },
 ]

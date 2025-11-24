@@ -68,7 +68,7 @@
                   :key="field.id"
                   :cols="getFieldCols(field)"
                 >
-               
+
                   <v-text-field
                     v-if="field.type === 'TEXT'"
                     v-model="formData[field.name]"
@@ -160,11 +160,12 @@
                     v-else-if="field.type === 'PHONE'"
                     v-model="formData[field.name]"
                     :label="field.label"
-                    :placeholder="field.placeholder || '(00) 00000-0000'"
+                    :placeholder="field.placeholder || 'Digite apenas números'"
                     :required="field.required"
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
-                    v-mask="['(##) ####-####', '(##) #####-####']"
+                    @blur="formatPhoneField(field.name)"
+                    @input="onPhoneInput(field.name, $event)"
                     persistent-hint
                     variant="outlined"
                     prepend-inner-icon="mdi-phone"
@@ -210,6 +211,8 @@
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
                     :items="field.options || []"
+                    item-title="label"
+                    item-value="value"
                     persistent-hint
                     variant="outlined"
                     prepend-inner-icon="mdi-form-dropdown"
@@ -234,6 +237,143 @@
                     <small v-if="field.helpText" class="text-caption text-medium-emphasis d-block mt-2">
                       {{ field.helpText }}
                     </small>
+                  </div>
+
+                  <!-- Campo de arquivo - Design Profissional -->
+                  <div
+                    v-else-if="field.type?.toString().toUpperCase() === 'FILE'"
+                    class="file-upload-container mb-4"
+                  >
+                    <!-- Label do campo -->
+                    <label class="file-upload-label mb-2 d-flex align-center">
+                      <span class="text-body-1 font-weight-medium">{{ field.label }}</span>
+                      <span v-if="field.required" class="text-error ml-1">*</span>
+                    </label>
+
+                    <!-- Área de Upload -->
+                    <div
+                      class="file-upload-area"
+                      :class="{
+                        'file-upload-area--dragover': dragStates[field.name],
+                        'file-upload-area--has-file': fileInputs[field.name],
+                        'file-upload-area--error': fileErrors[field.name]
+                      }"
+                      @dragover.prevent="dragStates[field.name] = true"
+                      @dragleave.prevent="dragStates[field.name] = false"
+                      @drop.prevent="handleFileDrop(field.name, $event, field)"
+                      @click="triggerFileInput(field.name)"
+                    >
+                      <!-- Input escondido -->
+                      <input
+                        :ref="el => fileInputRefs[field.name] = el"
+                        type="file"
+                        :accept="getFileFieldConfig(field).allowedTypes.join(',')"
+                        @change="handleFileInputChange(field.name, $event, field)"
+                        class="file-input-hidden"
+                      />
+
+                      <!-- Estado: Sem arquivo -->
+                      <div v-if="!fileInputs[field.name]" class="file-upload-empty">
+                        <div class="file-upload-icon-wrapper">
+                          <v-icon
+                            size="48"
+                            :color="dragStates[field.name] ? 'primary' : 'grey-lighten-1'"
+                            class="file-upload-icon"
+                          >
+                            {{ dragStates[field.name] ? 'mdi-cloud-upload' : 'mdi-cloud-upload-outline' }}
+                          </v-icon>
+                        </div>
+
+                        <div class="file-upload-text mt-3">
+                          <p class="text-body-1 font-weight-medium mb-1">
+                            {{ dragStates[field.name] ? 'Solte o arquivo aqui' : 'Arraste o arquivo ou clique para selecionar' }}
+                          </p>
+                          <p class="text-caption text-medium-emphasis">
+                            {{ getFileFieldHint(field) }}
+                          </p>
+                        </div>
+
+                        <v-btn
+                          color="primary"
+                          variant="tonal"
+                          size="small"
+                          class="mt-3"
+                          @click.stop="triggerFileInput(field.name)"
+                        >
+                          <v-icon start size="18">mdi-folder-open</v-icon>
+                          Escolher Arquivo
+                        </v-btn>
+                      </div>
+
+                      <!-- Estado: Com arquivo selecionado -->
+                      <div v-else class="file-upload-preview">
+                        <div class="file-preview-card">
+                          <!-- Ícone do tipo de arquivo -->
+                          <div class="file-preview-icon">
+                            <v-avatar
+                              :color="getFileIconColor(fileInputs[field.name]?.name)"
+                              size="56"
+                              rounded="lg"
+                            >
+                              <v-icon size="28" color="white">
+                                {{ getFileIcon(fileInputs[field.name]?.name) }}
+                              </v-icon>
+                            </v-avatar>
+                          </div>
+
+                          <!-- Informações do arquivo -->
+                          <div class="file-preview-info">
+                            <p class="file-preview-name text-body-1 font-weight-medium">
+                              {{ fileInputs[field.name]?.name }}
+                            </p>
+                            <p class="file-preview-size text-caption text-medium-emphasis">
+                              {{ formatFileSize(fileInputs[field.name]?.size) }}
+                            </p>
+                          </div>
+
+                          <!-- Ações -->
+                          <div class="file-preview-actions">
+                            <v-btn
+                              icon
+                              size="small"
+                              variant="text"
+                              color="primary"
+                              @click.stop="triggerFileInput(field.name)"
+                            >
+                              <v-icon size="20">mdi-pencil</v-icon>
+                              <v-tooltip activator="parent" location="top">Trocar arquivo</v-tooltip>
+                            </v-btn>
+                            <v-btn
+                              icon
+                              size="small"
+                              variant="text"
+                              color="error"
+                              @click.stop="removeFile(field.name)"
+                            >
+                              <v-icon size="20">mdi-delete</v-icon>
+                              <v-tooltip activator="parent" location="top">Remover</v-tooltip>
+                            </v-btn>
+                          </div>
+                        </div>
+
+                        <!-- Indicador de sucesso -->
+                        <div class="file-success-indicator">
+                          <v-icon size="16" color="success" class="mr-1">mdi-check-circle</v-icon>
+                          <span class="text-caption text-success">Arquivo selecionado</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Mensagem de erro -->
+                    <div v-if="fileErrors[field.name]" class="file-upload-error mt-2">
+                      <v-icon size="16" color="error" class="mr-1">mdi-alert-circle</v-icon>
+                      <span class="text-caption text-error">{{ fileErrors[field.name] }}</span>
+                    </div>
+
+                    <!-- Hint do campo -->
+                    <p v-if="field.helpText && !fileErrors[field.name]" class="text-caption text-medium-emphasis mt-2">
+                      {{ field.helpText }}
+                    </p>
                   </div>
                 </v-col>
               </v-row>
@@ -308,11 +448,13 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
 import { useProcessTypeStore } from '@/stores/processTypes'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
 const processStore = useProcessStore()
 const processTypeStore = useProcessTypeStore()
+const authStore = useAuthStore()
 
 // Props
 const props = defineProps({
@@ -332,10 +474,20 @@ const processData = ref({
   observations: ''
 })
 const formData = ref({})
-
+const fileInputs = ref({})
+const uploadedFileIds = ref({})
+const dragStates = ref({})
+const fileErrors = ref({})
+const fileInputRefs = ref({})
 
 const loadingTypes = computed(() => processTypeStore.loading)
-const processTypes = computed(() => processTypeStore.processTypes.filter(pt => pt.isActive !== false))
+const processTypes = computed(() => {
+  // Filtrar apenas tipos ativos
+  const activeTypes = processTypeStore.processTypes.filter(pt => pt.isActive !== false)
+
+  // Filtrar apenas tipos que o usuário tem permissão para criar
+  return activeTypes.filter(pt => authStore.canAccessProcessType(pt.id, 'create'))
+})
 const preselectedType = computed(() => props.typeId || route.params.typeId)
 const selectedProcessType = computed(() => {
   if (selectedProcessTypeId.value) {
@@ -357,14 +509,38 @@ async function createProcessWithFiles() {
   creating.value = true
 
   try {
+    // Preparar formData com campos não-arquivo
+    const processFormData = { ...formData.value }
+
+    // Criar o processo primeiro
     const basePayload = {
       processTypeId: selectedProcessType.value.id,
       title: generateProcessTitle(),
       description: processData.value.observations?.trim() || null,
-      formData: formData.value
+      formData: processFormData
     }
 
     const createdProcess = await processStore.createProcess(basePayload)
+
+    // Fazer upload dos arquivos se houver
+    const fileFields = selectedProcessType.value.formFields.filter(f => f.type?.toString().toUpperCase() === 'FILE')
+
+    if (fileFields.length > 0) {
+      for (const field of fileFields) {
+        const file = fileInputs.value[field.name]
+
+        if (file) {
+          try {
+            // Upload único por campo
+            const uploadedFile = await processStore.uploadProcessFieldFile(createdProcess.id, field.name, file)
+            console.log(`✅ Arquivo enviado para campo ${field.name}:`, uploadedFile)
+          } catch (uploadError) {
+            console.error(`Erro ao fazer upload do campo ${field.name}:`, uploadError)
+            window.showSnackbar?.(`Aviso: Erro ao fazer upload de ${field.label}`, 'warning')
+          }
+        }
+      }
+    }
 
     window.showSnackbar?.('Processo criado com sucesso!', 'success')
 
@@ -404,10 +580,10 @@ function getVisibleFieldsCount(processType) {
 function getFieldCols(field) {
   switch (field.type) {
     case 'TEXTAREA':
-    case 'CHECKBOX':
-      return 12
+    case 'FILE':
+      return 12  // Largura completa (uma linha inteira)
     default:
-      return { cols: 12, md: 6 }
+      return 4  // 3 campos por linha em desktop
   }
 }
 
@@ -435,11 +611,54 @@ function getFieldRules(field) {
       rules.push(v => !v || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'CNPJ inválido')
       break
     case 'PHONE':
-      rules.push(v => !v || /^\(\d{2}\) \d{4,5}-\d{4}$/.test(v) || 'Telefone inválido')
+      // Aceita formato com máscara (XX) XXXXX-XXXX ou apenas números (10-11 dígitos)
+      rules.push(v => {
+        if (!v) return true
+        const digits = v.replace(/\D/g, '')
+        return (digits.length >= 10 && digits.length <= 11) || 'Telefone deve ter 10 ou 11 dígitos'
+      })
       break
   }
 
   return rules
+}
+
+// Funções para formatação de telefone
+function formatPhone(value) {
+  if (!value) return ''
+  // Remove tudo que não é número
+  const digits = value.replace(/\D/g, '')
+
+  if (digits.length === 0) return ''
+
+  // Formata de acordo com a quantidade de dígitos
+  if (digits.length <= 2) {
+    return `(${digits}`
+  } else if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+  } else if (digits.length <= 10) {
+    // Telefone fixo: (XX) XXXX-XXXX
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  } else {
+    // Celular: (XX) XXXXX-XXXX
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`
+  }
+}
+
+function formatPhoneField(fieldName) {
+  const value = formData.value[fieldName]
+  if (value) {
+    formData.value[fieldName] = formatPhone(value)
+  }
+}
+
+function onPhoneInput(fieldName, event) {
+  // Permite que o usuário digite livremente, mas remove caracteres não numéricos
+  // A formatação acontece no blur
+  const value = event.target?.value || formData.value[fieldName] || ''
+  // Mantém apenas números enquanto digita (máximo 11 dígitos)
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  formData.value[fieldName] = digits
 }
 
 // Métodos de navegação (mantidos)
@@ -447,9 +666,195 @@ function goBack() {
   router.push('/processes')
 }
 
+// Funções para campos de arquivo
+function getFileFieldConfig(field) {
+  const defaultConfig = {
+    multiple: false,
+    maxFiles: 1,
+    maxSize: 10 * 1024 * 1024, // 10MB
+    allowedTypes: ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.xls', '.xlsx']
+  }
+
+  if (field.validations) {
+    try {
+      const validations = typeof field.validations === 'object' ? field.validations : JSON.parse(field.validations)
+      return {
+        multiple: validations.maxFiles ? validations.maxFiles > 1 : defaultConfig.multiple,
+        maxFiles: validations.maxFiles || defaultConfig.maxFiles,
+        maxSize: validations.maxSize || defaultConfig.maxSize,
+        allowedTypes: validations.allowedTypes || defaultConfig.allowedTypes
+      }
+    } catch {
+      return defaultConfig
+    }
+  }
+
+  return defaultConfig
+}
+
+function getFileFieldHint(field) {
+  const config = getFileFieldConfig(field)
+  const sizeInMB = (config.maxSize / (1024 * 1024)).toFixed(0)
+  const types = config.allowedTypes.join(', ')
+
+  return `Tamanho máximo: ${sizeInMB}MB. Tipos permitidos: ${types}`
+}
+
+function getFileFieldRules(field) {
+  const rules = []
+  const config = getFileFieldConfig(field)
+
+  if (field.required) {
+    rules.push(v => !!v || `${field.label} é obrigatório`)
+  }
+
+  // Validar tamanho do arquivo
+  rules.push(v => {
+    if (!v) return true
+
+    if (v.size > config.maxSize) {
+      const maxSizeMB = (config.maxSize / (1024 * 1024)).toFixed(0)
+      return `Arquivo muito grande. Tamanho máximo: ${maxSizeMB}MB`
+    }
+
+    return true
+  })
+
+  return rules
+}
+
+async function handleFileChange(fieldName, file) {
+  fileInputs.value[fieldName] = file
+
+  if (!file) {
+    delete uploadedFileIds.value[fieldName]
+    delete formData.value[fieldName]
+    return
+  }
+
+  // Upload será feito no submit
+  console.log('File selected for field', fieldName, ':', file)
+}
+
+// ✅ Novas funções para o design de upload profissional
+function triggerFileInput(fieldName) {
+  const input = fileInputRefs.value[fieldName]
+  if (input) {
+    input.click()
+  }
+}
+
+function handleFileInputChange(fieldName, event, field) {
+  const file = event.target.files?.[0]
+  if (file) {
+    validateAndSetFile(fieldName, file, field)
+  }
+}
+
+function handleFileDrop(fieldName, event, field) {
+  dragStates.value[fieldName] = false
+  const file = event.dataTransfer?.files?.[0]
+  if (file) {
+    validateAndSetFile(fieldName, file, field)
+  }
+}
+
+function validateAndSetFile(fieldName, file, field) {
+  const config = getFileFieldConfig(field)
+
+  // Limpar erro anterior
+  delete fileErrors.value[fieldName]
+
+  // Validar tamanho
+  if (file.size > config.maxSize) {
+    const maxSizeMB = (config.maxSize / (1024 * 1024)).toFixed(0)
+    fileErrors.value[fieldName] = `Arquivo muito grande. Tamanho máximo: ${maxSizeMB}MB`
+    return
+  }
+
+  // Validar tipo
+  const extension = '.' + file.name.split('.').pop().toLowerCase()
+  const allowedExtensions = config.allowedTypes.map(t => t.toLowerCase())
+  if (!allowedExtensions.includes(extension)) {
+    fileErrors.value[fieldName] = `Tipo de arquivo não permitido. Tipos aceitos: ${config.allowedTypes.join(', ')}`
+    return
+  }
+
+  // Arquivo válido
+  fileInputs.value[fieldName] = file
+  console.log('File validated and set for field', fieldName, ':', file)
+}
+
+function removeFile(fieldName) {
+  fileInputs.value[fieldName] = null
+  delete fileErrors.value[fieldName]
+  delete uploadedFileIds.value[fieldName]
+  delete formData.value[fieldName]
+
+  // Limpar input
+  const input = fileInputRefs.value[fieldName]
+  if (input) {
+    input.value = ''
+  }
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+function getFileIcon(filename) {
+  if (!filename) return 'mdi-file'
+  const ext = filename.split('.').pop()?.toLowerCase()
+
+  const iconMap = {
+    pdf: 'mdi-file-pdf-box',
+    doc: 'mdi-file-word',
+    docx: 'mdi-file-word',
+    xls: 'mdi-file-excel',
+    xlsx: 'mdi-file-excel',
+    jpg: 'mdi-file-image',
+    jpeg: 'mdi-file-image',
+    png: 'mdi-file-image',
+    gif: 'mdi-file-image',
+    txt: 'mdi-file-document',
+    zip: 'mdi-folder-zip',
+    rar: 'mdi-folder-zip'
+  }
+
+  return iconMap[ext] || 'mdi-file'
+}
+
+function getFileIconColor(filename) {
+  if (!filename) return 'grey'
+  const ext = filename.split('.').pop()?.toLowerCase()
+
+  const colorMap = {
+    pdf: 'red',
+    doc: 'blue',
+    docx: 'blue',
+    xls: 'green',
+    xlsx: 'green',
+    jpg: 'purple',
+    jpeg: 'purple',
+    png: 'purple',
+    gif: 'purple',
+    txt: 'grey',
+    zip: 'orange',
+    rar: 'orange'
+  }
+
+  return colorMap[ext] || 'grey'
+}
+
 function changeProcessType() {
   selectedProcessTypeId.value = null
   formData.value = {}
+  fileInputs.value = {}
+  uploadedFileIds.value = {}
 }
 
 function selectProcessType(processType) {
@@ -539,16 +944,203 @@ onMounted(async () => {
   padding-left: 16px;
 }
 
+/* ========================================
+   UPLOAD DE ARQUIVO - DESIGN PROFISSIONAL
+   ======================================== */
+
+/* Container principal */
+.file-upload-container {
+  width: 100%;
+}
+
+/* Label do campo */
+.file-upload-label {
+  display: block;
+  color: rgba(0, 0, 0, 0.87);
+}
+
+/* Input escondido */
+.file-input-hidden {
+  display: none;
+}
+
+/* Área de upload */
+.file-upload-area {
+  position: relative;
+  border: 2px dashed rgba(0, 0, 0, 0.12);
+  border-radius: 16px;
+  padding: 32px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.01), rgba(0, 0, 0, 0.02));
+}
+
+.file-upload-area:hover {
+  border-color: rgb(var(--v-theme-primary));
+  background: linear-gradient(135deg, rgba(25, 118, 210, 0.03), rgba(25, 118, 210, 0.06));
+}
+
+/* Estado: Dragover */
+.file-upload-area--dragover {
+  border-color: rgb(var(--v-theme-primary));
+  border-style: solid;
+  background: linear-gradient(135deg, rgba(25, 118, 210, 0.08), rgba(25, 118, 210, 0.12));
+  transform: scale(1.01);
+}
+
+.file-upload-area--dragover .file-upload-icon {
+  animation: bounce 0.6s ease infinite;
+}
+
+/* Estado: Com arquivo */
+.file-upload-area--has-file {
+  border-style: solid;
+  border-color: rgb(var(--v-theme-success));
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.03), rgba(76, 175, 80, 0.06));
+  padding: 20px;
+}
+
+/* Estado: Erro */
+.file-upload-area--error {
+  border-color: rgb(var(--v-theme-error));
+  background: linear-gradient(135deg, rgba(244, 67, 54, 0.03), rgba(244, 67, 54, 0.06));
+}
+
+/* Ícone wrapper */
+.file-upload-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0.06));
+  margin-bottom: 8px;
+  transition: all 0.3s ease;
+}
+
+.file-upload-area:hover .file-upload-icon-wrapper {
+  background: linear-gradient(135deg, rgba(25, 118, 210, 0.08), rgba(25, 118, 210, 0.12));
+}
+
+.file-upload-area--dragover .file-upload-icon-wrapper {
+  background: linear-gradient(135deg, rgba(25, 118, 210, 0.15), rgba(25, 118, 210, 0.25));
+}
+
+/* Texto de upload */
+.file-upload-text p {
+  margin: 0;
+}
+
+/* Estado vazio */
+.file-upload-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Preview do arquivo */
+.file-upload-preview {
+  width: 100%;
+}
+
+.file-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #ffffff !important;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.file-preview-icon {
+  flex-shrink: 0;
+}
+
+.file-preview-info {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.file-preview-name {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.file-preview-size {
+  margin: 0;
+}
+
+.file-preview-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Indicador de sucesso */
+.file-success-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+  padding: 6px 12px;
+  background: rgba(76, 175, 80, 0.1);
+  border-radius: 20px;
+}
+
+/* Mensagem de erro */
+.file-upload-error {
+  display: flex;
+  align-items: center;
+}
+
+/* Animação de bounce */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
 /* Responsividade */
 @media (max-width: 768px) {
   .header-section {
     padding: 16px;
   }
-  
+
   .selected-process-header .d-flex {
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
   }
+
+  .file-upload-area {
+    padding: 24px 16px;
+  }
+
+  .file-preview-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+
+  .file-preview-info {
+    text-align: center;
+  }
+
+  .file-preview-name {
+    max-width: 100%;
+  }
 }
+
 </style>

@@ -18,13 +18,23 @@
     </div>
 
     <!-- Tabela de Usuários -->
-    <v-card>
+    <v-card flat>
       <v-data-table
         :headers="headers"
         :items="users"
         :loading="loading"
         :search="search"
         class="elevation-0"
+        items-per-page-text="Itens por página"
+        :items-per-page-options="[
+          { value: 5, title: '5' },
+          { value: 10, title: '10' },
+          { value: 25, title: '25' },
+          { value: -1, title: 'Todos' }
+        ]"
+        no-data-text="Nenhum usuário encontrado"
+        loading-text="Carregando..."
+        page-text="{0}-{1} de {2}"
       >
         <template v-slot:top>
           <v-card-title class="d-flex align-center pe-2">
@@ -107,7 +117,7 @@
             <v-tooltip activator="parent" location="top">Editar</v-tooltip>
           </v-btn>
           <v-btn
-            v-if="authStore.isAdmin"
+            v-if="authStore.hasPermission('users', 'manage')"
             icon="mdi-lock-reset"
             size="small"
             variant="text"
@@ -157,7 +167,7 @@
               <h2 class="text-h5 font-weight-bold mb-1">
                 {{ editingItem?.id ? 'Editar Usuário' : 'Novo Usuário' }}
               </h2>
-              <p class="text-body-2 text-medium-emphasis mb-0">
+              <p class="text-body-2  mb-0 ">
                 {{ editingItem?.id
                   ? 'Atualize as informações do usuário e suas permissões'
                   : 'Preencha os dados para criar um novo usuário no sistema'
@@ -305,7 +315,7 @@
                 </v-col>
 
                 <v-col cols="12" md="6" v-if="editingItem?.id">
-                  <v-card variant="outlined" class="pa-4">
+                  <v-card flat class="pa-4 ">
                     <div class="d-flex align-center justify-space-between">
                       <div class="d-flex align-center">
                         <v-icon :color="formData.isActive ? 'success' : 'error'" class="mr-3" size="28">
@@ -515,41 +525,7 @@
                       </v-col>
                     </v-row>
 
-                    <!-- Resumo da empresa -->
-                    <v-alert
-                      v-if="company.companyId && company.profileId"
-                      type="info"
-                      variant="tonal"
-                      density="compact"
-                      class="mt-3"
-                    >
-                      <div class="text-caption">
-                        <div>
-                          <strong>{{ getCompanyName(company.companyId) }}</strong>
-                          <span v-if="company.sectorId">
-                            • {{ getSectorName(company.sectorId) }}
-                          </span>
-                          <span v-if="company.isDefault" class="text-warning">
-                            • Empresa padrão
-                          </span>
-                        </div>
-                        <div v-if="company.profileId" class="mt-1">
-                          <span class="font-weight-medium">Perfil de acesso:</span>
-                          {{ getProfileName(company.profileId) }}
-                        </div>
-                        <ul
-                          v-if="company.profileId"
-                          class="mt-2 mb-0 ps-4 text-caption"
-                        >
-                          <li
-                            v-for="summary in getProfileCapabilitySummary(company.profileId)"
-                            :key="summary"
-                          >
-                            {{ summary }}
-                          </li>
-                        </ul>
-                      </div>
-                    </v-alert>
+                  
 
                   </v-card-text>
                 </v-card>
@@ -580,6 +556,10 @@
                   >
                     Adicionar Primeira Empresa
                   </v-btn>
+                  <div v-else-if="companyStore.loading" class="text-center mt-4">
+                    <v-progress-circular indeterminate size="24" class="mr-2" />
+                    <span class="text-medium-emphasis">Carregando empresas...</span>
+                  </div>
                   <v-alert
                     v-else
                     type="warning"
@@ -733,7 +713,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/users'
 import { useCompanyStore } from '@/stores/company'
@@ -790,12 +770,26 @@ const profileMap = computed(() => {
   return map
 })
 const availableCompanies = computed(() => {
-  if (authStore.isAdmin) {
-    return companyStore.companies || []
-  } else {
-    // Managers só podem gerenciar usuários da própria empresa
-    return (companyStore.companies || []).filter(c => c.id === authStore.user?.companyId)
+  const allCompanies = companyStore.companies || []
+
+  // Se tem permissão de gerenciar empresas, gerenciar usuários, ou permissão total, pode ver todas
+  // Justificativa: quem está na tela de gerenciar usuários precisa poder vincular usuários às empresas
+  const canSeeAllCompanies = authStore.hasPermission('companies', 'manage') ||
+                             authStore.hasPermission('users', 'manage') ||
+                             authStore.hasPermission('*', '*')
+
+  if (canSeeAllCompanies) {
+    return allCompanies
   }
+
+  // Outros usuários só podem gerenciar usuários da própria empresa
+  const userCompanyId = authStore.activeCompany?.companyId || authStore.activeCompanyId
+  if (!userCompanyId) {
+    // Se não temos o ID da empresa, retornar todas (fallback para evitar tela vazia)
+    return allCompanies
+  }
+
+  return allCompanies.filter(c => c.id === userCompanyId)
 })
 
 const canAddMoreCompanies = computed(() => {
@@ -850,7 +844,8 @@ const cpfRules = [
 
 // Métodos auxiliares
 function canDelete(user) {
-  return authStore.isAdmin && user.id !== authStore.user?.id
+  // Permite deletar se tiver permissão users:manage e não for o próprio usuário
+  return authStore.hasPermission('users', 'manage') && user.id !== authStore.user?.id
 }
 
 function getCompanyName(companyId) {
@@ -873,14 +868,31 @@ function getSectorsForCompany(companyId) {
 function getAvailableCompaniesForIndex(index) {
   // Para a empresa atual, mostrar todas as disponíveis
   // Para outras, filtrar as já selecionadas
-  const currentCompanyId = formData.value.companies[index]?.companyId
+  const currentCompany = formData.value.companies[index]
+  const currentCompanyId = currentCompany?.companyId
   const selectedCompanyIds = formData.value.companies
     .map((c, i) => i !== index ? c.companyId : null)
     .filter(Boolean)
 
-  return availableCompanies.value.filter(company => 
+  const filteredCompanies = availableCompanies.value.filter(company =>
     company.id === currentCompanyId || !selectedCompanyIds.includes(company.id)
   )
+
+  // ✅ CORREÇÃO: Se a empresa atual não está na lista (ex: empresas não carregadas),
+  // adiciona um item placeholder para exibir corretamente
+  if (currentCompanyId && !filteredCompanies.some(c => c.id === currentCompanyId)) {
+    // Buscar o nome: 1) do formData, 2) da store, 3) fallback
+    const companyName = currentCompany?.companyName ||
+                        getCompanyName(currentCompanyId) ||
+                        companyStore.companies?.find(c => c.id === currentCompanyId)?.name ||
+                        'Carregando...'
+    filteredCompanies.unshift({
+      id: currentCompanyId,
+      name: companyName
+    })
+  }
+
+  return filteredCompanies
 }
 
 function getProfilesForCompany(companyId) {
@@ -947,13 +959,14 @@ function getProfileCapabilitySummary(profileId) {
 // Métodos de gerenciamento de empresas
 function addCompany() {
   const assignedCompanyIds = formData.value.companies.map(c => c.companyId).filter(Boolean)
-  const availableCompanyIds = availableCompanies.value
-    .map(c => c.id)
-    .filter(id => !assignedCompanyIds.includes(id))
+  const availableForAdd = availableCompanies.value
+    .filter(c => !assignedCompanyIds.includes(c.id))
 
-  if (availableCompanyIds.length > 0) {
+  if (availableForAdd.length > 0) {
+    const firstAvailable = availableForAdd[0]
     const newCompany = {
-      companyId: availableCompanyIds[0], // Selecionar automaticamente a primeira disponível
+      companyId: firstAvailable.id, // Selecionar automaticamente a primeira disponível
+      companyName: firstAvailable.name, // ✅ Salvar nome para exibição
       sectorId: null,
       profileId: null,
       isDefault: formData.value.companies.length === 0
@@ -988,18 +1001,41 @@ function onDefaultChange(index, isDefault) {
     if (!hasDefault && formData.value.companies.length > 0) {
       // Se não há nenhuma padrão, manter esta como padrão
       formData.value.companies[index].isDefault = true
-      window.showSnackbar?.('Pelo menos uma empresa deve ser padrão', 'warning')
     }
   }
 }
 
 function onCompanyChange(index, newCompanyId) {
-  // Limpar setor ao trocar empresa
-  if (formData.value.companies[index]) {
-    formData.value.companies[index].sectorId = null
-    formData.value.companies[index].profileId = null
+  const company = formData.value.companies[index]
+  if (!company) return
+
+  // ✅ Verificar se o setor atual pertence à nova empresa
+  // Se pertencer, não limpar; se não pertencer ou for null, limpar
+  const currentSectorId = company.sectorId
+  const sectorsForNewCompany = getSectorsForCompany(newCompanyId)
+  const sectorBelongsToNewCompany = currentSectorId &&
+    sectorsForNewCompany.some(s => s.id === currentSectorId)
+
+  // Só limpar setor se ele não pertencer à nova empresa
+  if (!sectorBelongsToNewCompany) {
+    company.sectorId = null
   }
-  applyDefaultProfileForCompany(index, { overwrite: true })
+
+  // ✅ Verificar se o perfil atual é válido para a nova empresa
+  const currentProfileId = company.profileId
+  const profilesForNewCompany = getProfilesForCompany(newCompanyId)
+  const profileValidForNewCompany = currentProfileId &&
+    profilesForNewCompany.some(p => p.id === currentProfileId)
+
+  // Só limpar perfil se ele não for válido para a nova empresa
+  if (!profileValidForNewCompany) {
+    company.profileId = null
+    applyDefaultProfileForCompany(index, { overwrite: true })
+  }
+
+  // Atualizar nome da empresa para exibição
+  const selectedCompany = availableCompanies.value.find(c => c.id === newCompanyId)
+  company.companyName = selectedCompany?.name || ''
 }
 
 watch(
@@ -1016,20 +1052,25 @@ function openDialog(item = null) {
   
   if (item) {
     // Editando usuário existente
+    // Limpar caracteres de formatação do CPF (pontos e traços)
+    const cpfLimpo = (item.cpf || '').replace(/\D/g, '')
     formData.value = {
       name: item.name || '',
       email: item.email || '',
       password: '',
-      cpf: item.cpf || '',
+      cpf: cpfLimpo,
       companies: item.companies && item.companies.length > 0
         ? item.companies.map(company => ({
             companyId: company.companyId,
-            sectorId: company.sectorId || null,
+            companyName: company.companyName || '', // ✅ Salvar nome para exibição
+            // ✅ CORREÇÃO: Backend retorna 'sector' como objeto, não 'sectorId'
+            sectorId: company.sectorId || company.sector?.id || null,
             profileId: company.profileId || null,
             isDefault: company.isDefault || false
           }))
         : [{
             companyId: authStore.user?.companyId || (availableCompanies.value[0]?.id || ''),
+            companyName: availableCompanies.value[0]?.name || '',
             sectorId: item.sector?.id || null,
             profileId: null,
             isDefault: true
@@ -1049,8 +1090,10 @@ function openDialog(item = null) {
     
     // Adicionar primeira empresa automaticamente se disponível
     if (availableCompanies.value.length > 0) {
+      const firstCompany = availableCompanies.value[0]
       formData.value.companies.push({
-        companyId: availableCompanies.value[0].id,
+        companyId: firstCompany.id,
+        companyName: firstCompany.name, // ✅ Salvar nome para exibição
         sectorId: null,
         profileId: null,
         isDefault: true
@@ -1059,6 +1102,11 @@ function openDialog(item = null) {
   }
   
   dialog.value = true
+
+  // Validar formulário após abrir (para edição)
+  nextTick(() => {
+    form.value?.validate()
+  })
 }
 
 function closeDialog() {
@@ -1265,6 +1313,21 @@ onMounted(async () => {
    CENTRALIZAÇÃO DE ÍCONES NOS AVATARES
    ======================================== */
 
+/* ✅ CORREÇÃO: Todos os avatares do dialog */
+.user-dialog-card .v-avatar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.user-dialog-card .v-avatar .v-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
 /* Avatares de Seção */
 .section-avatar,
 .company-avatar,
@@ -1280,6 +1343,8 @@ onMounted(async () => {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 /* Lista de Empresas */

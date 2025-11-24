@@ -119,8 +119,8 @@
               </v-chip>
             </header>
             <p class="text-body-2 text-medium-emphasis mb-4">
-              Escolha para quais tipos de processo este perfil terá acesso e defina as capacidades.
-              Utilize a opção "Todos os tipos" para aplicar regras globais.
+              Selecione os tipos de processo que este perfil poderá acessar.
+              <strong>Ao adicionar um tipo, o perfil terá acesso completo</strong> (visualizar, criar e executar).
             </p>
             <v-autocomplete
               v-model="selectedProcessTypeIds"
@@ -145,88 +145,21 @@
 
             <v-expand-transition>
               <div v-if="processTypeSelections.length" class="process-type-list mt-4">
-                <v-row class="process-type-list__row" dense>
-                  <v-col
+                <div class="d-flex flex-wrap ga-2">
+                  <v-chip
                     v-for="item in processTypeSelections"
                     :key="item.key"
-                    cols="12"
-                    md="6"
+                    color="primary"
+                    variant="tonal"
+                    closable
+                    @click:close="removeProcessType(item.key)"
                   >
-                    <v-card variant="outlined" class="process-type-card">
-                      <v-card-title class="d-flex align-center py-3">
-                        <v-avatar size="36" color="primary" variant="tonal">
-                          <v-icon size="20">
-                            {{ item.processTypeId === '*' ? 'mdi-asterisk' : 'mdi-file-tree' }}
-                          </v-icon>
-                        </v-avatar>
-                        <div class="ml-3">
-                          <div class="text-subtitle-2 font-weight-medium">
-                            {{ item.label }}
-                          </div>
-                          <div class="text-caption text-medium-emphasis">
-                            {{ item.processTypeId === '*' ? 'Aplica-se a todos os processos' : 'Regra específica' }}
-                          </div>
-                        </div>
-                        <v-spacer />
-                        <v-btn
-                          icon="mdi-close"
-                          variant="text"
-                          density="comfortable"
-                          @click="removeProcessType(item.key)"
-                        />
-                      </v-card-title>
-
-                      <v-divider class="my-0" />
-
-                      <v-card-text class="pt-4">
-                        <div class="text-body-2 text-medium-emphasis mb-3">
-                          Defina as capacidades permitidas para este tipo.
-                        </div>
-                        <v-chip-group
-                          v-model="item.toggle"
-                          multiple
-                          class="process-type-card__chips"
-                          @update:model-value="() => syncProcessTypeEntry(item)"
-                        >
-                          <v-chip
-                            value="view"
-                            label
-                            variant="tonal"
-                            :color="item.toggle.includes('view') ? 'primary' : undefined"
-                          >
-                            Visualizar
-                          </v-chip>
-                          <v-chip
-                            value="create"
-                            label
-                            variant="tonal"
-                            :color="item.toggle.includes('create') ? 'primary' : undefined"
-                          >
-                            Criar
-                          </v-chip>
-                          <v-chip
-                            value="execute"
-                            label
-                            variant="tonal"
-                            :color="item.toggle.includes('execute') ? 'primary' : undefined"
-                          >
-                            Executar
-                          </v-chip>
-                        </v-chip-group>
-
-                        <v-alert
-                          v-if="!item.toggle.length"
-                          type="warning"
-                          variant="tonal"
-                          density="comfortable"
-                          class="mt-4"
-                        >
-                          Sem capacidades ativas. Este perfil não terá acesso a este tipo.
-                        </v-alert>
-                      </v-card-text>
-                    </v-card>
-                  </v-col>
-                </v-row>
+                    <v-icon start size="18">
+                      {{ item.processTypeId === '*' ? 'mdi-asterisk' : 'mdi-file-tree' }}
+                    </v-icon>
+                    {{ item.label }}
+                  </v-chip>
+                </div>
               </div>
             </v-expand-transition>
 
@@ -236,7 +169,7 @@
               variant="tonal"
               class="mt-4"
             >
-              Selecione um tipo de processo para começar.
+              Selecione um tipo de processo para dar acesso a este perfil.
             </v-alert>
           </section>
 
@@ -405,11 +338,7 @@ function initializeForm(profile) {
     : []
 
   existingProcessTypes.forEach((item) => {
-    addProcessTypeSelection(item.processTypeId || '*', {
-      canView: Boolean(item.canView),
-      canCreate: Boolean(item.canCreate),
-      canExecute: Boolean(item.canExecute),
-    })
+    addProcessTypeSelection(item.processTypeId || '*')
   })
 }
 
@@ -421,24 +350,23 @@ function normalizeProcessTypeId(value) {
   return value
 }
 
-function addProcessTypeSelection(processTypeId, capabilities) {
+function addProcessTypeSelection(processTypeId) {
   const normalizedId = normalizeProcessTypeId(processTypeId) ?? '*'
   const exists = processTypeSelections.some((item) => item.processTypeId === normalizedId)
   if (exists) return
 
   const label = processTypeLookup.value.get(normalizedId) || 'Tipo desconhecido'
 
+  // Ao selecionar um tipo, SEMPRE tem ACESSO COMPLETO (view, create, execute)
   const base = {
     key: generateKey('process-type'),
     processTypeId: normalizedId,
     label,
-    canView: capabilities?.canView ?? true,
-    canCreate: capabilities?.canCreate ?? false,
-    canExecute: capabilities?.canExecute ?? false,
-    toggle: [],
+    canView: true,
+    canCreate: true,
+    canExecute: true,
   }
 
-  base.toggle = buildToggleArray(base)
   processTypeSelections.push(base)
 }
 
@@ -454,26 +382,6 @@ function removeProcessTypeById(processTypeId) {
   if (index !== -1) {
     processTypeSelections.splice(index, 1)
   }
-}
-
-function buildToggleArray(item) {
-  const toggle = []
-  if (item.canView) toggle.push('view')
-  if (item.canCreate) toggle.push('create')
-  if (item.canExecute) toggle.push('execute')
-  return toggle
-}
-
-function syncProcessTypeToggle() {
-  processTypeSelections.forEach((item) => {
-    syncProcessTypeEntry(item)
-  })
-}
-
-function syncProcessTypeEntry(item) {
-  item.canView = item.toggle.includes('view')
-  item.canCreate = item.toggle.includes('create')
-  item.canExecute = item.toggle.includes('execute')
 }
 
 function selectedActionsCount(screenId) {
@@ -513,19 +421,18 @@ async function handleSubmit() {
     return
   }
 
-  syncProcessTypeToggle()
-
   try {
     const payload = {
       name: form.name.trim(),
       description: form.description?.trim() || null,
       isDefault: Boolean(form.isDefault),
       permissions: collectScreenPermissions(),
+      // Ao adicionar tipo de processo, SEMPRE tem acesso completo
       processTypes: processTypeSelections.map((item) => ({
         processTypeId: item.processTypeId || '*',
-        canView: Boolean(item.canView),
-        canCreate: Boolean(item.canCreate),
-        canExecute: Boolean(item.canExecute),
+        canView: true,
+        canCreate: true,
+        canExecute: true,
       })),
     }
 

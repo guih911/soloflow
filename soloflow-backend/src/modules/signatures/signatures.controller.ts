@@ -13,18 +13,13 @@ import {
 import { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
 import { SignaturesService } from './signatures.service';
 import { SignDocumentSimpleDto } from './dto/sign-document-simple.dto';
 import { CreateSignatureRequirementDto } from './dto/create-signature-requirement.dto';
-import { ValidateSignaturePublicDto } from './dto/validate-signature-public.dto';
 import { IpService } from '../../common/services/ip-service';
 
 @Controller('signatures')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
+@UseGuards(JwtAuthGuard)
 export class SignaturesController {
   constructor(
     private readonly signaturesService: SignaturesService,
@@ -61,18 +56,6 @@ export class SignaturesController {
       });
       throw error;
     }
-  }
-
-  /**
-   * Validação pública de assinatura (SEM autenticação)
-   * Qualquer pessoa pode validar uma assinatura
-   */
-  @Post('public/validate')
-  async validateSignature(@Body() dto: ValidateSignaturePublicDto) {
-    return this.signaturesService.validatePublicSignature(
-      dto.signatureToken,
-      dto.documentHash,
-    );
   }
 
   /**
@@ -145,5 +128,15 @@ export class SignaturesController {
     });
 
     return new StreamableFile(file);
+  }
+
+  /**
+   * Busca status detalhado das assinaturas de um anexo
+   * Retorna informações sobre quem já assinou, quem está aguardando e a ordem
+   */
+  @Get('status/:attachmentId')
+  @UseGuards(JwtAuthGuard)
+  async getSignatureStatus(@Param('attachmentId') attachmentId: string, @Req() req) {
+    return this.signaturesService.getSignatureStatus(attachmentId, req.user.id);
   }
 }

@@ -212,10 +212,6 @@
                       <v-chip v-if="step.actions?.length > 0" size="x-small">
                         {{ step.actions.length }} ações
                       </v-chip>
-                      <v-chip v-if="step.flowConditions" size="x-small" color="info" class="ml-1">
-                        <v-icon start size="12">mdi-arrow-decision</v-icon>
-                        Fluxo condicional
-                      </v-chip>
                     </div>
                   </v-list-item-subtitle>
 
@@ -448,18 +444,18 @@ const nameRules = [
 ]
 
 const fieldTypes = [
-  { title: 'Texto', value: 'TEXT' }, 
-  { title: 'Número', value: 'NUMBER' }, 
-  { title: 'Data', value: 'DATE' }, 
-  { title: 'E-mail', value: 'EMAIL' }, 
-  { title: 'CPF', value: 'CPF' }, 
-  { title: 'CNPJ', value: 'CNPJ' }, 
-  { title: 'Telefone', value: 'PHONE' }, 
-  { title: 'Lista Suspensa', value: 'DROPDOWN' }, 
-  { title: 'Caixa de Seleção', value: 'CHECKBOX' }, 
-  { title: 'Área de Texto', value: 'TEXTAREA' }, 
-  { title: 'Moeda', value: 'CURRENCY' }, 
+  { title: 'Texto', value: 'TEXT' },
+  { title: 'Número', value: 'NUMBER' },
+  { title: 'Data', value: 'DATE' },
+  { title: 'E-mail', value: 'EMAIL' },
+  { title: 'CPF', value: 'CPF' },
+  { title: 'CNPJ', value: 'CNPJ' },
+  { title: 'Telefone', value: 'PHONE' },
+  { title: 'Lista Suspensa', value: 'DROPDOWN' },
+  { title: 'Área de Texto', value: 'TEXTAREA' },
+  { title: 'Moeda', value: 'CURRENCY' },
   { title: 'Arquivo', value: 'FILE' }
+  // CHECKBOX removido - usar DROPDOWN para múltiplas opções
 ]
 
 function getFieldTypeColor(type) {
@@ -468,19 +464,18 @@ function getFieldTypeColor(type) {
 }
 
 function getFieldTypeIcon(type) {
-  const icons = { 
-    TEXT: 'mdi-format-text', 
-    NUMBER: 'mdi-numeric', 
-    DATE: 'mdi-calendar', 
-    EMAIL: 'mdi-email', 
-    CPF: 'mdi-card-account-details', 
-    CNPJ: 'mdi-domain', 
-    PHONE: 'mdi-phone', 
-    DROPDOWN: 'mdi-menu-down', 
-    CHECKBOX: 'mdi-checkbox-marked', 
-    TEXTAREA: 'mdi-text-long', 
-    CURRENCY: 'mdi-currency-brl', 
-    FILE: 'mdi-paperclip' 
+  const icons = {
+    TEXT: 'mdi-format-text',
+    NUMBER: 'mdi-numeric',
+    DATE: 'mdi-calendar',
+    EMAIL: 'mdi-email',
+    CPF: 'mdi-card-account-details',
+    CNPJ: 'mdi-domain',
+    PHONE: 'mdi-phone',
+    DROPDOWN: 'mdi-menu-down',
+    TEXTAREA: 'mdi-text-long',
+    CURRENCY: 'mdi-currency-brl',
+    FILE: 'mdi-paperclip'
   }
   return icons[type] || 'mdi-help-circle'
 }

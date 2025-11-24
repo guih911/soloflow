@@ -173,7 +173,7 @@
       <div class="drawer-gradient">
         <v-divider style="border-color: rgba(255, 255, 255, 0.2);" />
 
-        <!-- ✨ Navigation Items com Ícones Corrigidos -->
+        <!-- Navegacao -->
         <v-list nav density="comfortable" class="navigation-list">
           <!-- Dashboard -->
           <v-tooltip
@@ -301,9 +301,8 @@
             </template>
           </v-tooltip>
 
-          <!-- Assinaturas Pendentes -->
+          <!-- Assinaturas Pendentes - Disponível para todos os usuários autenticados -->
           <v-tooltip
-            v-if="canAccess({ permissions: { resource: 'signatures', action: 'view' } })"
             :disabled="drawer"
             location="right"
             text="Assinaturas"
@@ -345,7 +344,7 @@
 
           <!-- Tipos de Processo -->
           <v-tooltip
-            v-if="canAccess({ permissions: { resource: 'processTypes', action: 'manage' } })"
+            v-if="canAccess({ permissions: { resource: 'process_types', action: 'manage' } })"
             :disabled="drawer"
             location="right"
             text="Tipos de Processo"
@@ -474,6 +473,24 @@
       </div>
     </v-main>
 
+    <!-- Snackbar global -->
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      :timeout="3000"
+      location="top right"
+    >
+      {{ snackbar.message }}
+      <template v-slot:actions>
+        <v-btn
+          variant="text"
+          @click="snackbar.show = false"
+        >
+          Fechar
+        </v-btn>
+      </template>
+    </v-snackbar>
+
     <!-- ✨ Notifications Dialog -->
     <v-dialog v-model="notificationsDialog" max-width="500">
       <v-card>
@@ -517,7 +534,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useProcessStore } from '@/stores/processes'
@@ -531,6 +548,20 @@ const authStore = useAuthStore()
 // ✨ Estado Reativo
 const drawer = ref(false) // Inicia colapsado (rail mode)
 const notificationsDialog = ref(false)
+
+// Snackbar global
+const snackbar = reactive({
+  show: false,
+  message: '',
+  color: 'success'
+})
+
+// Expor método global para mostrar snackbar
+window.showSnackbar = (message, color = 'success') => {
+  snackbar.message = message
+  snackbar.color = color
+  snackbar.show = true
+}
 
 // ✨ Computed Properties
 const user = computed(() => authStore.user)
@@ -550,7 +581,7 @@ const isRead = (id) => notificationsStore.isRead(id)
 
 // Verificar se tem qualquer permissão administrativa
 const hasAnyAdminPermission = computed(() => {
-  return authStore.hasPermission('processTypes', 'manage') ||
+  return authStore.hasPermission('process_types', 'manage') ||
          authStore.hasPermission('profiles', 'manage') ||
          authStore.hasPermission('sectors', 'manage') ||
          authStore.hasPermission('users', 'manage') ||

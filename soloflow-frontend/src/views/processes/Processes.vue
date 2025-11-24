@@ -219,13 +219,15 @@ const itemsPerPageOptions = [8, 12, 16, 24, 32]
 const loading = computed(() => processTypeStore.loading)
 const processTypes = computed(() => processTypeStore.processTypes)
 
-const activeProcessTypes = computed(() =>
-  processTypes.value.filter(pt => pt.isActive)
-)
+const activeProcessTypes = computed(() => {
+  // Filtrar apenas tipos ativos e que o usuário tem permissão para criar
+  return processTypes.value.filter(pt =>
+    pt.isActive && authStore.canAccessProcessType(pt.id, 'create')
+  )
+})
 
 const canManageProcessTypes = computed(() => {
-  const userRole = authStore.userRole
-  return ['ADMIN', 'MANAGER'].includes(userRole)
+  return authStore.hasPermission('process_types', 'manage')
 })
 
 // ✨ Filtro Simplificado (apenas busca)

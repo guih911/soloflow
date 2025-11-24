@@ -121,6 +121,7 @@ export class ProfilesService {
         name: dto.name,
         description: dto.description,
         isDefault: dto.isDefault ?? false,
+        updatedAt: new Date(),
         companyId,
       };
 
@@ -261,6 +262,7 @@ export class ProfilesService {
           name: dto.name,
           description: dto.description,
           isDefault: dto.isDefault,
+          isActive: dto.isActive,
           parentProfileId: dto.parentProfileId,
         },
       });

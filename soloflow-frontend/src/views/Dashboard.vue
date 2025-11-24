@@ -288,7 +288,7 @@
             lines="three"
           >
             <v-list-item
-              v-for="(process, index) in myRecentProcesses.slice(0, 6)"
+              v-for="(process, index) in myRecentProcesses.slice(0, 3)"
               :key="process.id"
               @click="viewProcess(process)"
               class="cursor-pointer"
@@ -451,7 +451,7 @@ const userStats = computed(() => [
     subtitle: 'Processos criados por você em andamento',
     icon: 'mdi-rocket-launch',
     color: 'primary',
-    action: () => router.push('/processes/my?status=IN_PROGRESS'),
+    action: () => router.push('/my-processes?status=IN_PROGRESS'),
     progress: userActiveProcesses.value > 0 ? Math.min((userActiveProcesses.value / 10) * 100, 100) : 0,
   },
   {
@@ -460,7 +460,7 @@ const userStats = computed(() => [
     subtitle: getCompletionInsight(),
     icon: 'mdi-check-circle',
     color: 'success',
-    action: () => router.push('/processes/my?status=COMPLETED'),
+    action: () => router.push('/my-processes?status=COMPLETED'),
   }
 ])
 

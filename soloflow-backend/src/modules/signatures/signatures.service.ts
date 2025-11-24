@@ -256,21 +256,11 @@ export class SignaturesService {
       },
     });
 
-    // 13. Atualizar anexo - marcar como assinado (path permanece o mesmo pois foi substituído)
-    await this.prisma.attachment.update({
-      where: { id: dto.attachmentId },
-      data: {
-        isSigned: true,
-        // Não precisa de signedPath separado - o arquivo original foi substituído
-      },
-    });
-
-    // 13. Verificar se todas as assinaturas requeridas DESTE ARQUIVO foram concluídas
+    // 13. Verificar se todas as assinaturas DESTE ARQUIVO foram concluídas
+    // Nota: Não filtramos por isRequired pois todos os requisitos devem ser cumpridos
     const allRequirements = await this.prisma.signatureRequirement.findMany({
       where: {
-        stepVersionId: attachment.stepExecution.stepVersionId,
         attachmentId: dto.attachmentId, // APENAS REQUISITOS DESTE ANEXO
-        isRequired: true,
       },
       include: {
         signatureRecords: {
@@ -286,6 +276,19 @@ export class SignaturesService {
 
     console.log(`✅ Requisitos de assinatura para ${attachment.originalName}: ${allRequirements.length} total, ${allRequirements.filter(r => r.signatureRecords.length > 0).length} assinados`);
 
+    // IMPORTANTE: Só marcar como assinado quando TODAS as assinaturas forem concluídas
+    if (allSigned) {
+      await this.prisma.attachment.update({
+        where: { id: dto.attachmentId },
+        data: {
+          isSigned: true,
+        },
+      });
+      console.log('📝 Anexo marcado como totalmente assinado (todas as assinaturas concluídas)');
+    } else {
+      console.log(`📝 Anexo ainda aguardando mais assinaturas (${allRequirements.filter(r => r.signatureRecords.length === 0).length} pendentes)`);
+    }
+
     // Apenas registrar que todas as assinaturas foram concluídas
     // Não modificar status da etapa - a etapa já foi concluída quando o usuário clicou em "Concluir Etapa"
     if (allSigned) {
@@ -297,6 +300,44 @@ export class SignaturesService {
       });
 
       console.log('All signatures completed - step already marked as COMPLETED earlier');
+    }
+
+    // 14. Log do próximo assinante (para assinaturas sequenciais)
+    // Nota: Sistema de notificação pode ser implementado futuramente
+    if (requirement.type === 'SEQUENTIAL') {
+      // Buscar requisitos deste anexo ordenados por ordem
+      const attachmentRequirements = await this.prisma.signatureRequirement.findMany({
+        where: {
+          stepVersionId: attachment.stepExecution.stepVersionId,
+          OR: [
+            { attachmentId: dto.attachmentId },
+            { attachmentId: null }, // Requisitos globais
+          ],
+        },
+        include: {
+          user: { select: { id: true, name: true } },
+          sector: { select: { id: true, name: true } },
+          signatureRecords: {
+            where: {
+              attachmentId: dto.attachmentId,
+              status: 'COMPLETED',
+            },
+          },
+        },
+        orderBy: { order: 'asc' },
+      });
+
+      // Encontrar o próximo assinante que ainda não assinou
+      const nextRequirement = attachmentRequirements.find(req =>
+        req.order > requirement.order && req.signatureRecords.length === 0
+      );
+
+      if (nextRequirement) {
+        const nextSignerName = nextRequirement.user?.name || nextRequirement.sector?.name || 'N/A';
+        console.log(`📧 Próximo assinante disponível: ${nextSignerName} (ordem ${nextRequirement.order})`);
+      } else {
+        console.log('✅ Todas as assinaturas para este anexo foram concluídas');
+      }
     }
 
     return {
@@ -420,18 +461,18 @@ export class SignaturesService {
       throw new NotFoundException('Etapa não encontrada');
     }
 
-    const existing = await this.prisma.signatureRequirement.findUnique({
+    // Verificar duplicatas (attachmentId pode ser null para requisitos globais)
+    const existing = await this.prisma.signatureRequirement.findFirst({
       where: {
-        stepVersionId_order: {
-          stepVersionId: dto.stepVersionId,
-          order: dto.order,
-        },
+        stepVersionId: dto.stepVersionId,
+        attachmentId: dto.attachmentId ?? null,
+        order: dto.order,
       },
     });
 
     if (existing) {
       throw new BadRequestException(
-        `Já existe um requisito com ordem ${dto.order}`,
+        `Já existe um requisito com ordem ${dto.order} para este anexo`,
       );
     }
 
@@ -697,5 +738,145 @@ export class SignaturesService {
     }
 
     return attachment;
+  }
+
+  /**
+   * Busca status detalhado das assinaturas de um anexo
+   * Retorna informações sobre quem já assinou, quem está aguardando e a ordem
+   */
+  async getSignatureStatus(attachmentId: string, userId: string) {
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: {
+        stepExecution: {
+          include: {
+            stepVersion: {
+              include: {
+                signatureRequirements: {
+                  include: {
+                    user: { select: { id: true, name: true, email: true } },
+                    sector: { select: { id: true, name: true } },
+                    signatureRecords: {
+                      where: { attachmentId },
+                      include: {
+                        signer: { select: { id: true, name: true, email: true } },
+                      },
+                    },
+                  },
+                  orderBy: { order: 'asc' },
+                },
+              },
+            },
+            processInstance: {
+              include: {
+                createdBy: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Anexo não encontrado');
+    }
+
+    // Filtrar requisitos apenas para este anexo específico OU requisitos globais (attachmentId = null)
+    const allRequirements = attachment.stepExecution.stepVersion.signatureRequirements;
+    const requirements = allRequirements.filter(
+      req => !req.attachmentId || req.attachmentId === attachmentId
+    );
+
+    // Buscar setores do usuário
+    const userCompanies = await this.prisma.userCompany.findMany({
+      where: { userId },
+      select: { sectorId: true },
+    });
+    const userSectorIds = userCompanies.map(uc => uc.sectorId).filter(id => id !== null);
+
+    // Mapear os requisitos com status detalhado
+    const signatureDetails = requirements.map((req, index) => {
+      const isSigned = req.signatureRecords.length > 0 &&
+                       req.signatureRecords.some(r => r.status === 'COMPLETED');
+      const signatureRecord = req.signatureRecords.find(r => r.status === 'COMPLETED');
+
+      // Verificar se é o requisito do usuário atual
+      const isCurrentUser = req.userId === userId ||
+                           (req.sectorId && userSectorIds.includes(req.sectorId));
+
+      // Determinar o nome do responsável
+      const responsibleName = req.user?.name || req.sector?.name || 'Não definido';
+
+      // Status da assinatura para este requisito
+      let status: 'completed' | 'pending' | 'waiting' | 'available';
+      let statusMessage: string;
+
+      if (isSigned) {
+        status = 'completed';
+        const signedDate = signatureRecord?.signedAt ? new Date(signatureRecord.signedAt).toLocaleString('pt-BR') : '';
+        statusMessage = `Assinado por ${signatureRecord?.signer?.name || 'usuário'} em ${signedDate}`;
+      } else if (req.type === 'SEQUENTIAL') {
+        // Para sequencial, verificar se os anteriores já assinaram
+        const previousRequirements = requirements.filter(r => r.order < req.order);
+        const allPreviousSigned = previousRequirements.every(prevReq =>
+          prevReq.signatureRecords.some(r => r.status === 'COMPLETED')
+        );
+
+        if (allPreviousSigned) {
+          status = 'available';
+          statusMessage = isCurrentUser
+            ? 'Disponível para sua assinatura'
+            : `Aguardando assinatura de ${responsibleName}`;
+        } else {
+          status = 'waiting';
+          // Encontrar quem está pendente antes
+          const pendingBefore = previousRequirements.find(prevReq =>
+            !prevReq.signatureRecords.some(r => r.status === 'COMPLETED')
+          );
+          const waitingFor = pendingBefore?.user?.name || pendingBefore?.sector?.name || 'assinante anterior';
+          statusMessage = `Aguardando ${waitingFor} assinar primeiro`;
+        }
+      } else {
+        // PARALLEL - todos podem assinar ao mesmo tempo
+        status = 'available';
+        statusMessage = isCurrentUser
+          ? 'Disponível para sua assinatura'
+          : `Aguardando assinatura de ${responsibleName}`;
+      }
+
+      return {
+        order: req.order,
+        type: req.type,
+        responsible: {
+          id: req.userId || req.sectorId,
+          name: responsibleName,
+          type: req.userId ? 'user' : 'sector',
+        },
+        isCurrentUser,
+        status,
+        statusMessage,
+        isSigned,
+        signedAt: signatureRecord?.signedAt || null,
+        signedBy: signatureRecord?.signer || null,
+      };
+    });
+
+    // Verificar se o usuário pode assinar agora
+    const userRequirement = signatureDetails.find(d => d.isCurrentUser);
+    const canSign = userRequirement &&
+                   !userRequirement.isSigned &&
+                   (userRequirement.status === 'available');
+
+    return {
+      attachmentId,
+      attachmentName: attachment.originalName,
+      isSigned: attachment.isSigned,
+      totalSignatures: requirements.length,
+      completedSignatures: signatureDetails.filter(d => d.isSigned).length,
+      signatureDetails,
+      canSign,
+      currentUserOrder: userRequirement?.order || null,
+      signatureType: requirements[0]?.type || 'PARALLEL',
+    };
   }
 }

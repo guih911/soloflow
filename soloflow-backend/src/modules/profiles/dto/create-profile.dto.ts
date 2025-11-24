@@ -46,6 +46,10 @@ export class CreateProfileDto {
   isDefault?: boolean = false;
 
   @IsOptional()
+  @IsBoolean()
+  isActive?: boolean = true;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ProfilePermissionInput)
