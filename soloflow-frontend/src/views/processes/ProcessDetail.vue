@@ -309,8 +309,9 @@
                 <div class="step-content">
                   <v-card 
                     class="step-card"
-                    :class="getStepCardClass(execution)"
+                    :class="[getStepCardClass(execution), execution.status === 'COMPLETED' ? 'cursor-pointer' : '']"
                     :elevation="execution.status === 'IN_PROGRESS' ? 8 : 2"
+                    @click="execution.status === 'COMPLETED' && openStepDetailDialog(execution)"
                   >
                     <div class="step-card-header" :class="getStepHeaderClass(execution)">
                       <div class="d-flex align-center justify-space-between">
@@ -522,6 +523,12 @@
       :company-id="process?.companyId"
       @created="handleSubTaskCreated"
     />
+
+    <!-- Diálogo de Detalhes da Etapa -->
+    <StepExecutionDetailDialog
+      v-model="stepDetailDialog"
+      :execution="selectedStepDetail"
+    />
   </div>
 
   <div v-else-if="loading" class="text-center py-12">
@@ -557,6 +564,7 @@ import CancelProcessDialog from '@/components/CancelProcessDialog.vue'
 import CreateChildProcessDialog from '@/components/CreateChildProcessDialog.vue'
 import SubTasksList from '@/components/SubTasksList.vue'
 import CreateSubTaskDialog from '@/components/CreateSubTaskDialog.vue'
+import StepExecutionDetailDialog from '@/components/StepExecutionDetailDialog.vue'
 import { useChildProcessStore } from '@/stores/childProcesses'
 import { useSubTaskStore } from '@/stores/subTasks'
 
@@ -581,6 +589,8 @@ const selectedStepExecution = ref(null)
 const parentProcessInfo = ref(null) // Informação do processo pai se este for sub-processo
 const stepUsers = ref([]) // Usuários para atribuição de sub-tarefas
 const subTasksReloadKey = ref(0) // Key para forçar reload do SubTasksList
+const stepDetailDialog = ref(false) // Modal de detalhes da etapa
+const selectedStepDetail = ref(null) // Etapa selecionada para visualizar detalhes
 
 // Store para sub-processos e sub-tarefas
 const childProcessStore = useChildProcessStore()
@@ -1299,6 +1309,12 @@ async function handleChildProcessCreated() {
 function openCreateSubTaskDialog(execution) {
   selectedStepExecution.value = execution
   createSubTaskDialog.value = true
+}
+
+// Função para abrir modal de detalhes da etapa
+function openStepDetailDialog(execution) {
+  selectedStepDetail.value = execution
+  stepDetailDialog.value = true
 }
 
 async function handleSubTaskCreated() {
