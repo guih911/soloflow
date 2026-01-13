@@ -436,6 +436,9 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         name: data.name?.trim(),
         description: data.description?.trim() || null,
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : undefined,
+        isChildProcessOnly: data.isChildProcessOnly !== undefined ? Boolean(data.isChildProcessOnly) : undefined,
+        allowSubProcesses: data.allowSubProcesses !== undefined ? Boolean(data.allowSubProcesses) : undefined,
+        allowSubTasks: data.allowSubTasks !== undefined ? Boolean(data.allowSubTasks) : undefined,
       }
 
       if (Array.isArray(data.steps)) {

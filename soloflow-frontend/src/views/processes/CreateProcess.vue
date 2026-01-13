@@ -20,12 +20,84 @@
       </div>
     </div>
 
-    
-    <div v-if="!selectedProcessType">
-      
+    <!-- Loading enquanto carrega tipos de processo -->
+    <div v-if="loadingTypes" class="d-flex justify-center align-center" style="min-height: 300px;">
+      <v-progress-circular indeterminate color="primary" size="64" />
     </div>
 
-   
+    <!-- Quando não há tipo selecionado, mostrar lista de tipos disponíveis -->
+    <div v-else-if="!selectedProcessType">
+      <!-- Busca -->
+      <v-card class="mb-4" elevation="1">
+        <v-card-text class="py-3">
+          <v-text-field
+            v-model="searchType"
+            label="Buscar tipo de processo"
+            prepend-inner-icon="mdi-magnify"
+            clearable
+            variant="outlined"
+            density="comfortable"
+            hide-details
+          />
+        </v-card-text>
+      </v-card>
+
+      <!-- Grid de tipos de processo -->
+      <v-row>
+        <v-col
+          v-for="processType in filteredProcessTypes"
+          :key="processType.id"
+          cols="12"
+          sm="6"
+          md="4"
+        >
+          <v-card
+            class="h-100 process-type-card"
+            :class="{ 'card-disabled': !canCreateProcessType(processType) }"
+            elevation="2"
+            @click="selectProcessType(processType)"
+            style="cursor: pointer;"
+          >
+            <v-card-text class="pa-4">
+              <div class="d-flex align-center mb-3">
+                <v-avatar color="primary" size="48" class="mr-3">
+                  <v-icon color="white">mdi-file-document-outline</v-icon>
+                </v-avatar>
+                <div class="flex-grow-1">
+                  <h4 class="text-subtitle-1 font-weight-bold">{{ processType.name }}</h4>
+                  <span class="text-caption text-medium-emphasis">
+                    {{ processType.steps?.length || 0 }} etapas
+                  </span>
+                </div>
+              </div>
+              <p class="text-body-2 text-medium-emphasis mb-3" style="min-height: 40px;">
+                {{ processType.description || 'Sem descrição' }}
+              </p>
+              <v-btn
+                color="primary"
+                variant="flat"
+                block
+                :disabled="!canCreateProcessType(processType)"
+              >
+                <v-icon start>mdi-rocket-launch</v-icon>
+                Iniciar
+              </v-btn>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+
+      <!-- Mensagem quando não há tipos -->
+      <v-card v-if="filteredProcessTypes.length === 0" class="text-center pa-8">
+        <v-icon size="64" color="grey">mdi-file-document-remove-outline</v-icon>
+        <h3 class="text-h6 mt-4">Nenhum tipo de processo disponível</h3>
+        <p class="text-body-2 text-medium-emphasis">
+          {{ searchType ? 'Nenhum resultado para sua busca' : 'Não há tipos de processo configurados' }}
+        </p>
+      </v-card>
+    </div>
+
+    <!-- Formulário quando há tipo selecionado -->
     <div v-else>
       <v-card class="form-card" elevation="2">
        
@@ -55,6 +127,28 @@
         <v-form ref="processForm" v-model="formValid">
           <div class="form-content pa-6">
             
+            <!-- ✅ SEÇÃO: Título do Processo -->
+            <div class="form-section mb-6">
+              <h4 class="text-h6 font-weight-medium mb-4 d-flex align-center">
+                <v-icon color="primary" class="mr-2">mdi-format-title</v-icon>
+                Identificação do Processo
+              </h4>
+              
+              <v-text-field
+                v-model="processData.title"
+                label="Título do Processo *"
+                placeholder="Ex: Pagamento fornecedor ABC - Janeiro/2026"
+                :rules="[v => !!v || 'Título é obrigatório', v => (v && v.length >= 3) || 'Mínimo 3 caracteres']"
+                variant="outlined"
+                prepend-inner-icon="mdi-format-title"
+                hint="Dê um nome descritivo para identificar facilmente este processo"
+                persistent-hint
+                counter="100"
+                maxlength="100"
+                class="mb-3"
+              />
+            </div>
+
             <!-- ✅ SEÇÃO: Campos do Formulário -->
             <div v-if="hasFormFields" class="form-section mb-6">
               <h4 class="text-h6 font-weight-medium mb-4 d-flex align-center">
@@ -471,6 +565,7 @@ const creating = ref(false)
 
 const processForm = ref(null)
 const processData = ref({
+  title: '',
   observations: ''
 })
 const formData = ref({})
@@ -507,7 +602,9 @@ const processTypes = computed(() => {
 const preselectedType = computed(() => props.typeId || route.params.typeId)
 const selectedProcessType = computed(() => {
   if (selectedProcessTypeId.value) {
-    return processTypes.value.find(pt => pt.id === selectedProcessTypeId.value)
+    // Buscar em TODOS os tipos (não apenas nos filtrados) para suportar acesso direto via URL
+    const allTypes = processTypeStore.processTypes
+    return allTypes.find(pt => String(pt.id) === String(selectedProcessTypeId.value))
   }
   return null
 })
@@ -515,10 +612,41 @@ const hasFormFields = computed(() => {
   return getVisibleFieldsCount(selectedProcessType.value) > 0
 })
 
+// Computed para filtrar tipos de processo pela busca
+const filteredProcessTypes = computed(() => {
+  if (!searchType.value) return processTypes.value
+  const search = searchType.value.toLowerCase()
+  return processTypes.value.filter(pt => 
+    pt.name?.toLowerCase().includes(search) ||
+    pt.description?.toLowerCase().includes(search)
+  )
+})
+
+// Verificar se pode criar processo do tipo
+function canCreateProcessType(processType) {
+  return processType?.steps?.length > 0
+}
+
+// Selecionar tipo de processo
+function selectProcessType(processType) {
+  if (!canCreateProcessType(processType)) {
+    window.showSnackbar?.('Este tipo de processo não possui etapas configuradas', 'warning')
+    return
+  }
+  selectedProcessTypeId.value = processType.id
+  initializeFormData(processType)
+}
+
 
 async function createProcessWithFiles() {
   if (!formValid.value || !selectedProcessType.value) {
     window.showSnackbar?.('Por favor, corrija os erros no formulário', 'error')
+    return
+  }
+
+  // Validar título
+  if (!processData.value.title?.trim()) {
+    window.showSnackbar?.('Por favor, informe um título para o processo', 'error')
     return
   }
 
@@ -531,7 +659,7 @@ async function createProcessWithFiles() {
     // Criar o processo primeiro
     const basePayload = {
       processTypeId: selectedProcessType.value.id,
-      title: generateProcessTitle(),
+      title: processData.value.title.trim(),
       description: processData.value.observations?.trim() || null,
       formData: processFormData
     }
@@ -561,7 +689,7 @@ async function createProcessWithFiles() {
     window.showSnackbar?.('Processo criado com sucesso!', 'success')
 
     setTimeout(() => {
-      router.push(`/processes/${createdProcess.id}`)
+      router.push(`/processos/${createdProcess.id}`)
     }, 500)
 
   } catch (error) {
@@ -679,7 +807,7 @@ function onPhoneInput(fieldName, event) {
 
 // Métodos de navegação (mantidos)
 function goBack() {
-  router.push('/processes')
+  router.push('/processos')
 }
 
 // Funções para campos de arquivo
@@ -873,11 +1001,6 @@ function changeProcessType() {
   uploadedFileIds.value = {}
 }
 
-function selectProcessType(processType) {
-  selectedProcessTypeId.value = processType.id
-  initializeFormData(processType)
-}
-
 function proceedToForm() {
   const processType = processTypes.value.find(pt => pt.id === selectedProcessTypeId.value)
   if (processType) {
@@ -901,11 +1024,12 @@ function initializeFormData(processType) {
 
 // Watchers (mantidos)
 watch(() => preselectedType.value, async (newTypeId) => {
-  if (newTypeId && processTypes.value.length > 0) {
-    const processType = processTypes.value.find(pt => pt.id === newTypeId)
+  if (newTypeId && processTypeStore.processTypes.length > 0) {
+    // Buscar em TODOS os tipos do store (não nos filtrados)
+    const processType = processTypeStore.processTypes.find(pt => String(pt.id) === String(newTypeId))
     if (processType) {
       console.log('✨ Pre-selecting process type:', processType.name)
-      selectedProcessTypeId.value = newTypeId
+      selectedProcessTypeId.value = processType.id
       initializeFormData(processType)
     }
   }
@@ -915,12 +1039,13 @@ watch(() => preselectedType.value, async (newTypeId) => {
 onMounted(async () => {
   console.log('🚀 CreateProcess mounted, typeId:', preselectedType.value)
   
-  if (processTypes.value.length === 0) {
+  if (processTypeStore.processTypes.length === 0) {
     await processTypeStore.fetchProcessTypes()
   }
   
   if (preselectedType.value) {
-    const processType = processTypes.value.find(pt => pt.id === preselectedType.value)
+    // Buscar em TODOS os tipos do store (não nos filtrados)
+    const processType = processTypeStore.processTypes.find(pt => String(pt.id) === String(preselectedType.value))
     if (processType) {
       selectedProcessTypeId.value = preselectedType.value
       initializeFormData(processType)
@@ -934,6 +1059,26 @@ onMounted(async () => {
 .create-process-container {
   max-width: 1200px;
   margin: 0 auto;
+}
+
+/* Cards de seleção de tipo de processo */
+.process-type-card {
+  transition: all 0.3s ease;
+  border-radius: 12px;
+}
+
+.process-type-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+.process-type-card.card-disabled {
+  opacity: 0.6;
+  cursor: not-allowed !important;
+}
+
+.process-type-card.card-disabled:hover {
+  transform: none;
 }
 
 .header-section {

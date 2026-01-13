@@ -365,13 +365,19 @@ export class ProcessTypesService {
   async update(id: string, dto: UpdateProcessTypeWithVersioningDto): Promise<ProcessType> {
     console.log('Updating process type with versioning:', id, dto);
 
-    // Se está apenas atualizando isActive ou name/description sem steps/formFields, usar updateBasic
+    // Se está apenas atualizando campos simples sem steps/formFields, usar updateBasic
     const isSimpleUpdate = !dto.steps && !dto.formFields && (
-      dto.isActive !== undefined || dto.name !== undefined || dto.description !== undefined
+      dto.isActive !== undefined || 
+      dto.name !== undefined || 
+      dto.description !== undefined ||
+      dto.allowSubProcesses !== undefined ||
+      dto.allowSubTasks !== undefined ||
+      dto.isChildProcessOnly !== undefined ||
+      dto.allowedChildProcessTypes !== undefined
     );
 
     if (isSimpleUpdate) {
-      console.log('Detected simple update (isActive/name/description only), using updateBasic');
+      console.log('Detected simple update (no steps/formFields), using updateBasic');
       return this.updateBasic(id, dto);
     }
 
@@ -599,6 +605,16 @@ export class ProcessTypesService {
         // Atualizar isChildProcessOnly se fornecido
         if (dto.isChildProcessOnly !== undefined) {
           updateData.isChildProcessOnly = dto.isChildProcessOnly;
+        }
+
+        // Atualizar allowSubProcesses se fornecido
+        if (dto.allowSubProcesses !== undefined) {
+          updateData.allowSubProcesses = dto.allowSubProcesses;
+        }
+
+        // Atualizar allowSubTasks se fornecido
+        if (dto.allowSubTasks !== undefined) {
+          updateData.allowSubTasks = dto.allowSubTasks;
         }
 
         // Atualizar allowedChildProcessTypes se fornecido
@@ -949,6 +965,8 @@ export class ProcessTypesService {
 
     return {
       ...processType,
+      allowSubProcesses: processType.allowSubProcesses ?? true,
+      allowSubTasks: processType.allowSubTasks ?? true,
       allowedChildProcessTypes: allowedChildProcessTypes || [],
       steps: activeVersion.steps?.map(step => this.adaptStepResponse(step)) || [],
       formFields: activeVersion.formFields?.map(field => this.adaptFormFieldResponse(field)) || [],

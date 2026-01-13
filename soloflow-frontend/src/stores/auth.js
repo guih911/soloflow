@@ -68,20 +68,20 @@ export const useAuthStore = defineStore('auth', () => {
     // Ordem de prioridade EXATA do menu lateral (sidebar)
     const routePriority = [
       // === SEÇÃO PRINCIPAL ===
-      { path: '/dashboard', resource: 'dashboard', action: 'view' },
-      { path: '/processes', resource: 'processes', action: 'create' },
-      { path: '/manage-processes', resource: 'processes', action: 'manage' },
-      { path: '/my-tasks', resource: 'tasks', action: 'view' },
-      { path: '/my-processes', resource: 'processes', action: 'view' },
-      { path: '/signatures/pending', resource: 'signatures', action: 'view' },
+      { path: '/painel', resource: 'dashboard', action: 'view' },
+      { path: '/processos', resource: 'processes', action: 'create' },
+      { path: '/gerenciar-processos', resource: 'processes', action: 'manage' },
+      { path: '/minhas-tarefas', resource: 'tasks', action: 'view' },
+      { path: '/meus-processos', resource: 'processes', action: 'view' },
+      { path: '/assinaturas/pendentes', resource: 'signatures', action: 'view' },
       // === SEÇÃO CONFIGURAÇÕES ===
-      { path: '/process-types', resource: 'process_types', action: 'manage' },
-      { path: '/sectors', resource: 'sectors', action: 'manage' },
-      { path: '/users', resource: 'users', action: 'manage' },
-      { path: '/profiles', resource: 'profiles', action: 'manage' },
-      { path: '/companies', resource: 'companies', action: 'manage' },
+      { path: '/tipos-de-processo', resource: 'process_types', action: 'manage' },
+      { path: '/setores', resource: 'sectors', action: 'manage' },
+      { path: '/usuarios', resource: 'users', action: 'manage' },
+      { path: '/perfis', resource: 'profiles', action: 'manage' },
+      { path: '/empresas', resource: 'companies', action: 'manage' },
       // === FALLBACK FINAL ===
-      { path: '/profile', resource: null, action: null }, // Sempre disponível
+      { path: '/meu-perfil', resource: null, action: null }, // Sempre disponível
     ]
 
     for (const route of routePriority) {
@@ -96,7 +96,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
     }
 
-    return '/profile'
+    return '/meu-perfil'
   }
 
   function applySession(accessToken, userData) {
@@ -160,9 +160,9 @@ export const useAuthStore = defineStore('auth', () => {
       const savedRedirect = sessionStorage.getItem('redirectAfterLogin')
       sessionStorage.removeItem('redirectAfterLogin')
 
-      let redirectPath = savedRedirect || '/dashboard'
+      let redirectPath = savedRedirect || '/painel'
 
-      if (redirectPath === '/dashboard' || redirectPath === '/') {
+      if (redirectPath === '/painel' || redirectPath === '/') {
         const hasDashboardPermission = hasPermission('dashboard', 'view')
 
         if (!hasDashboardPermission) {
@@ -336,7 +336,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     resetAllStores()
 
-    router.push('/login')
+    router.push('/entrar')
     window.showSnackbar?.('Logout realizado com sucesso!', 'info')
   }
 

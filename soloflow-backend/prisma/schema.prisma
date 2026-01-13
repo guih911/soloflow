@@ -140,6 +140,8 @@ model ProcessType {
   description              String?
   isActive                 Boolean                 @default(true)
   isChildProcessOnly       Boolean                 @default(false) // Se true, só pode ser usado como subprocesso
+  allowSubProcesses        Boolean                 @default(true)  // Permite criar subprocessos
+  allowSubTasks            Boolean                 @default(true)  // Permite criar subtarefas nas etapas
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
   companyId                String

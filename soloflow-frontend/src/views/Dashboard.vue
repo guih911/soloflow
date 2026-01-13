@@ -439,7 +439,7 @@ const userStats = computed(() => [
       : 'Tarefas aguardando sua ação',
     icon: 'mdi-clipboard-account',
     color: userPendingTasks.value > 5 ? 'warning' : 'info',
-    action: () => router.push('/mytasks'),
+    action: () => router.push('/minhas-tarefas'),
   },
   {
     title: 'Assinaturas Pendentes',
@@ -449,7 +449,7 @@ const userStats = computed(() => [
       : 'Documentos aguardando assinatura',
     icon: 'mdi-draw-pen',
     color: userPendingSignatures.value > 0 ? 'error' : 'success',
-    action: () => router.push('/signatures/pending'),
+    action: () => router.push('/assinaturas/pendentes'),
   },
   {
     title: 'Processos Ativos',
@@ -457,7 +457,7 @@ const userStats = computed(() => [
     subtitle: 'Processos criados por você em andamento',
     icon: 'mdi-rocket-launch',
     color: 'primary',
-    action: () => router.push('/my-processes?status=IN_PROGRESS'),
+    action: () => router.push('/meus-processos?status=IN_PROGRESS'),
     progress: userActiveProcesses.value > 0 ? Math.min((userActiveProcesses.value / 10) * 100, 100) : 0,
   },
   {
@@ -466,7 +466,7 @@ const userStats = computed(() => [
     subtitle: getCompletionInsight(),
     icon: 'mdi-check-circle',
     color: 'success',
-    action: () => router.push('/my-processes?status=COMPLETED'),
+    action: () => router.push('/meus-processos?status=COMPLETED'),
   }
 ])
 
@@ -563,27 +563,27 @@ function getCurrentStepName(process) {
 
 // Métodos de navegação
 function createNewProcess() {
-  router.push('/processes')
+  router.push('/processos')
 }
 
 function goToTasks() {
-  router.push('/mytasks')
+  router.push('/minhas-tarefas')
 }
 
 function goToSignatures() {
-  router.push('/signatures/pending')
+  router.push('/assinaturas/pendentes')
 }
 
 function goToMyProcesses() {
-  router.push({ name: 'MyProcesses' })
+  router.push({ name: 'MeusProcessos' })
 }
 
 function openTask(task) {
-  router.push(`/processes/${task.processInstance.id}/execute/${task.id}`)
+  router.push(`/processos/${task.processInstance.id}/executar/${task.id}`)
 }
 
 function viewProcess(process) {
-  router.push(`/processes/${process.id}`)
+  router.push(`/processos/${process.id}`)
 }
 
 // ✅ CARREGAR DADOS - USANDO ENDPOINTS CORRETOS

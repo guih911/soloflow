@@ -28,7 +28,7 @@ import Profiles from '@/views/profiles/Profiles.vue'
 
 // Views - Processes
 import Processes from '@/views/processes/Processes.vue'
-import CreateProcess from '@/views/processes/CreateProcess.vue' // ✅ ADICIONADO
+import CreateProcess from '@/views/processes/CreateProcess.vue' 
 import ProcessDetail from '@/views/processes/ProcessDetail.vue'
 import StepExecution from '@/views/processes/StepExecution.vue'
 import ManageProcesses from '@/views/processes/ManageProcesses.vue'
@@ -59,20 +59,20 @@ function findFirstAvailableRoute(authStore) {
   // Ordem de prioridade EXATA do menu lateral (sidebar)
   const routePriority = [
     // === SEÇÃO PRINCIPAL ===
-    { path: '/dashboard', permission: { resource: 'dashboard', action: 'view' } },
-    { path: '/processes', permission: { resource: 'processes', action: 'create' } },
-    { path: '/manage-processes', permission: { resource: 'processes', action: 'manage' } },
-    { path: '/my-tasks', permission: { resource: 'tasks', action: 'view' } },
-    { path: '/my-processes', permission: { resource: 'processes', action: 'view' } },
-    { path: '/signatures/pending', permission: { resource: 'signatures', action: 'view' } },
+    { path: '/painel', permission: { resource: 'dashboard', action: 'view' } },
+    { path: '/processos', permission: { resource: 'processes', action: 'create' } },
+    { path: '/gerenciar-processos', permission: { resource: 'processes', action: 'manage' } },
+    { path: '/minhas-tarefas', permission: { resource: 'tasks', action: 'view' } },
+    { path: '/meus-processos', permission: { resource: 'processes', action: 'view' } },
+    { path: '/assinaturas/pendentes', permission: { resource: 'signatures', action: 'view' } },
     // === SEÇÃO CONFIGURAÇÕES ===
-    { path: '/process-types', permission: { resource: 'process_types', action: 'manage' } },
-    { path: '/sectors', permission: { resource: 'sectors', action: 'manage' } },
-    { path: '/users', permission: { resource: 'users', action: 'manage' } },
-    { path: '/profiles', permission: { resource: 'profiles', action: 'manage' } },
-    { path: '/companies', permission: { resource: 'companies', action: 'manage' } },
+    { path: '/tipos-de-processo', permission: { resource: 'process_types', action: 'manage' } },
+    { path: '/setores', permission: { resource: 'sectors', action: 'manage' } },
+    { path: '/usuarios', permission: { resource: 'users', action: 'manage' } },
+    { path: '/perfis', permission: { resource: 'profiles', action: 'manage' } },
+    { path: '/empresas', permission: { resource: 'companies', action: 'manage' } },
     // === FALLBACK FINAL ===
-    { path: '/profile', permission: null }, // Sempre disponível
+    { path: '/meu-perfil', permission: null }, // Sempre disponível
   ]
 
   for (const route of routePriority) {
@@ -87,24 +87,24 @@ function findFirstAvailableRoute(authStore) {
     }
   }
 
-  return '/profile'
+  return '/meu-perfil'
 }
 
 const routes = [
   // Redirect principal
   {
     path: '/',
-    redirect: '/dashboard',
+    redirect: '/painel',
   },
 
   // ROTAS DE AUTENTICAÇÃO
   {
-    path: '/login',
+    path: '/entrar',
     component: AuthLayout,
     children: [
       {
         path: '',
-        name: 'Login',
+        name: 'Entrar',
         component: Login,
         meta: { requiresGuest: true },
       },
@@ -123,64 +123,64 @@ const routes = [
     }
   },
 
-  // ROTAS DO DASHBOARD (todas protegidas)
+  // ROTAS DO PAINEL (todas protegidas)
   {
-    path: '/dashboard',
+    path: '/painel',
     component: DashboardLayout,
     meta: { requiresAuth: true },
     children: [
-      // Dashboard Principal
+      // Painel Principal
       {
         path: '',
-        name: 'Dashboard',
+        name: 'Painel',
         component: Dashboard,
         meta: {
           requiresPermission: { resource: 'dashboard', action: 'view' },
-          title: 'Dashboard',
+          title: 'Painel',
           description: 'Painel de controle'
         }
       },
 
       // EMPRESAS
       {
-        path: '/companies',
-        name: 'Companies',
+        path: '/empresas',
+        name: 'Empresas',
         component: Companies,
         meta: { requiresPermission: { resource: 'companies', action: 'manage' } },
       },
 
       // USUÁRIOS
       {
-        path: '/users',
-        name: 'Users',
+        path: '/usuarios',
+        name: 'Usuarios',
         component: Users,
         meta: { requiresPermission: { resource: 'users', action: 'manage' } },
       },
 
       // SETORES
       {
-        path: '/sectors',
-        name: 'Sectors',
+        path: '/setores',
+        name: 'Setores',
         component: Sectors,
         meta: { requiresPermission: { resource: 'sectors', action: 'manage' } },
       },
 
       // TIPOS DE PROCESSO
       {
-        path: '/process-types',
-        name: 'ProcessTypes',
+        path: '/tipos-de-processo',
+        name: 'TiposDeProcesso',
         component: ProcessTypes,
         meta: { requiresPermission: { resource: 'process_types', action: 'manage' } },
       },
       {
-        path: '/process-types/new',
-        name: 'ProcessTypeNew',
+        path: '/tipos-de-processo/novo',
+        name: 'TipoDeProcessoNovo',
         component: ProcessTypeEditor,
         meta: { requiresPermission: { resource: 'process_types', action: 'manage' } },
       },
       {
-        path: '/process-types/:id/edit',
-        name: 'ProcessTypeEdit',
+        path: '/tipos-de-processo/:id/editar',
+        name: 'TipoDeProcessoEditar',
         component: ProcessTypeEditor,
         meta: { requiresPermission: { resource: 'process_types', action: 'manage' } },
         props: true,
@@ -188,16 +188,16 @@ const routes = [
 
       // PERFIS
       {
-        path: '/profiles',
-        name: 'Profiles',
+        path: '/perfis',
+        name: 'Perfis',
         component: Profiles,
         meta: { requiresPermission: { resource: 'profiles', action: 'manage' } },
       },
 
-      // PROCESSOS - ✅ SEÇÃO MELHORADA
+      // PROCESSOS
       {
-        path: '/processes',
-        name: 'Processes',
+        path: '/processos',
+        name: 'Processos',
         component: Processes,
         meta: { 
           title: 'Processos Disponíveis',
@@ -205,8 +205,8 @@ const routes = [
         }
       },
       {
-        path: '/processes/create',
-        name: 'CreateProcess',
+        path: '/processos/criar',
+        name: 'CriarProcesso',
         component: CreateProcess,
         meta: {
           title: 'Criar Novo Processo',
@@ -214,8 +214,8 @@ const routes = [
         }
       },
       {
-        path: '/processes/create/:typeId',
-        name: 'CreateProcessWithType',
+        path: '/processos/criar/:typeId',
+        name: 'CriarProcessoComTipo',
         component: CreateProcess,
         props: true,
         meta: {
@@ -224,8 +224,8 @@ const routes = [
         }
       },
       {
-        path: '/processes/:id',
-        name: 'ProcessDetail',
+        path: '/processos/:id',
+        name: 'DetalhesDoProcesso',
         component: ProcessDetail,
         props: true,
         meta: {
@@ -234,8 +234,8 @@ const routes = [
         }
       },
       {
-        path: '/processes/:id/execute/:stepId',
-        name: 'StepExecution',
+        path: '/processos/:id/executar/:stepId',
+        name: 'ExecutarEtapa',
         component: StepExecution,
         props: true,
         meta: {
@@ -246,8 +246,8 @@ const routes = [
 
       // GERENCIAR PROCESSOS
       {
-        path: '/manage-processes',
-        name: 'ManageProcesses',
+        path: '/gerenciar-processos',
+        name: 'GerenciarProcessos',
         component: ManageProcesses,
         meta: {
           requiresPermission: { resource: 'processes', action: 'manage' },
@@ -258,8 +258,8 @@ const routes = [
 
       // MEUS PROCESSOS
       {
-        path: '/my-processes',
-        name: 'MyProcesses',
+        path: '/meus-processos',
+        name: 'MeusProcessos',
         component: MyProcesses,
         meta: {
           title: 'Meus Processos',
@@ -269,8 +269,8 @@ const routes = [
 
       // MINHAS TAREFAS
       {
-        path: '/my-tasks',
-        name: 'MyTasks',
+        path: '/minhas-tarefas',
+        name: 'MinhasTarefas',
         component: MyTasks,
         meta: {
           title: 'Minhas Tarefas',
@@ -280,8 +280,8 @@ const routes = [
 
       // ASSINATURAS PENDENTES
       {
-        path: '/signatures/pending',
-        name: 'PendingSignatures',
+        path: '/assinaturas/pendentes',
+        name: 'AssinaturasPendentes',
         component: PendingSignatures,
         meta: {
           title: 'Assinaturas Pendentes',
@@ -291,8 +291,8 @@ const routes = [
 
       // PERFIL DO USUÁRIO
       {
-        path: '/profile',
-        name: 'Profile',
+        path: '/meu-perfil',
+        name: 'MeuPerfil',
         component: Profile,
         meta: {
           title: 'Meu Perfil',
@@ -302,8 +302,8 @@ const routes = [
 
       // CONFIGURAÇÕES
       {
-        path: '/settings',
-        name: 'Settings',
+        path: '/configuracoes',
+        name: 'Configuracoes',
         component: Settings,
         meta: {
           requiresPermission: { resource: 'settings', action: 'manage' },
@@ -312,29 +312,39 @@ const routes = [
         },
       },
 
-      // ALIASES PARA COMPATIBILIDADE
-      {
-        path: '/mytasks',
-        redirect: '/my-tasks'
-      },
-      {
-        path: '/manageprocesses',
-        redirect: '/manage-processes'
-      }
+      // ALIASES PARA COMPATIBILIDADE (rotas antigas redirecionam para novas)
+      { path: '/dashboard', redirect: '/painel' },
+      { path: '/login', redirect: '/entrar' },
+      { path: '/companies', redirect: '/empresas' },
+      { path: '/users', redirect: '/usuarios' },
+      { path: '/sectors', redirect: '/setores' },
+      { path: '/process-types', redirect: '/tipos-de-processo' },
+      { path: '/process-types/new', redirect: '/tipos-de-processo/novo' },
+      { path: '/profiles', redirect: '/perfis' },
+      { path: '/processes', redirect: '/processos' },
+      { path: '/processes/create', redirect: '/processos/criar' },
+      { path: '/manage-processes', redirect: '/gerenciar-processos' },
+      { path: '/my-processes', redirect: '/meus-processos' },
+      { path: '/my-tasks', redirect: '/minhas-tarefas' },
+      { path: '/mytasks', redirect: '/minhas-tarefas' },
+      { path: '/manageprocesses', redirect: '/gerenciar-processos' },
+      { path: '/signatures/pending', redirect: '/assinaturas/pendentes' },
+      { path: '/profile', redirect: '/meu-perfil' },
+      { path: '/settings', redirect: '/configuracoes' }
     ],
   },
 
   // Catch-all para rotas inexistentes
   {
     path: '/:pathMatch(.*)*',
-    name: 'NotFound',
+    name: 'NaoEncontrado',
     beforeEnter: (to, from, next) => {
       const authStore = useAuthStore()
       if (authStore.isAuthenticated) {
         const firstAvailableRoute = findFirstAvailableRoute(authStore)
         next(firstAvailableRoute)
       } else {
-        next('/login')
+        next('/entrar')
       }
     },
   },
@@ -366,7 +376,7 @@ router.beforeEach(async (to, from, next) => {
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     sessionStorage.setItem('redirectAfterLogin', to.fullPath)
-    next('/login')
+    next('/entrar')
     return
   }
 

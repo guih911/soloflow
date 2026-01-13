@@ -69,6 +69,47 @@
                 <v-col cols="12">
                   <v-textarea v-model="formData.description" label="Descrição" rows="3" counter="500" />
                 </v-col>
+                <v-col cols="12">
+                  <v-divider class="mb-4" />
+                  <h3 class="text-subtitle-1 font-weight-bold mb-4">
+                    <v-icon start color="primary">mdi-cog</v-icon>
+                    Configurações de Exibição
+                  </h3>
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-switch
+                    v-model="formData.allowSubProcesses"
+                    color="primary"
+                    hide-details
+                    class="mt-0"
+                  >
+                    <template v-slot:label>
+                      <div>
+                        <span class="font-weight-medium">Permitir Subprocessos</span>
+                        <p class="text-caption text-grey mb-0">
+                          Habilita a criação de subprocessos vinculados a este tipo
+                        </p>
+                      </div>
+                    </template>
+                  </v-switch>
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-switch
+                    v-model="formData.allowSubTasks"
+                    color="primary"
+                    hide-details
+                    class="mt-0"
+                  >
+                    <template v-slot:label>
+                      <div>
+                        <span class="font-weight-medium">Permitir Subtarefas</span>
+                        <p class="text-caption text-grey mb-0">
+                          Habilita a criação de subtarefas nas etapas do processo
+                        </p>
+                      </div>
+                    </template>
+                  </v-switch>
+                </v-col>
               </v-row>
             </v-card-text>
           </v-card>
@@ -754,6 +795,8 @@ const formData = ref({
   name: '',
   description: '',
   isChildProcessOnly: false,
+  allowSubProcesses: true,
+  allowSubTasks: true,
   steps: [],
   formFields: [],
   allowedChildProcessTypes: []
@@ -1230,6 +1273,8 @@ async function save() {
       name: formData.value.name,
       description: formData.value.description,
       isChildProcessOnly: formData.value.isChildProcessOnly || false,
+      allowSubProcesses: formData.value.allowSubProcesses ?? true,
+      allowSubTasks: formData.value.allowSubTasks ?? true,
       companyId: authStore.activeCompanyId,
       allowedChildProcessTypes: formData.value.allowedChildProcessTypes || [],
       formFields: formData.value.formFields.map((f, idx) => ({ ...f, order: f.order ?? (idx + 1) })),
@@ -1275,7 +1320,7 @@ async function save() {
       await processTypeStore.createProcessType(payload)
       window.showSnackbar?.('Tipo de processo criado com sucesso!', 'success')
     }
-    router.push({ name: 'ProcessTypes' })
+    router.push({ name: 'TiposDeProcesso' })
   } catch (e) {
     console.error('Save error:', e)
     window.showSnackbar?.(e.response?.data?.message || 'Erro ao salvar', 'error')
@@ -1408,6 +1453,8 @@ onMounted(async () => {
           name: current.name || '',
           description: current.description || '',
           isChildProcessOnly: current.isChildProcessOnly || false,
+          allowSubProcesses: current.allowSubProcesses ?? true,
+          allowSubTasks: current.allowSubTasks ?? true,
           steps: Array.isArray(current.steps) ? [...current.steps] : [],
           formFields: Array.isArray(current.formFields) ? [...current.formFields] : [],
           allowedChildProcessTypes: Array.isArray(current.allowedChildProcessTypes) ? [...current.allowedChildProcessTypes] : []

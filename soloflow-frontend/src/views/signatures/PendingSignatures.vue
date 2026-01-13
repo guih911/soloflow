@@ -1221,7 +1221,7 @@ async function signCurrentDocument() {
 }
 
 function viewProcess(task) {
-  router.push(`/processes/${task.processInstance.id}`)
+  router.push(`/processos/${task.processInstance.id}`)
 }
 
 onMounted(() => {

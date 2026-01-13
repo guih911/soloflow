@@ -274,13 +274,13 @@ function getStatusLabel(status) {
 }
 
 function viewProcess(proc) {
-  router.push({ name: 'ProcessDetail', params: { id: proc.id } })
+  router.push({ name: 'DetalhesDoProcesso', params: { id: proc.id } })
 }
 
 function continueProcess(proc) {
   const nextTask = proc.pendingTasks[0]
   if (!nextTask) return
-  router.push({ name: 'StepExecution', params: { id: proc.id, stepId: nextTask.id } })
+  router.push({ name: 'ExecutarEtapa', params: { id: proc.id, stepId: nextTask.id } })
 }
 
 function normalizeProcesses() {

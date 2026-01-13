@@ -654,7 +654,7 @@ async function saveVersion() {
 function viewVersion(version) {
   // Redirecionar para editor em modo visualização
   router.push({
-    name: 'ProcessTypeEdit',
+    name: 'TipoDeProcessoEditar',
     params: { id: props.processTypeId },
     query: { version: version.id, mode: 'view' }
   })
@@ -663,7 +663,7 @@ function viewVersion(version) {
 function editVersion(version) {
   // Redirecionar para editor em modo edição
   router.push({
-    name: 'ProcessTypeEdit',
+    name: 'TipoDeProcessoEditar',
     params: { id: props.processTypeId },
     query: { version: version.id, mode: 'edit' }
   })

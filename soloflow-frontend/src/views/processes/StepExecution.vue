@@ -2046,7 +2046,7 @@ async function executeStep() {
       else if (formData.value.action === 'reprovar') successMessage = 'Processo reprovado.'
     }
     window.showSnackbar?.(successMessage, 'success')
-    setTimeout(() => { router.push(`/processes/${route.params.id}`) }, 1000)
+    setTimeout(() => { router.push(`/processos/${route.params.id}`) }, 1000)
   } catch (error) {
     console.error('Error executing step:', error)
     let errorMessage = 'Erro ao executar etapa'
@@ -2064,7 +2064,7 @@ async function executeStep() {
 }
 
 function goBack() { 
-  router.push(`/processes/${route.params.id}`) 
+  router.push(`/processos/${route.params.id}`) 
 }
 
 onMounted(async () => {

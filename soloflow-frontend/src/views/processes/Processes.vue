@@ -319,7 +319,7 @@ function startProcessCreation(processType) {
 
   // ✨ Navegar para página de criação com tipo pré-selecionado
   router.push({
-    name: 'CreateProcessWithType',
+    name: 'CriarProcessoComTipo',
     params: { typeId: processType.id }
   })
 }
@@ -330,7 +330,7 @@ function clearFilters() {
 }
 
 function goToProcessTypes() {
-  router.push({ name: 'ProcessTypes' })
+  router.push({ name: 'TiposDeProcesso' })
 }
 
 async function refreshData() {

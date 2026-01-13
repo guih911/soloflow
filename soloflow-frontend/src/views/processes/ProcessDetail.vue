@@ -28,9 +28,9 @@
 
     <!-- Linha 2: Botões de ação -->
     <div class="d-flex justify-end gap-2 mb-6">
-      <!-- Botão de Criar Sub-Processo (não aparece se já for sub-processo) -->
+      <!-- Botão de Criar Sub-Processo (não aparece se já for sub-processo ou se desabilitado no tipo) -->
       <v-btn
-        v-if="process?.status !== 'CANCELLED' && !parentProcessInfo"
+        v-if="process?.status !== 'CANCELLED' && !parentProcessInfo && allowSubProcesses"
         variant="tonal"
         color="secondary"
         @click="openCreateChildProcessDialog"
@@ -146,7 +146,7 @@
           <v-divider />
           <v-list density="comfortable">
             <v-list-item
-              @click="router.push(`/processes/${parentProcessInfo.parentProcessInstance.id}`)"
+              @click="router.push(`/processos/${parentProcessInfo.parentProcessInstance.id}`)"
               class="cursor-pointer"
             >
               <template v-slot:prepend>
@@ -233,7 +233,7 @@
         </v-card>
 
         <!-- Seção de Sub-Processos -->
-        <v-card v-if="childProcesses.length > 0" class="mt-4">
+        <v-card v-if="allowSubProcesses && childProcesses.length > 0" class="mt-4">
           <v-card-title>
             <v-icon class="mr-2">mdi-source-branch</v-icon>
             Sub-Processos
@@ -447,7 +447,7 @@
 
                   <!-- Sub-etapas da etapa (aparecem sempre que existirem ou quando em progresso) -->
                   <SubTasksList
-                    v-if="execution.status === 'IN_PROGRESS' || execution.status === 'COMPLETED'"
+                    v-if="allowSubTasks && (execution.status === 'IN_PROGRESS' || execution.status === 'COMPLETED')"
                     :key="`subtasks-${execution.id}-${subTasksReloadKey}`"
                     :step-execution-id="execution.id"
                     :step-status="execution.status"
@@ -643,6 +643,16 @@ const hasFormDataToShow = computed(() => {
 
 // Computed para sub-processos
 const childProcesses = computed(() => childProcessStore.childProcesses)
+
+// Computed para verificar se o tipo de processo permite subprocessos
+const allowSubProcesses = computed(() => {
+  return process.value?.processType?.allowSubProcesses !== false
+})
+
+// Computed para verificar se o tipo de processo permite subtarefas
+const allowSubTasks = computed(() => {
+  return process.value?.processType?.allowSubTasks !== false
+})
 
 // Computed para verificar se pode cancelar o processo
 const canCancelProcess = computed(() => {
@@ -1163,7 +1173,7 @@ function goBack() {
   if (window.history.length > 1) {
     router.back()
   } else {
-    router.push('/manage-processes')
+    router.push('/gerenciar-processos')
   }
 }
 
@@ -1184,7 +1194,7 @@ function executeCurrentStep() {
 }
 
 function executeStep(execution) {
-  router.push(`/processes/${process.value.id}/execute/${execution.id}`)
+  router.push(`/processos/${process.value.id}/executar/${execution.id}`)
 }
 
 async function refreshProcess() {
@@ -1220,7 +1230,7 @@ function viewChildProcess(childProcess) {
   const processId = childProcess?.id
   if (processId) {
     isNavigatingToChild = true
-    router.push(`/processes/${processId}`).finally(() => {
+    router.push(`/processos/${processId}`).finally(() => {
       setTimeout(() => {
         isNavigatingToChild = false
       }, 500)

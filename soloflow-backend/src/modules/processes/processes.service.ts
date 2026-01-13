@@ -617,6 +617,8 @@ export class ProcessesService {
                 description: true,
                 isActive: true,
                 allowedChildProcessTypes: true,
+                allowSubProcesses: true,
+                allowSubTasks: true,
               },
             },
             steps: { orderBy: { order: 'asc' } },
@@ -1830,19 +1832,32 @@ export class ProcessesService {
   }
 
   private async generateProcessCode(): Promise<string> {
-    const year = new Date().getFullYear();
-    const lastProcess = await this.prisma.processInstance.findFirst({
-      where: { code: { startsWith: `PROC-${year}-` } },
+    // Busca processos que NÃO seguem o formato antigo com ano (PROC-20XX-)
+    // O novo formato é PROC-XXXXX (5 dígitos sequenciais)
+    const allProcesses = await this.prisma.processInstance.findMany({
+      where: { code: { startsWith: 'PROC-' } },
+      select: { code: true },
       orderBy: { code: 'desc' },
     });
 
     let nextNumber = 1;
-    if (lastProcess) {
-      const lastNumber = parseInt(lastProcess.code.split('-')[2]);
-      nextNumber = lastNumber + 1;
+    
+    // Filtra apenas códigos no novo formato (PROC-XXXXX onde XXXXX são 5 dígitos)
+    const newFormatProcesses = allProcesses.filter(p => {
+      const parts = p.code.split('-');
+      // Novo formato tem apenas 2 partes: PROC e número de 5 dígitos
+      // Formato antigo tem 3 partes: PROC, ano e número
+      return parts.length === 2 && /^\d{5}$/.test(parts[1]);
+    });
+
+    if (newFormatProcesses.length > 0) {
+      const lastNumber = parseInt(newFormatProcesses[0].code.split('-')[1]);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
     }
 
-    return `PROC-${year}-${nextNumber.toString().padStart(4, '0')}`;
+    return `PROC-${nextNumber.toString().padStart(5, '0')}`;
   }
 
   private async checkViewPermission(

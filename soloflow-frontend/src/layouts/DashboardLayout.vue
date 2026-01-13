@@ -187,7 +187,7 @@
             <template #activator="{ props }">
               <v-list-item
                 v-bind="props"
-                :to="{ name: 'Dashboard' }"
+                :to="{ name: 'Painel' }"
                 :exact="true"
                 class="nav-item"
                 rounded="xl"
@@ -212,7 +212,7 @@
             <template #activator="{ props }">
               <v-list-item 
                 v-bind="props"
-                :to="{ name: 'Processes' }"
+                :to="{ name: 'Processos' }"
                 class="nav-item"
                 rounded="xl"
               >
@@ -236,7 +236,7 @@
             <template #activator="{ props }">
               <v-list-item 
                 v-bind="props"
-                :to="{ name: 'ManageProcesses' }"
+                :to="{ name: 'GerenciarProcessos' }"
                 class="nav-item"
                 rounded="xl"
               >
@@ -260,7 +260,7 @@
             <template #activator="{ props }">
               <v-list-item
                 v-bind="props"
-                :to="{ name: 'MyTasks' }"
+                :to="{ name: 'MinhasTarefas' }"
                 class="nav-item"
                 rounded="xl"
               >
@@ -289,7 +289,7 @@
             <template #activator="{ props }">
               <v-list-item
                 v-bind="props"
-                :to="{ name: 'MyProcesses' }"
+                :to="{ name: 'MeusProcessos' }"
                 class="nav-item"
                 rounded="xl"
               >
@@ -312,7 +312,7 @@
             <template #activator="{ props }">
               <v-list-item 
                 v-bind="props"
-                :to="{ name: 'PendingSignatures' }"
+                :to="{ name: 'AssinaturasPendentes' }"
                 class="nav-item"
                 rounded="xl"
               >
@@ -354,7 +354,7 @@
             <template #activator="{ props }">
               <v-list-item 
                 v-bind="props"
-                :to="{ name: 'ProcessTypes' }"
+                :to="{ name: 'TiposDeProcesso' }"
                 class="nav-item"
                 rounded="xl"
               >
@@ -378,7 +378,7 @@
             <template #activator="{ props }">
               <v-list-item
                 v-bind="props"
-                :to="{ name: 'Sectors' }"
+                :to="{ name: 'Setores' }"
                 class="nav-item"
                 rounded="xl"
               >
@@ -402,7 +402,7 @@
             <template #activator="{ props }">
               <v-list-item
                 v-bind="props"
-                :to="{ name: 'Users' }"
+                :to="{ name: 'Usuarios' }"
                 class="nav-item"
                 rounded="xl"
               >
@@ -426,7 +426,7 @@
             <template #activator="{ props }">
               <v-list-item
                 v-bind="props"
-                :to="{ name: 'Profiles' }"
+                :to="{ name: 'Perfis' }"
                 class="nav-item"
                 rounded="xl"
               >
@@ -450,7 +450,7 @@
             <template #activator="{ props }">
               <v-list-item 
                 v-bind="props"
-                :to="{ name: 'Companies' }"
+                :to="{ name: 'Empresas' }"
                 class="nav-item"
                 rounded="xl"
               >
@@ -633,11 +633,11 @@ async function openNotification(notification) {
 
 // ✨ Métodos de navegação
 function goToProfile() {
-  router.push({ name: 'Profile' })
+  router.push({ name: 'MeuPerfil' })
 }
 
 function goToSettings() {
-  router.push({ name: 'Settings' })
+  router.push({ name: 'Configuracoes' })
 }
 
 async function switchCompany(companyId) {
@@ -651,11 +651,11 @@ async function switchCompany(companyId) {
 async function handleLogout() {
   try {
     await authStore.logout()
-    router.push('/login')
+    router.push('/entrar')
   } catch (error) {
     localStorage.clear()
     sessionStorage.clear()
-    router.push('/login')
+    router.push('/entrar')
   }
 }
 

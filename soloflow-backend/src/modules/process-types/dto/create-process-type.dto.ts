@@ -17,6 +17,14 @@ export class CreateProcessTypeDto {
   @IsBoolean()
   isChildProcessOnly?: boolean;
 
+  @IsOptional()
+  @IsBoolean()
+  allowSubProcesses?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowSubTasks?: boolean;
+
   @IsUUID()
   companyId: string;
 

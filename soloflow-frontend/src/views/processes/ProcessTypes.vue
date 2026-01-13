@@ -551,12 +551,12 @@ function clearSearch() {
 
 // Métodos principais
 function createNew() {
-  router.push('/process-types/new')
+  router.push('/tipos-de-processo/novo')
 }
 
 function editProcessType(processType) {
   console.log('📝 Editing process type:', processType.id)
-  router.push(`/process-types/${processType.id}/edit`)
+  router.push(`/tipos-de-processo/${processType.id}/editar`)
 }
 
 function viewProcessTypeDetails(processType) {
@@ -662,7 +662,7 @@ onMounted(async () => {
   if (!authStore.canManageProcessTypes) {
     console.warn('⚠️ User does not have permission to manage process types')
     showMessage('Você não tem permissão para gerenciar tipos de processo', 'error')
-    router.push('/dashboard')
+    router.push('/painel')
     return
   }
   

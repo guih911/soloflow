@@ -430,11 +430,11 @@ function getCommentCount(process) {
 
 // Métodos
 function createProcess() {
-  router.push('/processes')
+  router.push('/processos')
 }
 
 function viewProcess(process) {
-  router.push(`/processes/${process.id}`)
+  router.push(`/processos/${process.id}`)
 }
 
 async function loadData() {

@@ -39,9 +39,9 @@ function clearSessionAndRedirect() {
   localStorage.removeItem('processTypePermissions')
 
   // Só redireciona se não estiver já na página de login
-  if (router.currentRoute.value.path !== '/login') {
+  if (router.currentRoute.value.path !== '/entrar') {
     window.showSnackbar?.('Sua sessão expirou. Faça login novamente.', 'warning')
-    router.push('/login').then(() => {
+    router.push('/entrar').then(() => {
       // Reset da flag após redirecionamento bem-sucedido
       setTimeout(() => {
         sessionExpiredHandled = false
