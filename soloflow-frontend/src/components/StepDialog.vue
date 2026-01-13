@@ -1172,11 +1172,15 @@ function save() {
     stepToSave.reviewSettings = null
   }
 
-  // Adicionar configurações de assinatura
-  if (stepToSave.requiresSignature || stepToSave.type === 'SIGNATURE') {
+  // Adicionar configurações de assinatura - APENAS para etapas UPLOAD ou SIGNATURE
+  // Etapas INPUT, APPROVAL, REVIEW não devem ter requisitos de assinatura
+  const allowsSignature = stepToSave.type === 'UPLOAD' || stepToSave.type === 'SIGNATURE'
+  if (allowsSignature && (stepToSave.requiresSignature || stepToSave.type === 'SIGNATURE')) {
     stepToSave.signatureRequirements = signatureConfig.value.requirements
-  } else if (stepToSave.type !== 'SIGNATURE') {
+  } else {
+    // Limpar assinaturas para tipos de etapa que não suportam
     stepToSave.signatureRequirements = []
+    stepToSave.requiresSignature = false
   }
 
   emit('save', stepToSave)

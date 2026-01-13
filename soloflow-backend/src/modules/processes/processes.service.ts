@@ -18,6 +18,7 @@ import {
   ProcessStatus,
   StepExecutionStatus,
   Attachment,
+  ChildProcessStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
@@ -568,19 +569,39 @@ export class ProcessesService {
           },
           orderBy: { stepVersion: { order: 'asc' } },
         },
+        // Incluir relação com processo pai para identificar sub-processos
+        parentRelation: {
+          select: {
+            id: true,
+            parentProcessInstance: {
+              select: {
+                id: true,
+                code: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
 
     // Adaptar resposta para manter compatibilidade
-    return processes.map(process => ({
-      ...process,
-      processType: process.processTypeVersion.processType,
-      stepExecutions: process.stepExecutions.map(se => ({
-        ...se,
-        step: se.stepVersion,
-      })),
-    }));
+    return processes.map(process => {
+      const isChildProcess = !!process.parentRelation;
+      const parentProcess = process.parentRelation?.parentProcessInstance || null;
+
+      return {
+        ...process,
+        processType: process.processTypeVersion.processType,
+        // Flag para indicar se é sub-processo
+        isChildProcess,
+        parentProcess,
+        stepExecutions: process.stepExecutions.map(se => ({
+          ...se,
+          step: se.stepVersion,
+        })),
+      };
+    });
   }
 
   async findOne(processId: string, userId: string) {
@@ -589,7 +610,15 @@ export class ProcessesService {
       include: {
         processTypeVersion: {
           include: {
-            processType: true,
+            processType: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+                allowedChildProcessTypes: true,
+              },
+            },
             steps: { orderBy: { order: 'asc' } },
             formFields: { orderBy: { order: 'asc' } },
           },
@@ -668,6 +697,20 @@ export class ProcessesService {
                 },
               },
             },
+            // Incluir sub-tarefas com seus anexos
+            subTasks: {
+              include: {
+                subTaskTemplate: true,
+                executor: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+              orderBy: { subTaskTemplate: { order: 'asc' } },
+            },
           },
           orderBy: { stepVersion: { order: 'asc' } },
         },
@@ -678,11 +721,22 @@ export class ProcessesService {
 
     await this.checkViewPermission(process, userId);
 
+    // Parse allowedChildProcessTypes se for string JSON
+    let allowedChildProcessTypes = process.processTypeVersion.processType.allowedChildProcessTypes;
+    try {
+      if (allowedChildProcessTypes && typeof allowedChildProcessTypes === 'string') {
+        allowedChildProcessTypes = JSON.parse(allowedChildProcessTypes);
+      }
+    } catch (e) {
+      allowedChildProcessTypes = [];
+    }
+
     // Adaptar resposta para manter compatibilidade
     return {
       ...process,
       processType: {
         ...process.processTypeVersion.processType,
+        allowedChildProcessTypes: allowedChildProcessTypes || [],
         steps: process.processTypeVersion.steps,
         formFields: process.processTypeVersion.formFields,
       },
@@ -802,6 +856,9 @@ export class ProcessesService {
           metadata: baseMetadata as Prisma.InputJsonValue,
         },
       });
+
+      // Sincronizar status do sub-processo se este processo for filho de outro
+      await this.syncChildProcessStatusInTx(tx, process.id, ProcessStatus.CANCELLED);
     });
 
     return this.findOne(processId, user.id);
@@ -1033,15 +1090,16 @@ export class ProcessesService {
         continue;
       }
 
-      // Buscar requisitos de assinatura apenas para os anexos DESTA task
-      // Ou requisitos globais (attachmentId = null)
+      // Buscar requisitos de assinatura APENAS para os anexos DESTA task
+      // IMPORTANTE: Não incluir requisitos globais (attachmentId = null) pois SignatureRequirements
+      // são vinculados ao StepVersion (template) e podem incluir requisitos de outros processos
+      // Requisitos globais só fazem sentido quando configurados no template da etapa,
+      // mas para evitar conflitos entre processos, só consideramos requisitos específicos por arquivo
       const allRequirements = await this.prisma.signatureRequirement.findMany({
         where: {
           stepVersionId: task.stepVersionId,
-          OR: [
-            { attachmentId: { in: taskAttachmentIds } },
-            { attachmentId: null }, // Requisitos globais se existirem
-          ],
+          // SOMENTE requisitos com attachmentId que pertence a ESTA task
+          attachmentId: { in: taskAttachmentIds },
         },
         orderBy: { order: 'asc' },
         include: {
@@ -1051,9 +1109,39 @@ export class ProcessesService {
         },
       });
 
+      // Filtrar requisitos de arquivos de formulário (isFormField)
+      // Arquivos de formulário NÃO devem ter pendência de assinatura automaticamente
+      const validRequirements = allRequirements.filter(req => {
+        if (!req.attachmentId) return true; // Requisito global (não deve chegar aqui, mas por segurança)
+
+        const attachment = task.attachments.find(a => a.id === req.attachmentId);
+        if (!attachment) return false;
+
+        // Verificar se é arquivo de formulário
+        try {
+          const sigData = attachment.signatureData
+            ? (typeof attachment.signatureData === 'string'
+                ? JSON.parse(attachment.signatureData)
+                : attachment.signatureData)
+            : null;
+
+          // Se é arquivo de formulário, só incluir se o requisito foi criado ESPECIFICAMENTE para ele
+          // (o que significa que alguém intencionalmente configurou assinatura para esse arquivo)
+          if (sigData?.isFormField) {
+            // Para arquivos de formulário, verificar se realmente deve ter assinatura
+            // Neste caso, o requisito já existe e foi criado especificamente para este arquivo
+            return true;
+          }
+        } catch (e) {
+          // Se não conseguir parsear, continua normalmente
+        }
+
+        return true;
+      });
+
       // Agrupar requisitos por attachmentId
-      const requirementsByAttachment = new Map<string | null, typeof allRequirements>();
-      for (const req of allRequirements) {
+      const requirementsByAttachment = new Map<string | null, typeof validRequirements>();
+      for (const req of validRequirements) {
         const key = req.attachmentId;
         if (!requirementsByAttachment.has(key)) {
           requirementsByAttachment.set(key, []);
@@ -1116,7 +1204,9 @@ export class ProcessesService {
     }
 
     // 4. Combinar resultados, removendo duplicatas
+    // Marcar quais tarefas são de assinatura pendente para o frontend poder filtrar
     const taskIds = new Set<string>();
+    const signatureTaskIds = new Set(filteredSignatureTasks.map(t => t.id));
     const allTasks: typeof normalTasks = [];
 
     for (const task of normalTasks) {
@@ -1134,19 +1224,23 @@ export class ProcessesService {
     }
 
     // Adaptar resposta para incluir informação se é atribuída ao criador
+    // e flag indicando se tem requisitos de assinatura pendentes válidos
     return allTasks.map(task => {
-      const isAssignedToCreator = task.stepVersion.assignedToCreator && 
+      const isAssignedToCreator = task.stepVersion.assignedToCreator &&
                                   task.processInstance.createdById === userId;
-      
+
       const userAssignment = task.stepVersion.assignments?.find(a => a.type === 'USER');
       const sectorAssignment = task.stepVersion.assignments?.find(a => a.type === 'SECTOR');
-      
+
       return {
         ...task,
+        // Flag que indica se esta task tem requisitos de assinatura pendentes VÁLIDOS
+        // (ou seja, requisitos específicos para os anexos DESTA task)
+        hasValidSignatureRequirements: signatureTaskIds.has(task.id),
         step: {
           ...task.stepVersion,
-          assignedToUser: isAssignedToCreator 
-            ? task.processInstance.createdBy 
+          assignedToUser: isAssignedToCreator
+            ? task.processInstance.createdBy
             : (userAssignment?.user || null),
           assignedToSector: sectorAssignment?.sector || null,
           assignedToCreator: task.stepVersion.assignedToCreator || false,
@@ -1334,12 +1428,6 @@ export class ProcessesService {
         allowedActions = ['aprovar', 'reprovar'];
       }
 
-      console.log('Action validation:', {
-        providedAction: executeDto.action,
-        allowedActions: allowedActions,
-        stepType: stepExecution.stepVersion.type,
-      });
-
       if (
         allowedActions.length > 0 &&
         !allowedActions.includes(executeDto.action)
@@ -1373,17 +1461,30 @@ export class ProcessesService {
       });
       const minAttachments = stepExecution.stepVersion.minAttachments || 1;
 
-      console.log('Checking attachments:', {
-        required: stepExecution.stepVersion.requireAttachment,
-        count: attachmentCount,
-        minRequired: minAttachments,
-      });
-
       if (attachmentCount < minAttachments) {
         throw new BadRequestException(
           `Esta etapa requer no mínimo ${minAttachments} anexo(s). Encontrados: ${attachmentCount}`,
         );
       }
+    }
+
+    // Verificar se todas as sub-tarefas obrigatórias foram concluídas
+    const pendingRequiredSubTasks = await this.prisma.subTask.findMany({
+      where: {
+        stepExecutionId: executeDto.stepExecutionId,
+        subTaskTemplate: { isRequired: true },
+        status: { notIn: ['COMPLETED', 'SKIPPED'] },
+      },
+      include: { subTaskTemplate: true },
+    });
+
+    if (pendingRequiredSubTasks.length > 0) {
+      const pendingNames = pendingRequiredSubTasks
+        .map((st) => st.subTaskTemplate?.name || 'Sub-etapa')
+        .join(', ');
+      throw new BadRequestException(
+        `Existem sub-etapas obrigatórias pendentes: ${pendingNames}`,
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -1468,12 +1569,6 @@ export class ProcessesService {
 
       // Avançar para próxima etapa normalmente
       if (nextStep && !shouldEnd) {
-        console.log('Activating next step:', {
-          stepId: nextStep.id,
-          stepName: nextStep.name,
-          order: nextStep.order,
-        });
-
         await tx.stepExecution.updateMany({
           where: {
             processInstanceId: stepExecution.processInstanceId,
@@ -1492,13 +1587,6 @@ export class ProcessesService {
           data: { currentStepOrder: nextStepOrder || undefined },
         });
       } else {
-        console.log('Process ending:', {
-          shouldEnd,
-          hasNextStep: !!nextStep,
-          action: executeDto.action,
-          finalStatus: finalStatus,
-        });
-
         await tx.processInstance.update({
           where: { id: stepExecution.processInstanceId },
           data: {
@@ -1506,11 +1594,56 @@ export class ProcessesService {
             completedAt: new Date(),
           },
         });
+
+        // Sincronizar status do sub-processo se este processo for filho de outro
+        await this.syncChildProcessStatusInTx(tx, stepExecution.processInstanceId, finalStatus);
       }
 
-      console.log('Step execution completed successfully');
       return updatedExecution;
     });
+  }
+
+  // Sincroniza o status do ChildProcessInstance quando o processo filho termina
+  private async syncChildProcessStatusInTx(
+    tx: Prisma.TransactionClient,
+    processInstanceId: string,
+    processStatus: ProcessStatus,
+  ): Promise<void> {
+    // Verificar se este processo é filho de outro
+    const childRelation = await tx.childProcessInstance.findUnique({
+      where: { childProcessInstanceId: processInstanceId },
+    });
+
+    if (!childRelation) {
+      return; // Não é sub-processo, nada a fazer
+    }
+
+    let newStatus: ChildProcessStatus = childRelation.status;
+
+    // Mapear status do processo para status do relacionamento
+    switch (processStatus) {
+      case ProcessStatus.COMPLETED:
+        newStatus = ChildProcessStatus.COMPLETED;
+        break;
+      case ProcessStatus.CANCELLED:
+        newStatus = ChildProcessStatus.CANCELLED;
+        break;
+      case ProcessStatus.REJECTED:
+        newStatus = ChildProcessStatus.FAILED;
+        break;
+      default:
+        return; // Status não terminal, não atualizar
+    }
+
+    if (newStatus !== childRelation.status) {
+      await tx.childProcessInstance.update({
+        where: { id: childRelation.id },
+        data: {
+          status: newStatus,
+          completedAt: new Date(),
+        },
+      });
+    }
   }
 
   // Método específico para executar etapa INPUT
@@ -1519,11 +1652,6 @@ export class ProcessesService {
     executeDto: ExecuteStepDto,
     userId: string,
   ): Promise<StepExecution> {
-    console.log(
-      'Executing INPUT step with conditions:',
-      stepExecution.stepVersion.conditions,
-    );
-
     // Parsear conditions
     let stepConditions: any = {};
     if (stepExecution.stepVersion.conditions) {
@@ -1645,6 +1773,9 @@ export class ProcessesService {
             completedAt: new Date(),
           },
         });
+
+        // Sincronizar status do sub-processo se este processo for filho de outro
+        await this.syncChildProcessStatusInTx(tx, stepExecution.processInstanceId, ProcessStatus.COMPLETED);
       }
 
       return updatedExecution;

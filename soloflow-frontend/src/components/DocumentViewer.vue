@@ -518,13 +518,15 @@
       :attachment="documentToSign"
       :stepExecutionId="documentToSign?.executionId"
       :stepName="documentToSign?.stepName"
+      :isSubTaskAttachment="documentToSign?.isSubTaskAttachment"
+      :subTaskId="documentToSign?.subTaskId"
       @signed="handleSigned"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import dayjs from 'dayjs'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -547,6 +549,7 @@ const props = defineProps({
 // Estado
 const viewMode = ref('list')
 const searchQuery = ref('')
+const companyUsers = ref([]) // Lista de usuários da empresa para resolver IDs
 const selectedFilter = ref('all')
 const previewDialog = ref(false)
 const selectedDocument = ref(null)
@@ -557,14 +560,167 @@ const documentToSign = ref(null)
 // Emits
 const emit = defineEmits(['refresh'])
 
-// Computed - Coletar todos os documentos de todas as etapas
+// Carregar usuários da empresa para resolver IDs de assinantes
+async function loadCompanyUsers() {
+  if (!props.process?.companyId) return
+  try {
+    const response = await api.get('/users', { params: { companyId: props.process.companyId } })
+    companyUsers.value = response.data?.data || response.data || []
+  } catch (e) {
+    console.error('Erro ao carregar usuários da empresa:', e)
+    companyUsers.value = []
+  }
+}
+
+// Carregar usuários quando o processo mudar
+watch(() => props.process?.companyId, () => {
+  loadCompanyUsers()
+}, { immediate: true })
+
+// Helper para inferir mimeType a partir do nome do arquivo
+function getMimeTypeFromName(filename) {
+  if (!filename) return 'application/octet-stream'
+  const ext = filename.split('.').pop()?.toLowerCase()
+  const mimeTypes = {
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    txt: 'text/plain'
+  }
+  return mimeTypes[ext] || 'application/octet-stream'
+}
+
+// Computed - Coletar todos os documentos de todas as etapas e sub-tarefas
 const allDocuments = computed(() => {
   if (!props.process?.stepExecutions) return []
 
   const docs = []
   const currentUserId = authStore.user?.id
 
+  // Coletar todos os usuários conhecidos do processo para resolver IDs
+  const knownUsers = new Map()
+  // Usuários carregados da API da empresa
+  companyUsers.value.forEach(user => {
+    knownUsers.set(user.id, user)
+  })
+  // Criador do processo
+  if (props.process.createdBy) {
+    knownUsers.set(props.process.createdBy.id, props.process.createdBy)
+  }
+  // Executores de etapas e sub-tarefas
+  props.process.stepExecutions?.forEach(exec => {
+    if (exec.executor) {
+      knownUsers.set(exec.executor.id, exec.executor)
+    }
+    exec.subTasks?.forEach(st => {
+      if (st.executor) {
+        knownUsers.set(st.executor.id, st.executor)
+      }
+    })
+    // Usuários de requisitos de assinatura
+    exec.step?.signatureRequirements?.forEach(req => {
+      if (req.user) {
+        knownUsers.set(req.user.id, req.user)
+      }
+    })
+  })
+
   props.process.stepExecutions.forEach(execution => {
+    // Processar anexos das sub-tarefas
+    if (execution.subTasks && execution.subTasks.length > 0) {
+      execution.subTasks.forEach(subTask => {
+        if (subTask.attachmentPath && subTask.attachmentName) {
+          // Processar assinantes da sub-tarefa
+          let subTaskSignerIds = []
+          let pendingSigners = []
+          let canSign = false
+          let signatures = []
+          let signedByUserIds = []
+
+          // Parsear assinaturas existentes
+          if (subTask.signatures) {
+            try {
+              signatures = typeof subTask.signatures === 'string'
+                ? JSON.parse(subTask.signatures)
+                : subTask.signatures
+              signedByUserIds = signatures.map(sig => sig.signerId || sig.userId)
+            } catch (e) {
+              console.error('Erro ao parsear signatures da sub-tarefa:', e)
+            }
+          }
+
+          if (subTask.requireSignature && subTask.signers) {
+            try {
+              subTaskSignerIds = typeof subTask.signers === 'string'
+                ? JSON.parse(subTask.signers)
+                : subTask.signers
+
+              // Resolver IDs em objetos com name/email - apenas quem ainda não assinou
+              pendingSigners = subTaskSignerIds
+                .filter(signerId => !signedByUserIds.includes(signerId))
+                .map(signerId => {
+                  const user = knownUsers.get(signerId)
+                  if (user) {
+                    return {
+                      id: signerId,
+                      name: user.name,
+                      email: user.email || ''
+                    }
+                  }
+                  return {
+                    id: signerId,
+                    name: `Usuário ${signerId.slice(0, 8)}...`,
+                    email: ''
+                  }
+                })
+
+              // Verificar se o usuário atual é um dos assinantes E ainda não assinou
+              canSign = subTaskSignerIds.includes(currentUserId) && !signedByUserIds.includes(currentUserId)
+            } catch (e) {
+              console.error('Erro ao parsear signers da sub-tarefa:', e)
+            }
+          }
+
+          const signatureCount = signatures.length
+          const isSigned = signatureCount > 0
+
+          docs.push({
+            id: `subtask-${subTask.id}`,
+            originalName: subTask.attachmentName,
+            path: subTask.attachmentPath,
+            mimeType: subTask.attachmentMimeType || getMimeTypeFromName(subTask.attachmentName),
+            size: subTask.attachmentSize || 0,
+            isSigned: isSigned,
+            stepName: `Sub-etapa: ${subTask.subTaskTemplate?.name || 'Sem nome'}`,
+            stepType: 'SUBTASK',
+            stepOrder: (execution.step?.order || 0) + 0.5,
+            executionId: execution.id,
+            subTaskId: subTask.id,
+            signatureCount: signatureCount,
+            pendingSigners: pendingSigners,
+            canSign: canSign,
+            userRequirement: null,
+            waitingForSigner: null,
+            isFormField: false,
+            isStepFormField: false,
+            formFieldName: null,
+            isSubTaskAttachment: true,
+            // Dados adicionais de assinatura da sub-tarefa
+            requireSignature: subTask.requireSignature || false,
+            signatureType: subTask.signatureType || 'SEQUENTIAL',
+            signerIds: subTaskSignerIds,
+            signatures: signatures
+          })
+        }
+      })
+    }
+
     if (execution.attachments && execution.attachments.length > 0) {
       execution.attachments.forEach(attachment => {
         // ✅ Verificar se é um arquivo de campo do formulário (criação ou etapa)
@@ -601,10 +757,35 @@ const allDocuments = computed(() => {
         const allSignatureRequirements = execution.step?.signatureRequirements || execution.stepVersion?.signatureRequirements || []
         const currentUserSectorId = authStore.activeSectorId
 
-        // Filtrar requisitos para este anexo específico OU requisitos globais (attachmentId = null)
-        const signatureRequirements = allSignatureRequirements.filter(req =>
-          !req.attachmentId || req.attachmentId === attachment.id
-        )
+        // Coletar IDs de TODOS os anexos DESTE PROCESSO para filtrar requisitos
+        // IMPORTANTE: SignatureRequirements são vinculados ao StepVersion (template), então podem
+        // incluir requisitos de arquivos de OUTROS processos do mesmo tipo
+        const processAttachmentIds = new Set()
+        props.process.stepExecutions?.forEach(exec => {
+          exec.attachments?.forEach(att => processAttachmentIds.add(att.id))
+        })
+
+        // Filtrar requisitos para este anexo
+        // IMPORTANTE: Só incluir requisitos que:
+        // 1. São especificamente para este arquivo (attachmentId === attachment.id)
+        // 2. OU são globais (attachmentId = null) E NÃO são arquivos de formulário
+        // 3. NUNCA incluir requisitos de arquivos de OUTROS processos
+        const signatureRequirements = allSignatureRequirements.filter(req => {
+          // Se o requisito tem um attachmentId, verificar se é deste processo
+          if (req.attachmentId) {
+            // Só incluir se é o arquivo atual E pertence a este processo
+            return req.attachmentId === attachment.id && processAttachmentIds.has(req.attachmentId)
+          }
+
+          // Se é um requisito global (attachmentId = null)
+          // Arquivos de formulário NÃO herdam requisitos globais
+          if (isFormField) {
+            return false
+          }
+
+          // Para anexos normais de etapa: incluir requisitos globais
+          return true
+        })
 
         if (signatureRequirements.length > 0) {
           // Ordenar requisitos por ordem
@@ -776,8 +957,9 @@ function getStepColor(stepType) {
     UPLOAD: 'purple',
     REVIEW: 'teal',
     SIGNATURE: 'red',
-    FORM_FIELD: 'indigo', // Cor para campos do formulário de criação
-    STEP_FORM_FIELD: 'cyan' // Cor para campos do formulário de etapa
+    FORM_FIELD: 'indigo',
+    STEP_FORM_FIELD: 'cyan',
+    SUBTASK: 'secondary' // Cor para anexos de sub-etapas
   }
   return colors[stepType] || 'grey'
 }
@@ -789,8 +971,9 @@ function getStepIcon(stepType) {
     UPLOAD: 'mdi-upload',
     REVIEW: 'mdi-eye-check',
     SIGNATURE: 'mdi-draw-pen',
-    FORM_FIELD: 'mdi-file-document-edit', // Ícone para campos do formulário de criação
-    STEP_FORM_FIELD: 'mdi-form-textbox' // Ícone para campos do formulário de etapa
+    FORM_FIELD: 'mdi-file-document-edit',
+    STEP_FORM_FIELD: 'mdi-form-textbox',
+    SUBTASK: 'mdi-subdirectory-arrow-right' // Ícone para anexos de sub-etapas
   }
   return icons[stepType] || 'mdi-help-circle'
 }
@@ -802,8 +985,9 @@ function getStepTypeText(stepType) {
     UPLOAD: 'Upload de Arquivos',
     REVIEW: 'Revisão',
     SIGNATURE: 'Assinatura',
-    FORM_FIELD: 'Dados do Processo', // Texto para campos do formulário de criação
-    STEP_FORM_FIELD: 'Campo da Etapa' // Texto para campos do formulário de etapa
+    FORM_FIELD: 'Dados do Processo',
+    STEP_FORM_FIELD: 'Campo da Etapa',
+    SUBTASK: 'Sub-etapa' // Texto para anexos de sub-etapas
   }
   return types[stepType] || stepType
 }
@@ -827,7 +1011,12 @@ function openDocument(doc) {
 
 async function downloadDocument(doc) {
   try {
-    const response = await api.get(`/processes/attachment/${doc.id}/download`, {
+    // Usar endpoint diferente para anexos de sub-tarefas
+    const endpoint = doc.isSubTaskAttachment
+      ? `/sub-tasks/attachment/${doc.subTaskId}/download`
+      : `/processes/attachment/${doc.id}/download`
+
+    const response = await api.get(endpoint, {
       responseType: 'blob',
     })
 
@@ -866,12 +1055,6 @@ async function refreshDocuments() {
 }
 
 function openSignDialog(doc) {
-  console.log('🔍 Opening sign dialog for document:', doc)
-  console.log('👤 Current user:', authStore.user?.id, authStore.user?.name)
-  console.log('✅ Can sign:', doc.canSign)
-  console.log('📋 User requirement:', doc.userRequirement)
-  console.log('👥 Pending signers:', doc.pendingSigners)
-
   documentToSign.value = {
     id: doc.id,
     originalName: doc.originalName,
@@ -880,10 +1063,11 @@ function openSignDialog(doc) {
     executionId: doc.executionId,
     stepName: doc.stepName,
     isSigned: doc.isSigned,
-    requirementId: doc.userRequirement?.id
+    requirementId: doc.userRequirement?.id,
+    isSubTaskAttachment: doc.isSubTaskAttachment || false,
+    subTaskId: doc.subTaskId || null
   }
 
-  console.log('📄 Document to sign:', documentToSign.value)
   signDialog.value = true
 }
 

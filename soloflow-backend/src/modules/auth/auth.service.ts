@@ -7,6 +7,8 @@ import { SwitchCompanyDto } from './dto/switch-company.dto';
 import * as bcrypt from 'bcrypt';
 import { UserRole } from '@prisma/client';
 import { ProfilesService } from '../profiles/profiles.service';
+import { v4 as uuidv4 } from 'uuid';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -383,7 +385,6 @@ export class AuthService {
   }
 
   async refreshToken(user: any) {
-    // Buscar informações atualizadas do usuário
     const userCompany = await this.prisma.userCompany.findFirst({
       where: {
         userId: user.id,
@@ -412,7 +413,6 @@ export class AuthService {
       throw new UnauthorizedException('Usuário ou empresa inativos');
     }
 
-    // Resolver permissões atualizadas
     const resolvedPermissions = await this.profilesService.resolveUserPermissions(
       user.id,
       user.companyId,
@@ -429,6 +429,130 @@ export class AuthService {
     return {
       access_token: this.jwtService.sign(payload),
     };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // REFRESH TOKEN COM REVOGAÇÃO
+  // ════════════════════════════════════════════════════════════════════════════════
+
+  private generateRefreshToken(): string {
+    return crypto.randomBytes(64).toString('hex');
+  }
+
+  async createRefreshToken(userId: string, userAgent?: string, ipAddress?: string): Promise<string> {
+    const token = this.generateRefreshToken();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30); // 30 dias de validade
+
+    await this.prisma.refreshToken.create({
+      data: {
+        id: uuidv4(),
+        token,
+        userId,
+        expiresAt,
+        userAgent,
+        ipAddress,
+      },
+    });
+
+    return token;
+  }
+
+  async validateRefreshToken(token: string): Promise<{ userId: string } | null> {
+    const refreshToken = await this.prisma.refreshToken.findUnique({
+      where: { token },
+    });
+
+    if (!refreshToken) {
+      return null;
+    }
+
+    if (refreshToken.isRevoked) {
+      return null;
+    }
+
+    if (refreshToken.expiresAt < new Date()) {
+      await this.revokeRefreshToken(token);
+      return null;
+    }
+
+    return { userId: refreshToken.userId };
+  }
+
+  async revokeRefreshToken(token: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { token },
+      data: {
+        isRevoked: true,
+        revokedAt: new Date(),
+      },
+    });
+  }
+
+  async revokeAllUserTokens(userId: string): Promise<number> {
+    const result = await this.prisma.refreshToken.updateMany({
+      where: {
+        userId,
+        isRevoked: false,
+      },
+      data: {
+        isRevoked: true,
+        revokedAt: new Date(),
+      },
+    });
+
+    return result.count;
+  }
+
+  async cleanupExpiredTokens(): Promise<number> {
+    const result = await this.prisma.refreshToken.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: new Date() } },
+          { isRevoked: true, revokedAt: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+        ],
+      },
+    });
+
+    return result.count;
+  }
+
+  async getActiveTokens(userId: string): Promise<any[]> {
+    return this.prisma.refreshToken.findMany({
+      where: {
+        userId,
+        isRevoked: false,
+        expiresAt: { gt: new Date() },
+      },
+      select: {
+        id: true,
+        userAgent: true,
+        ipAddress: true,
+        createdAt: true,
+        expiresAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async revokeTokenById(tokenId: string, userId: string): Promise<boolean> {
+    const token = await this.prisma.refreshToken.findFirst({
+      where: { id: tokenId, userId },
+    });
+
+    if (!token) {
+      return false;
+    }
+
+    await this.prisma.refreshToken.update({
+      where: { id: tokenId },
+      data: {
+        isRevoked: true,
+        revokedAt: new Date(),
+      },
+    });
+
+    return true;
   }
 }
 

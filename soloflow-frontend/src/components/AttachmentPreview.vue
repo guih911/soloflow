@@ -202,43 +202,30 @@ watch(() => props.attachment, (newAttachment) => {
   }
 }, { immediate: true })
 
-// ✅ SOLUÇÃO PRINCIPAL: Carregar arquivo como blob para evitar problemas de CORS
 async function loadPreview() {
   if (!props.attachment?.id || !canPreview.value) return
-  
+
   loading.value = true
   error.value = ''
-  
+
   try {
-    console.log('🔍 Loading preview for attachment:', props.attachment.id, 'Type:', props.attachment.attachmentType)
-    
-    // ✅ Usar endpoint de view com autenticação automática via axios
     const response = await api.get(`/processes/attachment/${props.attachment.id}/view`, {
       responseType: 'blob'
     })
-    
-    console.log('✅ Preview blob loaded successfully')
-    
-    // Limpar URL anterior se existir
+
     if (previewUrl.value && previewUrl.value.startsWith('blob:')) {
       URL.revokeObjectURL(previewUrl.value)
     }
-    
-    // Criar URL blob
-    const blob = new Blob([response.data], { 
-      type: props.attachment.mimeType || 'application/pdf' 
+
+    const blob = new Blob([response.data], {
+      type: props.attachment.mimeType || 'application/pdf'
     })
-    
+
     previewUrl.value = URL.createObjectURL(blob)
-    
-    // Resetar zoom
+
     zoomLevel.value = 100
     imageZoom.value = 100
-    
-    console.log('🎯 Preview URL created:', previewUrl.value)
-    
   } catch (err) {
-    console.error('❌ Error loading preview:', err)
     error.value = 'Erro ao carregar visualização: ' + (err.response?.data?.message || err.message)
   } finally {
     loading.value = false
@@ -248,36 +235,30 @@ async function loadPreview() {
 function onLoad() {
   loading.value = false
   error.value = ''
-  console.log('✅ Preview loaded successfully')
 }
 
 function onError() {
   loading.value = false
   error.value = 'Não foi possível carregar o arquivo'
-  console.error('❌ Preview load error')
 }
 
 async function openInNewTab() {
   try {
-    // Baixar arquivo e abrir em nova aba
     const response = await api.get(`/processes/attachment/${props.attachment.id}/download`, {
       responseType: 'blob'
     })
-    
-    const blob = new Blob([response.data], { 
-      type: props.attachment.mimeType || 'application/pdf' 
+
+    const blob = new Blob([response.data], {
+      type: props.attachment.mimeType || 'application/pdf'
     })
     const url = URL.createObjectURL(blob)
-    
+
     window.open(url, '_blank')
-    
-    // Limpar URL após um tempo
+
     setTimeout(() => {
       URL.revokeObjectURL(url)
     }, 60000)
-    
   } catch (error) {
-    console.error('Error opening in new tab:', error)
     window.showSnackbar?.('Erro ao abrir arquivo', 'error')
   }
 }

@@ -36,6 +36,29 @@ export const useSignaturesStore = defineStore('signatures', {
       }
     },
 
+    async signSubTaskDocument(signatureData) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const authStore = useAuthStore()
+        const response = await axios.post(
+          `${API_URL}/signatures/sign-subtask`,
+          signatureData,
+          {
+            headers: { 'Authorization': `Bearer ${authStore.token}` }
+          }
+        )
+
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao assinar documento da sub-tarefa'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
     async validateSignaturePublic(signatureToken, documentHash = null) {
       this.loading = true
       this.error = null

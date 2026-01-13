@@ -18,7 +18,6 @@ async function main() {
     await prisma.attachment.deleteMany({});
     await prisma.stepExecution.deleteMany({});
     await prisma.processInstance.deleteMany({});
-    await prisma.stepTransition.deleteMany({});
     await prisma.stepAssignment.deleteMany({});
     await prisma.stepVersion.deleteMany({});
     await prisma.formFieldVersion.deleteMany({});

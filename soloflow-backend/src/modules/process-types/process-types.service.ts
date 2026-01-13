@@ -35,15 +35,11 @@ interface Step {
   maxAttachments?: number | null;
   allowedFileTypes?: any;
   conditions?: any;
-  actions?: any;
   assignedToUserId?: string | null;
   assignedToSectorId?: string | null;
   assignedToUser?: any;
   assignedToSector?: any;
   assignedToCreator: boolean;
-  assignmentConditions?: any;
-  flowConditions?: any;
-  reuseData?: any;
 }
 
 interface FormField {
@@ -67,7 +63,7 @@ export class ProcessTypesService {
   async create(createProcessTypeDto: CreateProcessTypeDto): Promise<ProcessType> {
     console.log('Creating process type with data:', createProcessTypeDto);
 
-    const { steps, formFields, ...processTypeData } = createProcessTypeDto;
+    const { steps, formFields, allowedChildProcessTypes, ...processTypeData } = createProcessTypeDto;
 
     const company = await this.prisma.company.findUnique({
       where: { id: processTypeData.companyId },
@@ -98,6 +94,7 @@ export class ProcessTypesService {
           data: {
             ...processTypeData,
             description: processTypeData.description || undefined,
+            allowedChildProcessTypes: allowedChildProcessTypes ? JSON.stringify(allowedChildProcessTypes) : undefined,
           },
         });
 
@@ -131,7 +128,9 @@ export class ProcessTypesService {
               processedConditions = step.conditions;
             }
           
-            const stepVersion = await tx.stepVersion.create({
+            // Assinaturas só são permitidas para etapas UPLOAD ou SIGNATURE
+              const allowsSignature = step.type === 'UPLOAD' || step.type === 'SIGNATURE';
+              const stepVersion = await tx.stepVersion.create({
               data: {
                 name: step.name,
                 description: step.description,
@@ -141,20 +140,16 @@ export class ProcessTypesService {
                 type: step.type,
                 order: step.order || (i + 1),
                 allowAttachment: step.allowAttachment || false,
-                requiresSignature: step.requiresSignature || false,
+                requiresSignature: allowsSignature ? (step.requiresSignature || false) : false,
                 requireAttachment: step.requireAttachment || false,
                 minAttachments: step.minAttachments || undefined,
                 maxAttachments: step.maxAttachments || undefined,
                 allowedFileTypes: step.allowedFileTypes ? JSON.stringify(step.allowedFileTypes) : undefined,
                 conditions: processedConditions || undefined,
-                actions: step.actions ? JSON.stringify(step.actions) : undefined,
-                
+
                 // Novos campos
                 assignedToCreator: step.assignedToCreator || false,
-                assignmentConditions: step.assignmentConditions || undefined,
-                flowConditions: step.flowConditions || undefined,
-                reuseData: step.reuseData || undefined,
-                
+
                 processTypeVersionId: version.id,
               },
             });
@@ -504,11 +499,7 @@ export class ProcessTypesService {
               maxAttachments: existingStep.maxAttachments,
               allowedFileTypes: existingStep.allowedFileTypes,
               conditions: existingStep.conditions,
-              actions: existingStep.actions,
               assignedToCreator: existingStep.assignedToCreator,
-              assignmentConditions: existingStep.assignmentConditions,
-              flowConditions: existingStep.flowConditions,
-              reuseData: existingStep.reuseData,
               // Mapear assignments de volta para campos compatíveis
               assignedToUserId: userAssignment?.userId || null,
               assignedToSectorId: sectorAssignment?.sectorId || null,
@@ -530,6 +521,8 @@ export class ProcessTypesService {
               processedConditions = step.conditions;
             }
             
+            // Assinaturas só são permitidas para etapas UPLOAD ou SIGNATURE
+            const allowsSignatureUpdate = step.type === 'UPLOAD' || step.type === 'SIGNATURE';
             const newStepVersion = await tx.stepVersion.create({
               data: {
                 name: step.name,
@@ -540,20 +533,16 @@ export class ProcessTypesService {
                 type: step.type,
                 order: step.order || (i + 1),
                 allowAttachment: step.allowAttachment || false,
-                requiresSignature: step.requiresSignature || false,
+                requiresSignature: allowsSignatureUpdate ? (step.requiresSignature || false) : false,
                 requireAttachment: step.requireAttachment || false,
                 minAttachments: step.minAttachments || undefined,
                 maxAttachments: step.maxAttachments || undefined,
                 allowedFileTypes: step.allowedFileTypes ? JSON.stringify(step.allowedFileTypes) : undefined,
                 conditions: processedConditions || undefined,
-                actions: step.actions ? JSON.stringify(step.actions) : undefined,
-                
+
                 // Novos campos
                 assignedToCreator: step.assignedToCreator || false,
-                assignmentConditions: step.assignmentConditions || undefined,
-                flowConditions: step.flowConditions || undefined,
-                reuseData: step.reuseData || undefined,
-                
+
                 processTypeVersionId: newVersion.id,
               },
             });
@@ -601,13 +590,27 @@ export class ProcessTypesService {
         }
 
         // 6. Atualizar o ProcessType principal com a nova versão
+        const updateData: any = {
+          name: dto.name || processType.name,
+          description: dto.description || processType.description,
+          updatedAt: new Date()
+        };
+
+        // Atualizar isChildProcessOnly se fornecido
+        if (dto.isChildProcessOnly !== undefined) {
+          updateData.isChildProcessOnly = dto.isChildProcessOnly;
+        }
+
+        // Atualizar allowedChildProcessTypes se fornecido
+        if (dto.allowedChildProcessTypes !== undefined) {
+          updateData.allowedChildProcessTypes = dto.allowedChildProcessTypes
+            ? JSON.stringify(dto.allowedChildProcessTypes)
+            : null;
+        }
+
         const updatedProcessType = await tx.processType.update({
           where: { id },
-          data: {
-            name: dto.name || processType.name,
-            description: dto.description || processType.description,
-            updatedAt: new Date()
-          },
+          data: updateData,
           include: {
             versions: {
               where: { isActive: true },
@@ -647,7 +650,7 @@ export class ProcessTypesService {
 
   // Método para updates simples (sem versionamento completo)
   async updateBasic(id: string, dto: UpdateProcessTypeDto): Promise<ProcessType> {
-    const { formFields, ...safeDto } = dto as any;
+    const { formFields, allowedChildProcessTypes, ...safeDto } = dto as any;
 
     try {
       const updated = await this.prisma.processType.update({
@@ -655,6 +658,9 @@ export class ProcessTypesService {
         data: {
           ...safeDto,
           description: safeDto.description || undefined,
+          allowedChildProcessTypes: allowedChildProcessTypes !== undefined
+            ? (allowedChildProcessTypes ? JSON.stringify(allowedChildProcessTypes) : null)
+            : undefined,
         },
         include: {
           versions: {
@@ -788,6 +794,8 @@ export class ProcessTypesService {
         processedConditions = dto.conditions;
       }
 
+      // Assinaturas só são permitidas para etapas UPLOAD ou SIGNATURE
+      const allowsSignatureAdd = dto.type === 'UPLOAD' || dto.type === 'SIGNATURE';
       const created = await this.prisma.stepVersion.create({
         data: {
           name: dto.name,
@@ -797,7 +805,7 @@ export class ProcessTypesService {
           type: dto.type,
           order: dto.order,
           allowAttachment: dto.allowAttachment || false,
-          requiresSignature: dto.requiresSignature || false,
+          requiresSignature: allowsSignatureAdd ? (dto.requiresSignature || false) : false,
           requireAttachment: dto.requireAttachment || false,
           minAttachments: dto.minAttachments || undefined,
           maxAttachments: dto.maxAttachments || undefined,
@@ -869,6 +877,8 @@ export class ProcessTypesService {
         processedConditions = dto.conditions;
       }
 
+      // Assinaturas só são permitidas para etapas UPLOAD ou SIGNATURE
+      const allowsSignatureEdit = dto.type === 'UPLOAD' || dto.type === 'SIGNATURE';
       const updated = await this.prisma.stepVersion.update({
         where: { id: stepId },
         data: {
@@ -879,7 +889,7 @@ export class ProcessTypesService {
           type: dto.type,
           order: dto.order,
           allowAttachment: dto.allowAttachment,
-          requiresSignature: dto.requiresSignature,
+          requiresSignature: allowsSignatureEdit ? dto.requiresSignature : false,
           requireAttachment: dto.requireAttachment,
           minAttachments: dto.minAttachments,
           maxAttachments: dto.maxAttachments,
@@ -927,8 +937,19 @@ export class ProcessTypesService {
     const activeVersion = processType.versions?.[0];
     if (!activeVersion) return processType;
 
+    // Parse allowedChildProcessTypes se for string JSON
+    let allowedChildProcessTypes = processType.allowedChildProcessTypes;
+    try {
+      if (allowedChildProcessTypes && typeof allowedChildProcessTypes === 'string') {
+        allowedChildProcessTypes = JSON.parse(allowedChildProcessTypes);
+      }
+    } catch (e) {
+      allowedChildProcessTypes = [];
+    }
+
     return {
       ...processType,
+      allowedChildProcessTypes: allowedChildProcessTypes || [],
       steps: activeVersion.steps?.map(step => this.adaptStepResponse(step)) || [],
       formFields: activeVersion.formFields?.map(field => this.adaptFormFieldResponse(field)) || [],
       _count: { instances: activeVersion.instances?.length || 0 },
@@ -960,15 +981,6 @@ export class ProcessTypesService {
       parsedAllowedFileTypes = stepVersion.allowedFileTypes;
     }
   
-    let parsedActions = stepVersion.actions || [];
-    try {
-      if (stepVersion.actions && typeof stepVersion.actions === 'string') {
-        parsedActions = JSON.parse(stepVersion.actions);
-      }
-    } catch (e) {
-      parsedActions = stepVersion.actions || [];
-    }
-  
     return {
       id: stepVersion.id,
       name: stepVersion.name,
@@ -985,14 +997,10 @@ export class ProcessTypesService {
       maxAttachments: stepVersion.maxAttachments,
       allowedFileTypes: parsedAllowedFileTypes,
       conditions: parsedConditions,
-      actions: parsedActions,
-      
+
       // Novos campos
       assignedToCreator: stepVersion.assignedToCreator || false,
-      assignmentConditions: conditionalAssignment?.conditionalConfig || null,
-      flowConditions: stepVersion.flowConditions || null,
-      reuseData: stepVersion.reuseData || null,
-      
+
       // Compatibilidade com o frontend existente
       assignedToUserId: userAssignment?.userId || null,
       assignedToSectorId: sectorAssignment?.sectorId || null,

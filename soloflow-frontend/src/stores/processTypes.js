@@ -487,7 +487,14 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
           validations: typeof field.validations === 'object' ? field.validations : {}
         }))
       }
-      
+
+      // Incluir allowedChildProcessTypes se fornecido
+      if (data.allowedChildProcessTypes !== undefined) {
+        cleanData.allowedChildProcessTypes = Array.isArray(data.allowedChildProcessTypes)
+          ? data.allowedChildProcessTypes
+          : []
+      }
+
       Object.keys(cleanData).forEach(key => {
         if (cleanData[key] === undefined) {
           delete cleanData[key]

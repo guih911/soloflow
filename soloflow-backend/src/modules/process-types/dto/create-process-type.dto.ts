@@ -1,4 +1,4 @@
-import { IsString, IsOptional, Length, IsUUID, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, Length, IsUUID, IsArray, ValidateNested, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateStepDto } from './create-step.dto';
 import { CreateFormFieldDto } from './create-form-field.dto';
@@ -13,6 +13,10 @@ export class CreateProcessTypeDto {
   @Length(0, 500)
   description?: string;
 
+  @IsOptional()
+  @IsBoolean()
+  isChildProcessOnly?: boolean;
+
   @IsUUID()
   companyId: string;
 
@@ -26,4 +30,9 @@ export class CreateProcessTypeDto {
   @ValidateNested({ each: true })
   @Type(() => CreateFormFieldDto)
   formFields?: CreateFormFieldDto[];
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  allowedChildProcessTypes?: string[];
 }

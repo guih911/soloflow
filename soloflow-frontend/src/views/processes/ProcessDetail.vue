@@ -1,34 +1,60 @@
 <template>
   <div v-if="process">
-    <div class="d-flex align-center mb-6">
+    <!-- Linha 1: Título, Atualizar e Status -->
+    <div class="d-flex align-center mb-2">
       <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" />
       <div class="ml-4 flex-grow-1">
         <div class="d-flex align-center">
-          <h1 class="text-h4 font-weight-bold ">
+          <h1 class="text-h4 font-weight-bold">
             {{ process.code }} - {{ process.processType.name }}
           </h1>
-
         </div>
         <p v-if="process.title && process.title !== 'undefined'" class="text-subtitle-1 text-medium-emphasis">
           {{ process.title }}
         </p>
       </div>
 
-      <div class="d-flex gap-2">
-          <v-chip :color="getStatusColor(process.status)" class="ml-3" label>
-            {{ getStatusText(process.status) }}
-          </v-chip>
+      <div class="d-flex gap-2 align-center">
         <v-btn variant="text" @click="refreshProcess" :loading="loading">
           <v-icon start>mdi-refresh</v-icon>
           Atualizar
         </v-btn>
 
-        <v-btn v-if="currentStepExecution" color="primary" variant="elevated" @click="executeCurrentStep"
-          :disabled="!canExecuteCurrentStep">
-          <v-icon start>mdi-play</v-icon>
-          Executar Etapa
-        </v-btn>
+        <v-chip :color="getStatusColor(process.status)" class="ml-2" label>
+          {{ getStatusText(process.status) }}
+        </v-chip>
       </div>
+    </div>
+
+    <!-- Linha 2: Botões de ação -->
+    <div class="d-flex justify-end gap-2 mb-6">
+      <!-- Botão de Criar Sub-Processo (não aparece se já for sub-processo) -->
+      <v-btn
+        v-if="process?.status !== 'CANCELLED' && !parentProcessInfo"
+        variant="tonal"
+        color="secondary"
+        @click="openCreateChildProcessDialog"
+      >
+        <v-icon start>mdi-source-branch-plus</v-icon>
+        Sub-Processo
+      </v-btn>
+
+      <!-- Botão de Cancelar Processo -->
+      <v-btn
+        v-if="canCancelProcess"
+        variant="tonal"
+        color="error"
+        @click="cancelProcessDialog = true"
+      >
+        <v-icon start>mdi-cancel</v-icon>
+        Cancelar
+      </v-btn>
+
+      <v-btn v-if="currentStepExecution" color="primary" variant="elevated" @click="executeCurrentStep"
+        :disabled="!canExecuteCurrentStep">
+        <v-icon start>mdi-play</v-icon>
+        Executar Etapa
+      </v-btn>
     </div>
 
     <v-card class="mb-6">
@@ -111,7 +137,39 @@
           </v-card-text>
         </v-card>
 
-        <v-card v-if="process.formData || hasFormFieldFiles">
+        <!-- Card de Processo Pai (se for sub-processo) -->
+        <v-card v-if="parentProcessInfo" class="mb-4">
+          <v-card-title class="d-flex align-center">
+            <v-icon class="mr-2" color="primary">mdi-source-branch</v-icon>
+            Processo Pai
+          </v-card-title>
+          <v-divider />
+          <v-list density="comfortable">
+            <v-list-item
+              @click="router.push(`/processes/${parentProcessInfo.parentProcessInstance.id}`)"
+              class="cursor-pointer"
+            >
+              <template v-slot:prepend>
+                <v-icon color="primary">mdi-file-document</v-icon>
+              </template>
+              <v-list-item-title class="font-weight-medium">
+                {{ parentProcessInfo.parentProcessInstance?.code }}
+              </v-list-item-title>
+              <v-list-item-subtitle>
+                {{ parentProcessInfo.parentProcessInstance?.processTypeVersion?.processType?.name }}
+              </v-list-item-subtitle>
+              <template v-slot:append>
+                <v-icon size="small">mdi-chevron-right</v-icon>
+              </template>
+            </v-list-item>
+          </v-list>
+          <v-card-text v-if="parentProcessInfo.description" class="pt-0">
+            <p class="text-caption text-medium-emphasis mb-1">Motivo do vínculo</p>
+            <p class="text-body-2">{{ parentProcessInfo.description }}</p>
+          </v-card-text>
+        </v-card>
+
+        <v-card v-if="hasFormDataToShow">
           <v-card-title>
             <v-icon class="mr-2">mdi-form-textbox</v-icon>
             Dados Informados
@@ -171,11 +229,35 @@
               </template>
             </template>
 
-            <v-list-item v-if="!process.formData && !hasFormFieldFiles">
-              <v-list-item-title class="text-center text-medium-emphasis">
-                <v-icon class="mr-2">mdi-information-outline</v-icon>
-                Nenhum dado informado
-              </v-list-item-title>
+          </v-list>
+        </v-card>
+
+        <!-- Seção de Sub-Processos -->
+        <v-card v-if="childProcesses.length > 0" class="mt-4">
+          <v-card-title>
+            <v-icon class="mr-2">mdi-source-branch</v-icon>
+            Sub-Processos
+          </v-card-title>
+          <v-divider />
+          <v-list density="comfortable">
+            <v-list-item
+              v-for="child in childProcesses"
+              :key="child.id"
+              @click="viewChildProcess(child.childProcessInstance)"
+              class="cursor-pointer"
+            >
+              <template v-slot:prepend>
+                <v-icon :color="getChildStatusColor(child.status)">
+                  {{ getChildStatusIcon(child.status) }}
+                </v-icon>
+              </template>
+              <v-list-item-title>{{ child.childProcessInstance?.code }}</v-list-item-title>
+              <v-list-item-subtitle>
+                <v-chip size="x-small" :color="getChildStatusColor(child.status)" variant="tonal" class="mr-2">
+                  {{ getChildStatusLabel(child.status) }}
+                </v-chip>
+                {{ child.childProcessInstance?.processTypeVersion?.processType?.name }}
+              </v-list-item-subtitle>
             </v-list-item>
           </v-list>
         </v-card>
@@ -251,10 +333,10 @@
                           </div>
                         </div>
 
-                        <div class="step-status-badge">
-                          <v-chip 
-                            size="small" 
-                            :color="getExecutionColor(execution)" 
+                        <div class="step-status-badge d-flex align-center gap-2">
+                          <v-chip
+                            size="small"
+                            :color="getExecutionColor(execution)"
                             :variant="execution.status === 'IN_PROGRESS' ? 'flat' : 'tonal'"
                           >
                             <v-icon start size="16">{{ getExecutionIcon(execution) }}</v-icon>
@@ -349,9 +431,9 @@
                     </div>
 
                     <div v-if="canExecuteStep(execution)" class="step-card-actions pa-4 pt-0">
-                      <v-btn 
-                        color="primary" 
-                        variant="elevated" 
+                      <v-btn
+                        color="primary"
+                        variant="elevated"
                         block
                         size="large"
                         @click="executeStep(execution)"
@@ -362,6 +444,17 @@
                       </v-btn>
                     </div>
                   </v-card>
+
+                  <!-- Sub-etapas da etapa (aparecem sempre que existirem ou quando em progresso) -->
+                  <SubTasksList
+                    v-if="execution.status === 'IN_PROGRESS' || execution.status === 'COMPLETED'"
+                    :key="`subtasks-${execution.id}-${subTasksReloadKey}`"
+                    :step-execution-id="execution.id"
+                    :step-status="execution.status"
+                    :users="stepUsers"
+                    @updated="refreshProcess"
+                    @create="openCreateSubTaskDialog(execution)"
+                  />
                 </div>
               </div>
             </div>
@@ -407,6 +500,28 @@
     >
       <DocumentViewer v-if="process" :process="process" :drawer="true" @refresh="refreshProcess" />
     </v-navigation-drawer>
+
+    <!-- Diálogo de Cancelamento -->
+    <CancelProcessDialog
+      v-model="cancelProcessDialog"
+      :process="process"
+      @cancel="handleCancelProcess"
+    />
+
+    <!-- Diálogo de Criar Sub-Processo -->
+    <CreateChildProcessDialog
+      v-model="createChildProcessDialog"
+      :parent-process="process"
+      @created="handleChildProcessCreated"
+    />
+
+    <!-- Diálogo de Criar Sub-Tarefa -->
+    <CreateSubTaskDialog
+      v-model="createSubTaskDialog"
+      :step-execution="selectedStepExecution"
+      :company-id="process?.companyId"
+      @created="handleSubTaskCreated"
+    />
   </div>
 
   <div v-else-if="loading" class="text-center py-12">
@@ -425,7 +540,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useProcessStore } from '@/stores/processes'
@@ -438,6 +553,12 @@ import 'dayjs/locale/pt-br'
 import FieldFileModal from '@/components/FieldFileModal.vue'
 import ProcessHistory from '@/components/ProcessHistory.vue'
 import DocumentViewer from '@/components/DocumentViewer.vue'
+import CancelProcessDialog from '@/components/CancelProcessDialog.vue'
+import CreateChildProcessDialog from '@/components/CreateChildProcessDialog.vue'
+import SubTasksList from '@/components/SubTasksList.vue'
+import CreateSubTaskDialog from '@/components/CreateSubTaskDialog.vue'
+import { useChildProcessStore } from '@/stores/childProcesses'
+import { useSubTaskStore } from '@/stores/subTasks'
 
 dayjs.extend(relativeTime)
 dayjs.locale('pt-br')
@@ -452,6 +573,18 @@ const fieldFileModal = ref(false)
 const selectedFieldFile = ref(null)
 const selectedField = ref(null)
 const documentsDrawer = ref(false)
+const childProcessesLoading = ref(false)
+const cancelProcessDialog = ref(false)
+const createChildProcessDialog = ref(false)
+const createSubTaskDialog = ref(false)
+const selectedStepExecution = ref(null)
+const parentProcessInfo = ref(null) // Informação do processo pai se este for sub-processo
+const stepUsers = ref([]) // Usuários para atribuição de sub-tarefas
+const subTasksReloadKey = ref(0) // Key para forçar reload do SubTasksList
+
+// Store para sub-processos e sub-tarefas
+const childProcessStore = useChildProcessStore()
+const subTaskStore = useSubTaskStore()
 
 // Computed
 const loading = computed(() => processStore.loading)
@@ -500,6 +633,24 @@ const fileFields = computed(() => {
 
 const hasFormFieldFiles = computed(() => {
   return fileFields.value.some(field => getFieldFileData(field) !== null)
+})
+
+// Verificar se há dados do formulário para exibir
+const hasFormDataToShow = computed(() => {
+  const hasTextData = Object.keys(formattedFormData.value).length > 0
+  return hasTextData || hasFormFieldFiles.value
+})
+
+// Computed para sub-processos
+const childProcesses = computed(() => childProcessStore.childProcesses)
+
+// Computed para verificar se pode cancelar o processo
+const canCancelProcess = computed(() => {
+  if (!process.value) return false
+  // Só pode cancelar se o processo não estiver já finalizado
+  return process.value.status !== 'COMPLETED' &&
+         process.value.status !== 'CANCELLED' &&
+         process.value.status !== 'REJECTED'
 })
 
 const formattedFormData = computed(() => {
@@ -596,14 +747,23 @@ const formattedFormData = computed(() => {
   return formatted
 })
 
-// Computed para total de documentos
+// Computed para total de documentos (incluindo anexos de sub-tarefas)
 const totalDocuments = computed(() => {
   if (!process.value?.stepExecutions) return 0
 
   let count = 0
   process.value.stepExecutions.forEach(execution => {
+    // Contar anexos da etapa
     if (execution.attachments && execution.attachments.length > 0) {
       count += execution.attachments.length
+    }
+    // Contar anexos das sub-tarefas
+    if (execution.subTasks && execution.subTasks.length > 0) {
+      execution.subTasks.forEach(subTask => {
+        if (subTask.attachmentPath && subTask.attachmentName) {
+          count++
+        }
+      })
     }
   })
 
@@ -760,16 +920,10 @@ function getProgressColor() {
 }
 
 function canExecuteStep(execution) {
-  console.warn('⚡ canExecuteStep called for execution:', execution.id, 'status:', execution.status)
-
-  // Permitir executar etapas PENDING ou IN_PROGRESS
-  // Bloquear apenas etapas já concluídas/rejeitadas/puladas
   if (execution.status === 'COMPLETED' || execution.status === 'REJECTED' || execution.status === 'SKIPPED') {
-    console.warn('❌ Execution already completed/rejected/skipped:', execution.status)
     return false
   }
 
-  // Verificar se é a primeira etapa não concluída (pode executar)
   const allExecutions = process.value?.stepExecutions || []
   const sortedExecutions = [...allExecutions].sort((a, b) =>
     (a.step?.order || 0) - (b.step?.order || 0)
@@ -780,58 +934,31 @@ function canExecuteStep(execution) {
   )
 
   if (firstPending?.id !== execution.id) {
-    console.warn('❌ Esta não é a próxima etapa a ser executada. Próxima:', firstPending?.step?.name)
     return false
   }
 
   const user = authStore.user
   const step = execution.step
 
-  // Extrair o ID do setor (pode vir como objeto ou string)
   const stepSectorId = step.assignedToSector?.id || step.assignedToSectorId
   const stepUserId = step.assignedToUser?.id || step.assignedToUserId
 
-  console.warn('🔍 VERIFICANDO PERMISSÃO PARA EXECUTAR ETAPA:')
-  console.table({
-    'Nome da Etapa': step.name,
-    'ID Setor da Etapa': stepSectorId,
-    'ID Usuário da Etapa': stepUserId,
-    'assignedToCreator': step.assignedToCreator,
-    'ID Criador do Processo': process.value?.createdBy?.id,
-    'ID Usuário Logado': user?.id,
-    'ID Setor do Usuário': authStore.activeSectorId,
-    'É Admin?': authStore.isAdmin,
-  })
-
-  // ✅ Verificar se a etapa é atribuída ao criador do processo
   if (step.assignedToCreator && process.value?.createdBy?.id === user?.id) {
-    console.warn('✅ PODE EXECUTAR: Etapa atribuída ao criador e usuário é o criador do processo')
     return true
   }
 
-  // Verificar se é responsável direto
   if (stepUserId && stepUserId === user?.id) {
-    console.warn('✅ PODE EXECUTAR: Usuário é responsável direto pela etapa')
     return true
   }
 
-  // Verificar se pertence ao setor responsável
   if (stepSectorId && authStore.activeSectorId && stepSectorId === authStore.activeSectorId) {
-    console.warn('✅ PODE EXECUTAR: Usuário pertence ao setor responsável pela etapa')
     return true
   }
 
-  // Admin pode executar qualquer etapa
   if (authStore.isAdmin) {
-    console.warn('✅ PODE EXECUTAR: Usuário é admin')
     return true
   }
 
-  console.warn('❌ NÃO PODE EXECUTAR esta etapa')
-  console.warn('Motivos:')
-  console.warn('- Não é responsável direto:', stepUserId, '!==', user?.id)
-  console.warn('- Não é do setor responsável:', stepSectorId, '!==', authStore.activeSectorId)
-  console.warn('- Não é admin:', authStore.isAdmin)
   return false
 }
 
@@ -973,8 +1100,6 @@ async function downloadFieldFile(field, index = 0) {
   }
   
   try {
-    console.log(`📥 Downloading field file: ${field.label} (index: ${index})`, fileData)
-    
     const response = await api.get(`/processes/attachment/${fileData.attachmentId}/download`, {
       responseType: 'blob',
     })
@@ -1034,7 +1159,22 @@ function formatFileSize(bytes) {
 
 // Métodos principais
 function goBack() {
-  router.push('/manage-processes')
+  // Usar histórico do navegador para voltar à página anterior
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    router.push('/manage-processes')
+  }
+}
+
+// Buscar informações do processo pai (se este for sub-processo)
+async function loadParentProcess() {
+  try {
+    const result = await childProcessStore.fetchParentProcess(route.params.id)
+    parentProcessInfo.value = result
+  } catch (err) {
+    parentProcessInfo.value = null
+  }
 }
 
 function executeCurrentStep() {
@@ -1056,12 +1196,127 @@ async function refreshProcess() {
   }
 }
 
+// Funções para sub-processos
+async function loadChildProcesses() {
+  if (!process.value?.id) return
+
+  childProcessesLoading.value = true
+  try {
+    await childProcessStore.fetchChildProcesses(process.value.id)
+  } catch (error) {
+    // Erro silencioso
+  } finally {
+    childProcessesLoading.value = false
+  }
+}
+
+let isNavigatingToChild = false
+
+function viewChildProcess(childProcess) {
+  if (isNavigatingToChild) {
+    return
+  }
+
+  const processId = childProcess?.id
+  if (processId) {
+    isNavigatingToChild = true
+    router.push(`/processes/${processId}`).finally(() => {
+      setTimeout(() => {
+        isNavigatingToChild = false
+      }, 500)
+    })
+  } else {
+    window.showSnackbar?.('Erro ao abrir sub-processo', 'error')
+  }
+}
+
+function getChildStatusColor(status) {
+  const colors = {
+    PENDING: 'grey',
+    ACTIVE: 'info',
+    COMPLETED: 'success',
+    CANCELLED: 'error',
+    FAILED: 'error'
+  }
+  return colors[status] || 'grey'
+}
+
+function getChildStatusIcon(status) {
+  const icons = {
+    PENDING: 'mdi-clock-outline',
+    ACTIVE: 'mdi-play-circle',
+    COMPLETED: 'mdi-check-circle',
+    CANCELLED: 'mdi-cancel',
+    FAILED: 'mdi-alert-circle'
+  }
+  return icons[status] || 'mdi-help-circle'
+}
+
+function getChildStatusLabel(status) {
+  const labels = {
+    PENDING: 'Pendente',
+    ACTIVE: 'Em andamento',
+    COMPLETED: 'Concluído',
+    CANCELLED: 'Cancelado',
+    FAILED: 'Falhou'
+  }
+  return labels[status] || status
+}
+
+// Funções para diálogos
+function openCreateChildProcessDialog() {
+  createChildProcessDialog.value = true
+}
+
+async function handleCancelProcess({ processId, reason }) {
+  try {
+    await processStore.cancelProcess(processId, reason)
+    cancelProcessDialog.value = false
+    await refreshProcess()
+    window.showSnackbar?.('Processo cancelado com sucesso', 'success')
+  } catch (error) {
+    window.showSnackbar?.('Erro ao cancelar processo', 'error')
+  }
+}
+
+async function handleChildProcessCreated() {
+  createChildProcessDialog.value = false
+  await loadChildProcesses()
+  window.showSnackbar?.('Sub-processo criado com sucesso', 'success')
+}
+
+// Funções para sub-tarefas
+function openCreateSubTaskDialog(execution) {
+  selectedStepExecution.value = execution
+  createSubTaskDialog.value = true
+}
+
+async function handleSubTaskCreated() {
+  createSubTaskDialog.value = false
+  // Forçar reload do SubTasksList incrementando a key
+  subTasksReloadKey.value++
+}
+
+watch(() => route.params.id, async (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    isNavigatingToChild = false
+    parentProcessInfo.value = null
+    try {
+      await processStore.fetchProcess(newId)
+      await loadChildProcesses()
+      await loadParentProcess()
+    } catch (error) {
+      window.showSnackbar?.('Erro ao carregar processo', 'error')
+    }
+  }
+})
+
 onMounted(async () => {
-  console.log('Loading process:', route.params.id)
   try {
     await processStore.fetchProcess(route.params.id)
+    await loadChildProcesses()
+    await loadParentProcess()
   } catch (error) {
-    console.error('Error loading process:', error)
     window.showSnackbar?.('Erro ao carregar processo', 'error')
   }
 })
@@ -1203,7 +1458,6 @@ onMounted(async () => {
 .connector-pending {
   background: linear-gradient(180deg, #e0e0e0, #bdbdbd);
 }
-
 
 .step-content {
   flex: 1;

@@ -572,7 +572,18 @@ const companies = computed(() => authStore.companies)
 const pendingTasks = computed(() => processStore.myTasks?.length || 0)
 const pendingSignatures = computed(() => {
   if (!processStore.myTasks) return 0
-  return processStore.myTasks.filter(task => task.step?.requiresSignature === true).length
+  // Usar mesma lógica da página PendingSignatures:
+  // 1. Tem requisitos de assinatura válidos configurados
+  // 2. Tem PDFs não assinados
+  return processStore.myTasks.filter(task => {
+    if (!task.hasValidSignatureRequirements) {
+      return false
+    }
+    const hasPdfAttachments = task.attachments && task.attachments.some(att =>
+      att.mimeType === 'application/pdf' && !att.isSigned
+    )
+    return hasPdfAttachments
+  }).length
 })
 
 const notificationsList = computed(() => notificationsStore.items || [])
@@ -660,23 +671,15 @@ function getRoleText(role) {
 }
 
 function canAccess(requirement) {
-  const result = authStore.canAccessRoute(requirement)
-  if (!result) {
-    console.log('🚫 Acesso negado para:', requirement)
-    console.log('   📋 Requirement completo:', JSON.stringify(requirement, null, 2))
-    console.log('   ✅ Permissões do usuário:', authStore.permissions.slice(0, 5))
-    console.log('   👤 Role do usuário:', authStore.userRole)
-  }
-  return result
+  return authStore.canAccessRoute(requirement)
 }
 
-// ✨ Carregar notificações ao montar e quando trocar empresa
 onMounted(async () => {
   try {
     await notificationsStore.fetchNotifications()
     notificationsStore.startPolling(60000)
   } catch (e) {
-    console.warn('Falha ao carregar notificações inicialmente:', e)
+    // Erro silencioso - notificações serão carregadas no próximo polling
   }
 })
 
@@ -689,7 +692,7 @@ watch(() => authStore.activeCompanyId, async (newId, oldId) => {
     try {
       await notificationsStore.fetchNotifications()
     } catch (e) {
-      console.warn('Falha ao recarregar notificações após trocar empresa:', e)
+      // Erro silencioso
     }
   }
 })

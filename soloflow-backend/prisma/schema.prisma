@@ -46,6 +46,9 @@ model User {
   user_profiles         user_profiles[]
   refreshTokens         RefreshToken[]
   auditLogs             AuditLog[]
+  // Sub-tarefas
+  subTaskTemplates      SubTaskTemplate[]      @relation("SubTaskTemplateUser")
+  subTaskExecutions     SubTask[]              @relation("SubTaskExecutor")
 
   @@map("users")
 }
@@ -124,22 +127,29 @@ model Sector {
   stepAssignments       StepAssignment[]       @relation("SectorStepAssignments")
   stepExecutions        StepExecution[]
   userCompanies         UserCompany[]
+  // Sub-tarefas
+  subTaskTemplates      SubTaskTemplate[]      @relation("SubTaskTemplateSector")
 
   @@unique([companyId, name])
   @@map("sectors")
 }
 
 model ProcessType {
-  id                    String                  @id @default(uuid())
-  name                  String
-  description           String?
-  isActive              Boolean                 @default(true)
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  companyId             String
-  versions              ProcessTypeVersion[]
-  company               Company                 @relation(fields: [companyId], references: [id])
-  profile_process_types profile_process_types[]
+  id                       String                  @id @default(uuid())
+  name                     String
+  description              String?
+  isActive                 Boolean                 @default(true)
+  isChildProcessOnly       Boolean                 @default(false) // Se true, só pode ser usado como subprocesso
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  companyId                String
+  // JSON array de IDs de ProcessTypes permitidos como sub-processos
+  allowedChildProcessTypes Json?
+  versions                 ProcessTypeVersion[]
+  company                  Company                 @relation(fields: [companyId], references: [id])
+  profile_process_types    profile_process_types[]
+  // Sub-processos: configurações que usam este tipo
+  childProcessConfigs      ChildProcessConfig[]    @relation("ChildProcessType")
 
   @@unique([companyId, name])
   @@map("process_types")
@@ -161,7 +171,6 @@ model ProcessTypeVersion {
   formFields      FormFieldVersion[]
   instances       ProcessInstance[]
   processType     ProcessType        @relation(fields: [processTypeId], references: [id], onDelete: Cascade)
-  stepTransitions StepTransition[]
   steps           StepVersion[]
 
   @@unique([processTypeId, version])
@@ -205,19 +214,17 @@ model StepVersion {
   allowedFileTypes      Json?
   conditions            Json?
   assignedToCreator     Boolean                @default(false)
-  assignmentConditions  Json?
-  flowConditions        Json?
-  reuseData             Json?
-  actions               Json?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   processTypeVersionId  String
   signatureRequirements SignatureRequirement[]
   assignments           StepAssignment[]
   executions            StepExecution[]
-  incomingTransitions   StepTransition[]       @relation("TargetStep")
-  outgoingTransitions   StepTransition[]       @relation("SourceStep")
   processTypeVersion    ProcessTypeVersion     @relation(fields: [processTypeVersionId], references: [id], onDelete: Cascade)
+  // Sub-processos: configurações que usam esta etapa como gatilho
+  triggerChildConfigs   ChildProcessConfig[]   @relation("TriggerStepConfigs")
+  // Sub-tarefas: templates de sub-tarefas desta etapa
+  subTaskTemplates      SubTaskTemplate[]      @relation("StepSubTaskTemplates")
 
   @@unique([processTypeVersionId, order])
   @@map("step_versions")
@@ -243,71 +250,60 @@ model StepAssignment {
   @@map("step_assignments")
 }
 
-model StepTransition {
-  id                   String                  @id @default(uuid())
-  name                 String?
-  description          String?
-  conditionType        TransitionConditionType @default(ALWAYS)
-  conditions           Json?
-  priority             Int                     @default(1)
-  isActive             Boolean                 @default(true)
-  actions              Json?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  processTypeVersionId String
-  sourceStepId         String
-  targetStepId         String?
-  targetStep           StepVersion?            @relation("TargetStep", fields: [targetStepId], references: [id])
-  sourceStep           StepVersion             @relation("SourceStep", fields: [sourceStepId], references: [id], onDelete: Cascade)
-  processTypeVersion   ProcessTypeVersion      @relation(fields: [processTypeVersionId], references: [id], onDelete: Cascade)
-
-  @@map("step_transitions")
-}
-
 model ProcessInstance {
-  id                   String             @id @default(uuid())
-  code                 String             @unique
+  id                   String                 @id @default(uuid())
+  code                 String                 @unique
   title                String?
   description          String?
-  status               ProcessStatus      @default(IN_PROGRESS)
-  currentStepOrder     Int                @default(1)
+  status               ProcessStatus          @default(IN_PROGRESS)
+  currentStepOrder     Int                    @default(1)
   formData             Json?
   metadata             Json?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
   completedAt          DateTime?
   processTypeVersionId String
   createdById          String
   companyId            String
-  company              Company            @relation(fields: [companyId], references: [id])
-  createdBy            User               @relation(fields: [createdById], references: [id])
-  processTypeVersion   ProcessTypeVersion @relation(fields: [processTypeVersionId], references: [id])
+  company              Company                @relation(fields: [companyId], references: [id])
+  createdBy            User                   @relation(fields: [createdById], references: [id])
+  processTypeVersion   ProcessTypeVersion     @relation(fields: [processTypeVersionId], references: [id])
   stepExecutions       StepExecution[]
+  // Sub-processos: configurações deste processo
+  childProcessConfigs  ChildProcessConfig[]   @relation("ProcessChildConfigs")
+  // Sub-processos: processos filhos deste processo
+  childProcesses       ChildProcessInstance[] @relation("ParentChildProcesses")
+  // Se este processo é filho de outro
+  parentRelation       ChildProcessInstance?  @relation("ChildProcessRelation")
 
   @@map("process_instances")
 }
 
 model StepExecution {
-  id                String              @id @default(uuid())
-  status            StepExecutionStatus @default(PENDING)
-  action            String?
-  dueAt             DateTime?
-  comment           String?
-  metadata          Json?
-  signedAt          DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  completedAt       DateTime?
-  processInstanceId String
-  stepVersionId     String
-  executorId        String?
-  sectorId          String?
-  attachments       Attachment[]
-  signatureRecords  SignatureRecord[]
-  sector            Sector?             @relation(fields: [sectorId], references: [id])
-  executor          User?               @relation(fields: [executorId], references: [id])
-  stepVersion       StepVersion         @relation(fields: [stepVersionId], references: [id])
-  processInstance   ProcessInstance     @relation(fields: [processInstanceId], references: [id])
+  id                    String                 @id @default(uuid())
+  status                StepExecutionStatus    @default(PENDING)
+  action                String?
+  dueAt                 DateTime?
+  comment               String?
+  metadata              Json?
+  signedAt              DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  completedAt           DateTime?
+  processInstanceId     String
+  stepVersionId         String
+  executorId            String?
+  sectorId              String?
+  attachments           Attachment[]
+  signatureRecords      SignatureRecord[]
+  sector                Sector?                @relation(fields: [sectorId], references: [id])
+  executor              User?                  @relation(fields: [executorId], references: [id])
+  stepVersion           StepVersion            @relation(fields: [stepVersionId], references: [id])
+  processInstance       ProcessInstance        @relation(fields: [processInstanceId], references: [id])
+  // Sub-processos disparados por esta etapa
+  triggeredChildProcesses ChildProcessInstance[] @relation("OriginStepChildProcesses")
+  // Sub-tarefas desta etapa
+  subTasks              SubTask[]              @relation("StepSubTasks")
 
   @@map("step_executions")
 }
@@ -366,9 +362,7 @@ model SignatureRecord {
   signatureReason String?
   ipAddress       String?
   userAgent       String?
-  geolocation     String?
   metadata        Json?
-  rejectionReason String?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
   requirementId   String
@@ -507,10 +501,209 @@ enum DynamicRole {
   DATA_OWNER
 }
 
-enum TransitionConditionType {
-  ALWAYS
-  ACTION_BASED
-  DATA_BASED
-  USER_BASED
-  CUSTOM
+// ════════════════════════════════════════════════════════════════════════════════
+// SUB-PROCESSOS E SUB-TAREFAS
+// ════════════════════════════════════════════════════════════════════════════════
+
+// Modo de criação do sub-processo
+enum ChildProcessMode {
+  MANUAL    // Disparado por botão/etapa
+  RECURRENT // Intervalos automáticos
+  SCHEDULED // Data/condição específica
+}
+
+// Status do sub-processo
+enum ChildProcessStatus {
+  PENDING   // Agendado, ainda não criado
+  ACTIVE    // Em execução
+  COMPLETED // Concluído com sucesso
+  CANCELLED // Cancelado
+  FAILED    // Falhou
+}
+
+// Modo de execução das sub-tarefas
+enum SubTaskExecutionMode {
+  SEQUENTIAL // Uma após a outra
+  PARALLEL   // Todas ao mesmo tempo
+}
+
+// Tipo de atribuição de sub-tarefa
+enum SubTaskAssignmentType {
+  INHERIT // Herda da etapa pai
+  USER    // Usuário específico
+  SECTOR  // Setor específico
+  CREATOR // Criador do processo
+}
+
+// Status da sub-tarefa
+enum SubTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  CANCELLED
+}
+
+// Configuração de sub-processos vinculada ao ProcessInstance
+model ChildProcessConfig {
+  id                   String           @id @default(uuid())
+  name                 String           // Nome descritivo da configuração
+
+  // Processo pai que terá os sub-processos
+  processInstanceId    String
+  processInstance      ProcessInstance  @relation("ProcessChildConfigs", fields: [processInstanceId], references: [id], onDelete: Cascade)
+
+  // Tipo de sub-processo a criar
+  childProcessTypeId   String
+  childProcessType     ProcessType      @relation("ChildProcessType", fields: [childProcessTypeId], references: [id])
+
+  // Modalidade do sub-processo
+  mode                 ChildProcessMode
+
+  // Para MANUAL: vinculado a uma etapa (opcional - pode ser criado por botão)
+  triggerStepVersionId String?
+  triggerStepVersion   StepVersion?     @relation("TriggerStepConfigs", fields: [triggerStepVersionId], references: [id])
+
+  // Para RECORRENTE: configuração de frequência
+  // { frequency, interval, dayOfMonth, dayOfWeek, time, maxRuns, startDate, endDate }
+  recurrence           Json?
+
+  // Configurações comuns
+  waitForCompletion    Boolean          @default(false)  // Bloquear pai até filho completar?
+  autoStart            Boolean          @default(true)   // Iniciar automaticamente?
+
+  // Mapeamento de dados entre pai e filho
+  inputDataMapping     Json?            // { "campoPai": "campoFilho" }
+
+  // Controle de execução
+  isActive             Boolean          @default(true)
+  nextRunAt            DateTime?
+  lastRunAt            DateTime?
+  runCount             Int              @default(0)
+
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  // Processos gerados por esta configuração
+  generatedProcesses   ChildProcessInstance[]
+
+  @@map("child_process_configs")
+}
+
+// Registro de cada sub-processo gerado
+model ChildProcessInstance {
+  id                      String              @id @default(uuid())
+
+  // Configuração que gerou este sub-processo (opcional para criações manuais diretas)
+  configId                String?
+  config                  ChildProcessConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
+
+  // Processo pai
+  parentProcessInstanceId String
+  parentProcessInstance   ProcessInstance     @relation("ParentChildProcesses", fields: [parentProcessInstanceId], references: [id], onDelete: Cascade)
+
+  // Processo filho gerado
+  childProcessInstanceId  String              @unique
+  childProcessInstance    ProcessInstance     @relation("ChildProcessRelation", fields: [childProcessInstanceId], references: [id], onDelete: Cascade)
+
+  // Para MANUAL: qual etapa disparou (se aplicável)
+  originStepExecutionId   String?
+  originStepExecution     StepExecution?      @relation("OriginStepChildProcesses", fields: [originStepExecutionId], references: [id])
+
+  // Para RECURRENT: controle de execução
+  runNumber               Int?                // 1, 2, 3... (mês 1, mês 2)
+
+  // Status do relacionamento
+  status                  ChildProcessStatus  @default(ACTIVE)
+
+  scheduledFor            DateTime?           // Quando deveria executar (para agendados)
+  createdAt               DateTime            @default(now())
+  completedAt             DateTime?
+
+  @@map("child_process_instances")
+}
+
+// Template de sub-tarefa (configuração na etapa)
+model SubTaskTemplate {
+  id                 String                @id @default(uuid())
+
+  // Etapa que contém as sub-tarefas
+  stepVersionId      String
+  stepVersion        StepVersion           @relation("StepSubTaskTemplates", fields: [stepVersionId], references: [id], onDelete: Cascade)
+
+  // Informações
+  name               String
+  description        String?
+  instructions       String?
+  order              Int
+
+  // Modo de execução
+  executionMode      SubTaskExecutionMode  @default(PARALLEL)
+
+  // Responsável
+  assignmentType     SubTaskAssignmentType @default(INHERIT)
+  assignedToUserId   String?
+  assignedToUser     User?                 @relation("SubTaskTemplateUser", fields: [assignedToUserId], references: [id])
+  assignedToSectorId String?
+  assignedToSector   Sector?               @relation("SubTaskTemplateSector", fields: [assignedToSectorId], references: [id])
+
+  // SLA
+  slaHours           Int?
+  slaDays            Int?
+
+  // Configurações
+  isRequired         Boolean               @default(true)
+  allowAttachment    Boolean               @default(false)
+
+  isActive           Boolean               @default(true)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  // Execuções desta template
+  executions         SubTask[]
+
+  @@unique([stepVersionId, order])
+  @@map("sub_task_templates")
+}
+
+// Execução de sub-tarefa
+model SubTask {
+  id                String          @id @default(uuid())
+
+  // Etapa em execução
+  stepExecutionId   String
+  stepExecution     StepExecution   @relation("StepSubTasks", fields: [stepExecutionId], references: [id], onDelete: Cascade)
+
+  // Template da sub-tarefa
+  subTaskTemplateId String
+  subTaskTemplate   SubTaskTemplate @relation(fields: [subTaskTemplateId], references: [id])
+
+  // Status
+  status            SubTaskStatus   @default(PENDING)
+
+  // Executor
+  executorId        String?
+  executor          User?           @relation("SubTaskExecutor", fields: [executorId], references: [id])
+
+  // Dados de execução
+  comment           String?
+  dueAt             DateTime?
+
+  // Anexo
+  attachmentPath    String?
+  attachmentName    String?
+  attachmentSize    Int?            // Tamanho do arquivo em bytes
+  attachmentMimeType String?        // Tipo MIME do arquivo
+  requireSignature  Boolean         @default(false)
+  signatureType     String?         // SEQUENTIAL ou PARALLEL
+  signers           String?         // JSON array de IDs de usuários
+  signatures        String?         // JSON array de assinaturas realizadas
+
+  startedAt         DateTime?
+  completedAt       DateTime?
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@map("sub_tasks")
 }

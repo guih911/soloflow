@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { join } from 'path';
+import * as path from 'path';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -14,12 +14,14 @@ import { SignaturesModule } from './modules/signatures/signatures.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { CacheModule } from './modules/cache/cache.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ChildProcessesModule } from './modules/child-processes/child-processes.module';
+import { SubTasksModule } from './modules/sub-tasks/sub-tasks.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: join(__dirname, '..', '..', '.env'),
+       envFilePath: path.resolve(__dirname, '..', '.env'),
     }),
     PrismaModule,
     CacheModule,
@@ -34,6 +36,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     SignaturesModule,
     AuditModule,
     NotificationsModule,
+    ChildProcessesModule,
+    SubTasksModule,
   ],
 })
 export class AppModule {}

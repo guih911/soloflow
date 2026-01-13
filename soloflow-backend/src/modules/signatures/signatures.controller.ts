@@ -15,6 +15,7 @@ import { createReadStream, existsSync } from 'fs';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SignaturesService } from './signatures.service';
 import { SignDocumentSimpleDto } from './dto/sign-document-simple.dto';
+import { SignSubTaskDocumentDto } from './dto/sign-subtask-document.dto';
 import { CreateSignatureRequirementDto } from './dto/create-signature-requirement.dto';
 import { IpService } from '../../common/services/ip-service';
 
@@ -138,5 +139,37 @@ export class SignaturesController {
   @UseGuards(JwtAuthGuard)
   async getSignatureStatus(@Param('attachmentId') attachmentId: string, @Req() req) {
     return this.signaturesService.getSignatureStatus(attachmentId, req.user.id);
+  }
+
+  /**
+   * Assina um documento de sub-tarefa
+   * Sub-tarefas têm seu próprio sistema de anexos separado da tabela Attachment
+   */
+  @Post('sign-subtask')
+  async signSubTaskDocument(@Req() req, @Body() dto: SignSubTaskDocumentDto) {
+    try {
+      // Capturar IP público real e User-Agent automaticamente
+      dto.ipAddress = this.ipService.getClientIp(req);
+      dto.userAgent = req.headers['user-agent'];
+
+      console.log('📝 Signing sub-task document:', {
+        userId: req.user.id,
+        subTaskId: dto.subTaskId,
+      });
+
+      const result = await this.signaturesService.signSubTaskDocument(req.user.id, dto);
+
+      console.log('✅ Sub-task document signed successfully:', result.signatureToken);
+
+      return result;
+    } catch (error) {
+      console.error('❌ Error signing sub-task document:', {
+        error: error.message,
+        status: error.status,
+        subTaskId: dto.subTaskId,
+        userId: req.user.id,
+      });
+      throw error;
+    }
   }
 }

@@ -676,9 +676,17 @@ const loading = computed(() => processStore.loading)
 const pendingTasks = computed(() => processStore.myTasks)
 
 const filteredTasks = computed(() => {
-  // Filtrar tarefas que tenham anexos PDF não assinados
-  // Não depende do flag requiresSignature ou status - se veio em myTasks, é porque tem requisito pendente
+  // Filtrar tarefas que:
+  // 1. Tenham o flag hasValidSignatureRequirements = true (indica que o backend validou requisitos específicos)
+  // 2. Tenham anexos PDF não assinados
+  // IMPORTANTE: O flag hasValidSignatureRequirements garante que a task tem requisitos de assinatura
+  // para os anexos ESPECÍFICOS desta task (não de outros processos do mesmo tipo)
   let tasks = pendingTasks.value.filter(task => {
+    // Verificar se tem requisitos de assinatura válidos (flag do backend)
+    if (!task.hasValidSignatureRequirements) {
+      return false
+    }
+
     const hasPdfAttachments = task.attachments && task.attachments.some(att =>
       att.mimeType === 'application/pdf' && !att.isSigned
     )

@@ -104,11 +104,48 @@
               Atenção
             </v-chip>
 
-            <v-card-title class="pb-2">
+            <v-card-title class="pb-2 d-flex align-center flex-wrap">
               <v-icon color="primary" class="mr-2">
                 mdi-file-document-multiple-outline
               </v-icon>
-              {{ processType.name }}
+              <span class="mr-2">{{ processType.name }}</span>
+
+              <!-- Badge de Sub-Processo -->
+              <v-tooltip v-if="processType.isSubProcess" location="top">
+                <template v-slot:activator="{ props }">
+                  <v-chip
+                    v-bind="props"
+                    size="x-small"
+                    color="deep-purple"
+                    variant="flat"
+                    class="mr-1"
+                  >
+                    <v-icon start size="12">mdi-source-branch</v-icon>
+                    Sub
+                  </v-chip>
+                </template>
+                <span>
+                  Sub-processo de: {{ processType.parentNames.join(', ') }}
+                </span>
+              </v-tooltip>
+
+              <!-- Badge de Pai (tem sub-processos) -->
+              <v-tooltip v-if="processType.hasChildProcesses" location="top">
+                <template v-slot:activator="{ props }">
+                  <v-chip
+                    v-bind="props"
+                    size="x-small"
+                    color="teal"
+                    variant="flat"
+                  >
+                    <v-icon start size="12">mdi-sitemap</v-icon>
+                    {{ processType.childProcessCount }}
+                  </v-chip>
+                </template>
+                <span>
+                  Possui {{ processType.childProcessCount }} tipo(s) de sub-processo configurado(s)
+                </span>
+              </v-tooltip>
             </v-card-title>
 
             <v-card-subtitle v-if="processType.description" class="pb-1">
@@ -402,31 +439,61 @@ const error = computed(() => processTypeStore.error)
 
 // 🔧 Computed aprimorado para informações dos process types
 const processTypesWithInfo = computed(() => {
+  // Primeiro, identificar quais tipos são usados como sub-processos
+  const usedAsChildProcessIds = new Set()
+  const parentProcessNames = {} // Mapeia ID do filho para nomes dos pais
+
+  processTypes.value.forEach(pt => {
+    if (Array.isArray(pt.allowedChildProcessTypes) && pt.allowedChildProcessTypes.length > 0) {
+      pt.allowedChildProcessTypes.forEach(childId => {
+        usedAsChildProcessIds.add(childId)
+        if (!parentProcessNames[childId]) {
+          parentProcessNames[childId] = []
+        }
+        parentProcessNames[childId].push(pt.name)
+      })
+    }
+  })
+
   return processTypes.value.map(processType => {
     // Garantir que steps e formFields são arrays
     const steps = Array.isArray(processType.steps) ? processType.steps : []
     const formFields = Array.isArray(processType.formFields) ? processType.formFields : []
-    
+
+    // Verificar se este tipo é usado como sub-processo
+    const isSubProcess = usedAsChildProcessIds.has(processType.id)
+    const parentNames = parentProcessNames[processType.id] || []
+
+    // Verificar se este tipo tem sub-processos configurados
+    const hasChildProcesses = Array.isArray(processType.allowedChildProcessTypes) &&
+                              processType.allowedChildProcessTypes.length > 0
+
     return {
       ...processType,
       // Contagens corretas
       stepsCount: steps.length,
       formFieldsCount: formFields.length,
       instancesCount: processType._count?.instances || 0,
-      
+
       // Preview das etapas (primeiras 3)
       stepsPreview: steps.slice(0, 3).map((step, idx) => ({
         order: idx + 1,
         name: step.name || `Etapa ${idx + 1}`,
         type: step.type || 'INPUT'
       })),
-      
+
       // Indicadores
       hasMoreSteps: steps.length > 3,
       moreStepsCount: Math.max(0, steps.length - 3),
       hasSignatureSteps: steps.some(step => step.requiresSignature),
       hasAttachmentSteps: steps.some(step => step.allowAttachment),
       hasIssues: steps.length === 0, // Problema se não tem etapas
+
+      // Indicadores de sub-processo
+      isSubProcess,
+      parentNames,
+      hasChildProcesses,
+      childProcessCount: processType.allowedChildProcessTypes?.length || 0
     }
   })
 })

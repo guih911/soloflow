@@ -406,8 +406,14 @@ const userPendingSignatures = computed(() => {
   if (!myTasks.value) return 0
 
   // ✅ MESMA LÓGICA DA PÁGINA PendingSignatures.vue
-  // Contar apenas tarefas que TÊM PDFs NÃO ASSINADOS
+  // Contar apenas tarefas que:
+  // 1. Têm requisitos de assinatura válidos configurados
+  // 2. Têm PDFs não assinados
   return myTasks.value.filter(task => {
+    // Verificar se tem requisitos de assinatura configurados
+    if (!task.hasValidSignatureRequirements) {
+      return false
+    }
     const hasPdfAttachments = task.attachments && task.attachments.some(att =>
       att.mimeType === 'application/pdf' && !att.isSigned
     )

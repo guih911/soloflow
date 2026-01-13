@@ -87,13 +87,29 @@
               </span>
             </v-sheet>
 
-            <v-card-title class="pb-1">
-              {{ process.code }} - {{ process.processType.name }}
+            <v-card-title class="pb-1 d-flex align-center">
+              <span>{{ process.code }} - {{ process.processType.name }}</span>
+              <v-chip
+                v-if="process.isChildProcess"
+                size="x-small"
+                color="secondary"
+                variant="tonal"
+                class="ml-2"
+              >
+                <v-icon start size="12">mdi-source-branch</v-icon>
+                Sub-processo
+              </v-chip>
             </v-card-title>
 
             <v-card-subtitle v-if="process.title && process.title !== 'undefined'">
               <v-icon size="16">mdi-text</v-icon>
               {{ process.title }}
+            </v-card-subtitle>
+
+            <!-- Link para processo pai se for sub-processo -->
+            <v-card-subtitle v-if="process.isChildProcess && process.parentProcess" class="pt-0">
+              <v-icon size="16" color="secondary">mdi-link-variant</v-icon>
+              Vinculado a: <span class="text-secondary font-weight-medium">{{ process.parentProcess.code }}</span>
             </v-card-subtitle>
 
             <v-card-text class="flex-grow-1">
@@ -266,9 +282,21 @@ const filteredProcesses = computed(() => {
 
   // Filtrar apenas processos de tipos que o usuário tem permissão para visualizar
   // O processTypeId pode estar direto no objeto ou dentro de processType.id
+  // EXCEÇÃO: Sub-processos herdam permissão do processo pai
   result = result.filter(p => {
+    // Se é sub-processo, verificar se o pai está na lista (herdar permissão)
+    if (p.isChildProcess && p.parentProcess) {
+      const parentInList = processes.value.some(parent =>
+        parent.id === p.parentProcess.id || parent.code === p.parentProcess.code
+      )
+      if (parentInList) {
+        return true
+      }
+    }
+
     const typeId = p.processTypeId || p.processType?.id
-    return typeId ? authStore.canAccessProcessType(typeId, 'view') : true
+    const hasAccess = typeId ? authStore.canAccessProcessType(typeId, 'view') : true
+    return hasAccess
   })
 
   if (filters.value.search) {

@@ -32,6 +32,13 @@
             {{ formData.steps.length }}
           </v-chip>
         </v-tab>
+        <v-tab value="subprocesses">
+          <v-icon start>mdi-source-branch</v-icon>
+          Sub-Processos
+          <v-chip v-if="formData.allowedChildProcessTypes?.length > 0" size="small" class="ml-2">
+            {{ formData.allowedChildProcessTypes.length }}
+          </v-chip>
+        </v-tab>
       </v-tabs>
 
       <v-window v-model="activeTab">
@@ -41,6 +48,23 @@
               <v-row>
                 <v-col cols="12" md="6">
                   <v-text-field v-model="formData.name" label="Nome do Processo" :rules="nameRules" required />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-switch
+                    v-model="formData.isChildProcessOnly"
+                    color="secondary"
+                    hide-details
+                    class="mt-2"
+                  >
+                    <template v-slot:label>
+                      <div>
+                        <span class="font-weight-medium">Somente Subprocesso</span>
+                        <p class="text-caption text-grey mb-0">
+                          Este tipo só pode ser usado como subprocesso de outro processo
+                        </p>
+                      </div>
+                    </template>
+                  </v-switch>
                 </v-col>
                 <v-col cols="12">
                   <v-textarea v-model="formData.description" label="Descrição" rows="3" counter="500" />
@@ -225,6 +249,103 @@
             </v-list>
           </v-card>
         </v-window-item>
+
+        <v-window-item value="subprocesses">
+          <v-card>
+            <v-card-title class="d-flex align-center justify-space-between">
+              <span>Sub-Processos Permitidos</span>
+              <v-btn color="primary" size="small" @click="openCreateChildTypeDialog" prepend-icon="mdi-plus">
+                Criar Novo Tipo
+              </v-btn>
+            </v-card-title>
+            <v-divider />
+
+            <v-card-text>
+              <v-alert type="info" variant="tonal" density="comfortable" class="mb-4" icon="mdi-information">
+                <template v-slot:title>
+                  <span class="font-weight-bold">Como funciona?</span>
+                </template>
+                Selecione os tipos de processo que podem ser criados como sub-processos deste tipo.
+                Quando um processo deste tipo estiver em execução, o usuário poderá criar sub-processos apenas dos tipos selecionados aqui.
+              </v-alert>
+
+              <v-select
+                v-model="formData.allowedChildProcessTypes"
+                :items="availableProcessTypesForChild"
+                item-title="name"
+                item-value="id"
+                label="Tipos de Sub-Processo Permitidos"
+                multiple
+                chips
+                closable-chips
+                variant="outlined"
+                :loading="loadingProcessTypes"
+                hint="Selecione os tipos de processo que podem ser sub-processos"
+                persistent-hint
+              >
+                <template v-slot:prepend-inner>
+                  <v-icon color="grey">mdi-source-branch</v-icon>
+                </template>
+                <template v-slot:chip="{ props, item }">
+                  <v-chip
+                    v-bind="props"
+                    color="primary"
+                    variant="tonal"
+                    closable
+                  >
+                    <v-icon start size="16">mdi-file-document-outline</v-icon>
+                    {{ item.raw.name }}
+                  </v-chip>
+                </template>
+                <template v-slot:item="{ props, item }">
+                  <v-list-item v-bind="props">
+                    <template v-slot:prepend>
+                      <v-icon color="primary">mdi-file-document-outline</v-icon>
+                    </template>
+                    <v-list-item-subtitle v-if="item.raw.description">
+                      {{ item.raw.description }}
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                </template>
+              </v-select>
+
+              <!-- Lista de tipos selecionados -->
+              <div v-if="formData.allowedChildProcessTypes?.length > 0" class="mt-6">
+                <h4 class="text-subtitle-1 font-weight-medium mb-3">
+                  <v-icon start>mdi-check-circle</v-icon>
+                  {{ formData.allowedChildProcessTypes.length }} tipo(s) selecionado(s)
+                </h4>
+                <v-list density="compact" class="bg-grey-lighten-5 rounded-lg">
+                  <v-list-item
+                    v-for="typeId in formData.allowedChildProcessTypes"
+                    :key="typeId"
+                  >
+                    <template v-slot:prepend>
+                      <v-icon color="success">mdi-check-circle</v-icon>
+                    </template>
+                    <v-list-item-title>{{ getProcessTypeName(typeId) }}</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close"
+                        size="small"
+                        variant="text"
+                        @click="removeAllowedChildType(typeId)"
+                      />
+                    </template>
+                  </v-list-item>
+                </v-list>
+              </div>
+
+              <div v-else class="text-center py-8">
+                <v-icon size="48" color="grey-lighten-1">mdi-source-branch</v-icon>
+                <p class="text-body-1 text-grey mt-2">Nenhum sub-processo configurado</p>
+                <p class="text-body-2 text-grey">
+                  Selecione acima os tipos de processo que podem ser vinculados como sub-processos
+                </p>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-window-item>
       </v-window>
 
       <div class="d-flex justify-end mt-6 gap-2">
@@ -376,11 +497,225 @@
       @save="handleStepSave"
       @close="handleStepClose"
     />
+
+    <!-- Modal para criar novo tipo de processo como sub-processo -->
+    <v-dialog v-model="createChildTypeDialog" max-width="700" persistent scrollable>
+      <v-card class="create-child-type-dialog">
+        <!-- Header -->
+        <v-card-title class="create-child-type-header d-flex align-center justify-center flex-column py-8">
+          <div class="icon-container mb-4">
+            <v-icon size="64" color="white">mdi-file-document-plus</v-icon>
+          </div>
+          <span class="text-h5 font-weight-bold text-white text-center">
+            Criar Novo Tipo de Sub-Processo
+          </span>
+          <span class="text-body-2 text-white-50 mt-2 text-center">
+            Este tipo será automaticamente vinculado como sub-processo permitido
+          </span>
+        </v-card-title>
+
+        <v-divider />
+
+        <v-card-text class="pa-6">
+          <v-form ref="childTypeForm" v-model="childTypeFormValid">
+            <!-- Nome -->
+            <div class="mb-4">
+              <label class="text-caption font-weight-bold text-grey-darken-2 mb-2 d-block">
+                Nome do Tipo de Processo *
+              </label>
+              <v-text-field
+                v-model="childTypeData.name"
+                variant="outlined"
+                placeholder="Ex: Aditivo de Contrato"
+                :rules="[v => !!v || 'Nome é obrigatório', v => (v?.length ?? 0) >= 3 || 'Mínimo 3 caracteres']"
+                bg-color="grey-lighten-5"
+                density="comfortable"
+              >
+                <template v-slot:prepend-inner>
+                  <v-icon color="grey" size="20">mdi-text</v-icon>
+                </template>
+              </v-text-field>
+            </div>
+
+            <!-- Descrição -->
+            <div class="mb-4">
+              <label class="text-caption font-weight-bold text-grey-darken-2 mb-2 d-block">
+                Descrição (opcional)
+              </label>
+              <v-textarea
+                v-model="childTypeData.description"
+                variant="outlined"
+                placeholder="Descreva o propósito deste tipo de processo..."
+                rows="2"
+                bg-color="grey-lighten-5"
+                density="comfortable"
+              >
+                <template v-slot:prepend-inner>
+                  <v-icon color="grey" size="20" class="mt-1">mdi-text-box-outline</v-icon>
+                </template>
+              </v-textarea>
+            </div>
+
+            <!-- Modalidade do Sub-Processo -->
+            <div class="mb-4">
+              <label class="text-caption font-weight-bold text-grey-darken-2 mb-2 d-block">
+                Modalidade *
+              </label>
+              <v-btn-toggle
+                v-model="childTypeData.modality"
+                mandatory
+                color="primary"
+                variant="outlined"
+                class="w-100 modality-toggle"
+              >
+                <v-btn value="MANUAL" class="flex-grow-1">
+                  <v-icon start>mdi-hand-pointing-up</v-icon>
+                  Manual
+                </v-btn>
+                <v-btn value="RECURRENT" class="flex-grow-1">
+                  <v-icon start>mdi-refresh</v-icon>
+                  Recorrente
+                </v-btn>
+                <v-btn value="SCHEDULED" class="flex-grow-1">
+                  <v-icon start>mdi-calendar-clock</v-icon>
+                  Agendado
+                </v-btn>
+              </v-btn-toggle>
+              <p class="text-caption text-grey mt-2">
+                <template v-if="childTypeData.modality === 'MANUAL'">
+                  O sub-processo será criado manualmente pelo usuário quando necessário.
+                </template>
+                <template v-else-if="childTypeData.modality === 'RECURRENT'">
+                  O sub-processo será criado automaticamente em intervalos regulares.
+                </template>
+                <template v-else-if="childTypeData.modality === 'SCHEDULED'">
+                  O sub-processo será criado automaticamente em uma data/hora específica.
+                </template>
+              </p>
+            </div>
+
+            <!-- Configurações de Recorrência -->
+            <div v-if="childTypeData.modality === 'RECURRENT'" class="mb-4 pa-4 bg-blue-lighten-5 rounded-lg">
+              <label class="text-caption font-weight-bold text-grey-darken-2 mb-3 d-block">
+                <v-icon start size="18" color="primary">mdi-refresh</v-icon>
+                Configuração de Recorrência
+              </label>
+
+              <v-row dense>
+                <v-col cols="6">
+                  <v-text-field
+                    v-model.number="childTypeData.recurrenceInterval"
+                    type="number"
+                    label="Intervalo"
+                    variant="outlined"
+                    density="comfortable"
+                    min="1"
+                    bg-color="white"
+                    :rules="[v => v > 0 || 'Intervalo deve ser maior que 0']"
+                  />
+                </v-col>
+                <v-col cols="6">
+                  <v-select
+                    v-model="childTypeData.recurrenceUnit"
+                    :items="recurrenceUnits"
+                    label="Unidade"
+                    variant="outlined"
+                    density="comfortable"
+                    bg-color="white"
+                  />
+                </v-col>
+              </v-row>
+              <p class="text-caption text-grey">
+                Ex: A cada {{ childTypeData.recurrenceInterval || 1 }} {{ getRecurrenceUnitLabel(childTypeData.recurrenceUnit) }}
+              </p>
+            </div>
+
+            <!-- Configurações de Agendamento -->
+            <div v-if="childTypeData.modality === 'SCHEDULED'" class="mb-4 pa-4 bg-orange-lighten-5 rounded-lg">
+              <label class="text-caption font-weight-bold text-grey-darken-2 mb-3 d-block">
+                <v-icon start size="18" color="orange">mdi-calendar-clock</v-icon>
+                Configuração de Agendamento
+              </label>
+
+              <v-row dense>
+                <v-col cols="6">
+                  <v-text-field
+                    v-model="childTypeData.scheduledDate"
+                    type="date"
+                    label="Data"
+                    variant="outlined"
+                    density="comfortable"
+                    bg-color="white"
+                    :rules="[v => !!v || 'Data é obrigatória']"
+                  />
+                </v-col>
+                <v-col cols="6">
+                  <v-text-field
+                    v-model="childTypeData.scheduledTime"
+                    type="time"
+                    label="Hora"
+                    variant="outlined"
+                    density="comfortable"
+                    bg-color="white"
+                  />
+                </v-col>
+              </v-row>
+            </div>
+
+            <!-- Opção de criar com etapa básica -->
+            <v-checkbox
+              v-model="childTypeData.createBasicStep"
+              label="Criar com uma etapa básica de aprovação"
+              color="primary"
+              density="comfortable"
+              hide-details
+              class="mb-2"
+            />
+            <p class="text-caption text-grey mb-4 ml-8">
+              Cria automaticamente uma etapa de aprovação inicial. Você pode editar o tipo completo depois.
+            </p>
+
+            <v-alert type="info" variant="tonal" density="compact" class="mb-0" icon="mdi-information">
+              Após criar, você poderá editar este tipo de processo para adicionar campos e etapas.
+            </v-alert>
+          </v-form>
+        </v-card-text>
+
+        <v-divider />
+
+        <!-- Ações -->
+        <v-card-actions class="pa-4 d-flex justify-space-between">
+          <v-btn
+            variant="text"
+            color="grey-darken-1"
+            size="large"
+            @click="closeCreateChildTypeDialog"
+            :disabled="savingChildType"
+          >
+            <v-icon start>mdi-close</v-icon>
+            Cancelar
+          </v-btn>
+
+          <v-btn
+            color="primary"
+            variant="elevated"
+            size="large"
+            :loading="savingChildType"
+            :disabled="!childTypeFormValid || savingChildType"
+            @click="createChildType"
+            class="px-6"
+          >
+            <v-icon start>mdi-plus</v-icon>
+            Criar e Vincular
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useProcessTypeStore } from '@/stores/processTypes'
 import { useSectorStore } from '@/stores/sectors'
@@ -418,9 +753,49 @@ const formData = ref({
   id: null,
   name: '',
   description: '',
+  isChildProcessOnly: false,
   steps: [],
-  formFields: []
+  formFields: [],
+  allowedChildProcessTypes: []
 })
+
+// Estado para carregar tipos de processo disponíveis
+const loadingProcessTypes = ref(false)
+const allProcessTypes = ref([])
+
+// Estado para criar novo tipo de sub-processo
+const createChildTypeDialog = ref(false)
+const childTypeFormValid = ref(false)
+const savingChildType = ref(false)
+const childTypeForm = ref(null)
+const childTypeData = ref({
+  name: '',
+  description: '',
+  modality: 'MANUAL',
+  recurrenceInterval: 1,
+  recurrenceUnit: 'DAYS',
+  scheduledDate: '',
+  scheduledTime: '',
+  createBasicStep: true
+})
+
+// Unidades de recorrência
+const recurrenceUnits = [
+  { title: 'Dias', value: 'DAYS' },
+  { title: 'Semanas', value: 'WEEKS' },
+  { title: 'Meses', value: 'MONTHS' },
+  { title: 'Anos', value: 'YEARS' }
+]
+
+function getRecurrenceUnitLabel(unit) {
+  const labels = {
+    'DAYS': 'dia(s)',
+    'WEEKS': 'semana(s)',
+    'MONTHS': 'mês(es)',
+    'YEARS': 'ano(s)'
+  }
+  return labels[unit] || unit
+}
 
 const fieldData = ref({
   name: '', 
@@ -438,10 +813,50 @@ const isEditing = computed(() => !!route.params.id && route.params.id !== 'new')
 const sectors = computed(() => sectorStore.sectors || [])
 const users = computed(() => userStore.users || [])
 
+// Tipos de processo disponíveis para serem sub-processos (excluindo o próprio tipo em edição)
+const availableProcessTypesForChild = computed(() => {
+  return allProcessTypes.value.filter(pt => {
+    // Não mostrar o próprio tipo de processo
+    if (isEditing.value && pt.id === formData.value.id) return false
+    // Apenas tipos ativos
+    return pt.isActive
+  })
+})
+
 const nameRules = [
   v => !!v || 'Nome é obrigatório',
   v => (v?.length ?? 0) >= 3 || 'Nome deve ter no mínimo 3 caracteres'
 ]
+
+// Variável para controlar se deve ignorar o próximo watch (evita salvar durante carregamento)
+const ignoreNextAllowedChildProcessTypesChange = ref(true)
+
+// Watcher para salvar automaticamente quando mudar sub-processos permitidos (apenas em modo edição)
+watch(() => formData.value.allowedChildProcessTypes, async (newValue, oldValue) => {
+  // Ignorar durante carregamento inicial
+  if (ignoreNextAllowedChildProcessTypesChange.value) {
+    ignoreNextAllowedChildProcessTypesChange.value = false
+    return
+  }
+
+  // Só salvar automaticamente se estiver editando um tipo existente
+  if (!isEditing.value || !formData.value.id) return
+
+  // Verificar se realmente mudou (comparar arrays)
+  const oldIds = (oldValue || []).sort().join(',')
+  const newIds = (newValue || []).sort().join(',')
+  if (oldIds === newIds) return
+
+  try {
+    await processTypeStore.updateProcessType(formData.value.id, {
+      allowedChildProcessTypes: newValue || []
+    })
+    window.showSnackbar?.('Sub-processos permitidos atualizados!', 'success')
+  } catch (err) {
+    console.error('Erro ao atualizar sub-processos:', err)
+    window.showSnackbar?.('Erro ao atualizar sub-processos', 'error')
+  }
+}, { deep: true })
 
 const fieldTypes = [
   { title: 'Texto', value: 'TEXT' },
@@ -531,6 +946,127 @@ function getInputFieldsCount(step) {
 function getReuseDataCount(reuseData) {
   if (!reuseData || !Array.isArray(reuseData)) return 0
   return reuseData.length
+}
+
+// Funções para sub-processos
+function getProcessTypeName(typeId) {
+  const pt = allProcessTypes.value.find(p => p.id === typeId)
+  return pt?.name || 'Tipo não encontrado'
+}
+
+function removeAllowedChildType(typeId) {
+  const index = formData.value.allowedChildProcessTypes.indexOf(typeId)
+  if (index > -1) {
+    formData.value.allowedChildProcessTypes.splice(index, 1)
+  }
+}
+
+// Funções para criar novo tipo de sub-processo
+function openCreateChildTypeDialog() {
+  childTypeData.value = {
+    name: '',
+    description: '',
+    modality: 'MANUAL',
+    recurrenceInterval: 1,
+    recurrenceUnit: 'DAYS',
+    scheduledDate: '',
+    scheduledTime: '',
+    createBasicStep: true
+  }
+  childTypeFormValid.value = false
+  createChildTypeDialog.value = true
+}
+
+function closeCreateChildTypeDialog() {
+  createChildTypeDialog.value = false
+  childTypeData.value = {
+    name: '',
+    description: '',
+    modality: 'MANUAL',
+    recurrenceInterval: 1,
+    recurrenceUnit: 'DAYS',
+    scheduledDate: '',
+    scheduledTime: '',
+    createBasicStep: true
+  }
+}
+
+async function createChildType() {
+  if (!childTypeFormValid.value) return
+
+  savingChildType.value = true
+  try {
+    // Preparar payload para criar o novo tipo
+    const payload = {
+      name: childTypeData.value.name,
+      description: childTypeData.value.description || '',
+      companyId: authStore.activeCompanyId,
+      formFields: [],
+      steps: []
+    }
+
+    // Se optou por criar etapa básica, adicionar uma etapa de aprovação
+    if (childTypeData.value.createBasicStep) {
+      payload.steps = [
+        {
+          name: 'Aprovação',
+          type: 'APPROVAL',
+          order: 1,
+          instructions: 'Revise e aprove o sub-processo.',
+          slaDays: null,
+          assignedToCreator: true,
+          actions: [],
+          allowedFileTypes: [],
+          flowConditions: [],
+          reuseData: [],
+          signatureRequirements: []
+        }
+      ]
+    }
+
+    // Criar o novo tipo de processo
+    const newType = await processTypeStore.createProcessType(payload)
+
+    if (newType && newType.id) {
+      // Adicionar o novo tipo à lista de sub-processos permitidos
+      if (!formData.value.allowedChildProcessTypes) {
+        formData.value.allowedChildProcessTypes = []
+      }
+      formData.value.allowedChildProcessTypes.push(newType.id)
+
+      // Se estamos editando um tipo existente, salvar a vinculação imediatamente
+      if (isEditing.value && formData.value.id) {
+        await processTypeStore.updateProcessType(formData.value.id, {
+          allowedChildProcessTypes: formData.value.allowedChildProcessTypes
+        })
+      }
+
+      // Recarregar a lista de tipos para incluir o novo
+      await loadAllProcessTypes()
+
+      window.showSnackbar?.(`Tipo "${newType.name}" criado e vinculado com sucesso!`, 'success')
+      closeCreateChildTypeDialog()
+    } else {
+      throw new Error('Falha ao criar tipo de processo')
+    }
+  } catch (err) {
+    console.error('Erro ao criar tipo de sub-processo:', err)
+    window.showSnackbar?.(err.response?.data?.message || 'Erro ao criar tipo de processo', 'error')
+  } finally {
+    savingChildType.value = false
+  }
+}
+
+async function loadAllProcessTypes() {
+  loadingProcessTypes.value = true
+  try {
+    await processTypeStore.fetchProcessTypes()
+    allProcessTypes.value = processTypeStore.processTypes || []
+  } catch (err) {
+    console.error('Erro ao carregar tipos de processo:', err)
+  } finally {
+    loadingProcessTypes.value = false
+  }
 }
 
 // Field management functions
@@ -693,7 +1229,9 @@ async function save() {
     const payload = {
       name: formData.value.name,
       description: formData.value.description,
+      isChildProcessOnly: formData.value.isChildProcessOnly || false,
       companyId: authStore.activeCompanyId,
+      allowedChildProcessTypes: formData.value.allowedChildProcessTypes || [],
       formFields: formData.value.formFields.map((f, idx) => ({ ...f, order: f.order ?? (idx + 1) })),
       steps: formData.value.steps.map((s, idx) => {
         const stepPayload = { ...s }
@@ -852,9 +1390,13 @@ function onStepDrop(event, dropIndex) {
 
 onMounted(async () => {
   try {
+    // Ignorar mudanças no watcher durante o carregamento inicial
+    ignoreNextAllowedChildProcessTypesChange.value = true
+
     await Promise.all([
       sectorStore.fetchSectors?.(),
-      userStore.fetchUsers?.()
+      userStore.fetchUsers?.(),
+      loadAllProcessTypes()
     ])
 
     if (isEditing.value) {
@@ -865,11 +1407,18 @@ onMounted(async () => {
           id: current.id,
           name: current.name || '',
           description: current.description || '',
+          isChildProcessOnly: current.isChildProcessOnly || false,
           steps: Array.isArray(current.steps) ? [...current.steps] : [],
-          formFields: Array.isArray(current.formFields) ? [...current.formFields] : []
+          formFields: Array.isArray(current.formFields) ? [...current.formFields] : [],
+          allowedChildProcessTypes: Array.isArray(current.allowedChildProcessTypes) ? [...current.allowedChildProcessTypes] : []
         }
       }
     }
+
+    // Aguardar próximo tick para garantir que o watcher processou a mudança inicial
+    setTimeout(() => {
+      ignoreNextAllowedChildProcessTypesChange.value = false
+    }, 100)
   } catch (e) {
     console.error(e)
     window.showSnackbar?.('Erro ao carregar dados', 'error')
@@ -911,5 +1460,52 @@ onMounted(async () => {
 .draggable-field[draggable="true"]:active,
 .draggable-step[draggable="true"]:active {
   cursor: grabbing;
+}
+
+/* Estilos para o modal de criar tipo de sub-processo */
+.create-child-type-dialog {
+  border-radius: 16px !important;
+  overflow: hidden;
+}
+
+.create-child-type-header {
+  background: linear-gradient(135deg, #1976d2, #1565c0);
+  position: relative;
+}
+
+.create-child-type-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+}
+
+.create-child-type-header .icon-container {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.create-child-type-header .text-white-50 {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Estilos para o toggle de modalidade */
+.modality-toggle {
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.modality-toggle .v-btn {
+  text-transform: none !important;
+  font-weight: 500 !important;
+  letter-spacing: normal !important;
 }
 </style>

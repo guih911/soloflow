@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SimpleSignatureService, SignatureMetadata } from './simple-signature.service';
-import { ModernSignatureService } from './modern-signature.service';
+import { ModernSignatureService, SignatureMetadata as ModernSignatureMetadata } from './modern-signature.service';
 import { SignDocumentSimpleDto } from './dto/sign-document-simple.dto';
 import { CreateSignatureRequirementDto } from './dto/create-signature-requirement.dto';
 import { join } from 'path';
@@ -238,9 +238,9 @@ export class SignaturesService {
         // Metadados
         ipAddress: dto.ipAddress,
         userAgent: dto.userAgent,
-        geolocation: dto.geolocation,
         metadata: {
           contactInfo: dto.contactInfo,
+          geolocation: dto.geolocation,
         },
       },
       include: {
@@ -877,6 +877,200 @@ export class SignaturesService {
       canSign,
       currentUserOrder: userRequirement?.order || null,
       signatureType: requirements[0]?.type || 'PARALLEL',
+    };
+  }
+
+  /**
+   * Assina um documento de sub-tarefa
+   * Sub-tarefas armazenam anexos diretamente na tabela SubTask, não em Attachment
+   */
+  async signSubTaskDocument(userId: string, dto: {
+    subTaskId: string;
+    userPassword: string;
+    reason?: string;
+    location?: string;
+    contactInfo?: string;
+    ipAddress?: string;
+    userAgent?: string;
+    geolocation?: string;
+  }) {
+    // 1. Buscar e validar usuário
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        userCompanies: {
+          select: {
+            sectorId: true,
+            companyId: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    // 2. Validar senha do usuário
+    const isValidPassword = await bcrypt.compare(dto.userPassword, user.password);
+
+    if (!isValidPassword) {
+      throw new UnauthorizedException(
+        'Senha incorreta. Por favor, verifique sua senha e tente novamente.'
+      );
+    }
+
+    // 3. Buscar sub-tarefa
+    const subTask = await this.prisma.subTask.findUnique({
+      where: { id: dto.subTaskId },
+      include: {
+        stepExecution: {
+          include: {
+            processInstance: {
+              include: {
+                createdBy: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        subTaskTemplate: true,
+      },
+    });
+
+    if (!subTask) {
+      throw new NotFoundException('Sub-tarefa não encontrada');
+    }
+
+    if (!subTask.attachmentPath || !subTask.attachmentName) {
+      throw new NotFoundException('Anexo não encontrado na sub-tarefa');
+    }
+
+    // 4. Verificar se requer assinatura
+    if (!subTask.requireSignature) {
+      throw new BadRequestException('Esta sub-tarefa não requer assinatura');
+    }
+
+    // 5. Verificar se o usuário é um dos assinantes
+    let signerIds: string[] = [];
+    if (subTask.signers) {
+      try {
+        signerIds = typeof subTask.signers === 'string'
+          ? JSON.parse(subTask.signers)
+          : subTask.signers;
+      } catch (e) {
+        signerIds = [];
+      }
+    }
+
+    if (signerIds.length > 0 && !signerIds.includes(userId)) {
+      throw new ForbiddenException('Você não está na lista de assinantes desta sub-tarefa');
+    }
+
+    // 6. Verificar se anexo é PDF
+    const isPdf = subTask.attachmentName.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      throw new BadRequestException('Apenas arquivos PDF podem ser assinados');
+    }
+
+    // 7. Verificar se já assinou (usando metadados na sub-tarefa)
+    // Para sub-tarefas, armazenamos as assinaturas em um campo JSON
+    let existingSignatures: any[] = [];
+    if (subTask['signatures']) {
+      try {
+        existingSignatures = typeof subTask['signatures'] === 'string'
+          ? JSON.parse(subTask['signatures'])
+          : subTask['signatures'];
+      } catch (e) {
+        existingSignatures = [];
+      }
+    }
+
+    const alreadySigned = existingSignatures.some(sig => sig.signerId === userId);
+    if (alreadySigned) {
+      throw new BadRequestException('Você já assinou este documento');
+    }
+
+    // 8. Verificar ordem de assinatura (se sequencial)
+    if (subTask.signatureType === 'SEQUENTIAL') {
+      const userIndex = signerIds.indexOf(userId);
+      if (userIndex > 0) {
+        // Verificar se todos os anteriores assinaram
+        for (let i = 0; i < userIndex; i++) {
+          const previousSignerId = signerIds[i];
+          const previousSigned = existingSignatures.some(sig => sig.signerId === previousSignerId);
+          if (!previousSigned) {
+            throw new BadRequestException('Aguarde os assinantes anteriores concluírem suas assinaturas');
+          }
+        }
+      }
+    }
+
+    // 9. Preparar metadados da assinatura
+    const metadata: ModernSignatureMetadata = {
+      signer: {
+        name: user.name,
+        cpf: user.cpf || '',
+        email: user.email,
+      },
+      reason: dto.reason || `Assinatura de sub-tarefa: ${subTask.subTaskTemplate?.name || 'Sub-tarefa'}`,
+      location: dto.location || 'Sistema SoloFlow',
+      contactInfo: dto.contactInfo || user.email,
+      ipAddress: dto.ipAddress,
+    };
+
+    // 10. Aplicar assinatura visual no PDF
+    const signedFilename = `signed-subtask-${Date.now()}-${subTask.attachmentName}`;
+    const tempSignedPath = join(process.cwd(), 'uploads', 'signatures', signedFilename);
+
+    const signatureResult = await this.modernSignatureService.signPDF(
+      subTask.attachmentPath,
+      tempSignedPath,
+      metadata,
+      dto.userPassword,
+      existingSignatures.length, // Ordem da assinatura
+    );
+
+    // 11. Substituir arquivo original pelo assinado
+    copyFileSync(tempSignedPath, subTask.attachmentPath);
+    unlinkSync(tempSignedPath);
+
+    // 12. Registrar assinatura nos metadados da sub-tarefa
+    const newSignature = {
+      signerId: userId,
+      signerName: user.name,
+      signerEmail: user.email,
+      signerCPF: user.cpf,
+      signedAt: new Date().toISOString(),
+      signatureHash: signatureResult.signatureHash,
+      signatureToken: signatureResult.signatureToken,
+      documentHash: signatureResult.documentHash,
+      reason: dto.reason,
+      ipAddress: dto.ipAddress,
+      userAgent: dto.userAgent,
+      geolocation: dto.geolocation,
+    };
+
+    existingSignatures.push(newSignature);
+
+    // 13. Atualizar sub-tarefa com as assinaturas
+    await this.prisma.$executeRaw`
+      UPDATE sub_tasks
+      SET signatures = ${JSON.stringify(existingSignatures)}
+      WHERE id = ${dto.subTaskId}
+    `;
+
+    // 14. Verificar se todas as assinaturas foram concluídas
+    const allSigned = signerIds.length === 0 ||
+      signerIds.every(signerId => existingSignatures.some(sig => sig.signerId === signerId));
+
+    return {
+      success: true,
+      signature: newSignature,
+      signedPath: subTask.attachmentPath,
+      signatureToken: signatureResult.signatureToken,
+      allRequirementsMet: allSigned,
+      totalSigners: signerIds.length,
+      completedSignatures: existingSignatures.length,
     };
   }
 }

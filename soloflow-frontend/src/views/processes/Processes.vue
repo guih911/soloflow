@@ -220,9 +220,12 @@ const loading = computed(() => processTypeStore.loading)
 const processTypes = computed(() => processTypeStore.processTypes)
 
 const activeProcessTypes = computed(() => {
-  // Filtrar apenas tipos ativos e que o usuário tem permissão para criar
+  // Filtrar apenas tipos ativos, que o usuário tem permissão para criar
+  // e que NÃO são exclusivamente subprocessos
   return processTypes.value.filter(pt =>
-    pt.isActive && authStore.canAccessProcessType(pt.id, 'create')
+    pt.isActive &&
+    !pt.isChildProcessOnly &&
+    authStore.canAccessProcessType(pt.id, 'create')
   )
 })
 

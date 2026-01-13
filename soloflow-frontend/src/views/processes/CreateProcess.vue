@@ -482,11 +482,27 @@ const fileInputRefs = ref({})
 
 const loadingTypes = computed(() => processTypeStore.loading)
 const processTypes = computed(() => {
-  // Filtrar apenas tipos ativos
-  const activeTypes = processTypeStore.processTypes.filter(pt => pt.isActive !== false)
+  const allTypes = processTypeStore.processTypes
 
-  // Filtrar apenas tipos que o usuário tem permissão para criar
-  return activeTypes.filter(pt => authStore.canAccessProcessType(pt.id, 'create'))
+  // Identificar IDs de tipos usados como sub-processos
+  const subProcessTypeIds = new Set()
+  allTypes.forEach(pt => {
+    if (Array.isArray(pt.allowedChildProcessTypes) && pt.allowedChildProcessTypes.length > 0) {
+      pt.allowedChildProcessTypes.forEach(childId => {
+        subProcessTypeIds.add(childId)
+      })
+    }
+  })
+
+  // Filtrar apenas tipos ativos
+  const activeTypes = allTypes.filter(pt => pt.isActive !== false)
+
+  // Filtrar tipos que o usuário tem permissão E que não são sub-processos exclusivos
+  return activeTypes.filter(pt => {
+    const hasPermission = authStore.canAccessProcessType(pt.id, 'create')
+    const isSubProcessOnly = subProcessTypeIds.has(pt.id)
+    return hasPermission && !isSubProcessOnly
+  })
 })
 const preselectedType = computed(() => props.typeId || route.params.typeId)
 const selectedProcessType = computed(() => {

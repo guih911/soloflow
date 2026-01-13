@@ -107,7 +107,9 @@ const props = defineProps({
   attachment: Object,
   stepExecutionId: String,
   stepName: String,
-  requirement: Object
+  requirement: Object,
+  isSubTaskAttachment: Boolean,
+  subTaskId: String
 })
 
 const emit = defineEmits(['update:modelValue', 'signed'])
@@ -152,17 +154,25 @@ function formatFileSize(bytes) {
 async function handleSign() {
   if (!signValid.value) return
 
-  console.log('📝 Signing document:', signData.value)
-
   try {
-    const result = await signaturesStore.signDocument(signData.value)
+    let result
 
-    console.log('✅ Document signed successfully:', result)
+    if (props.isSubTaskAttachment && props.subTaskId) {
+      const subTaskSignData = {
+        subTaskId: props.subTaskId,
+        userPassword: signData.value.userPassword,
+        reason: signData.value.reason,
+        location: signData.value.location,
+        contactInfo: signData.value.contactInfo
+      }
+      result = await signaturesStore.signSubTaskDocument(subTaskSignData)
+    } else {
+      result = await signaturesStore.signDocument(signData.value)
+    }
 
-    // Mostrar dialog de sucesso
     successDialog.value = true
   } catch (error) {
-    console.error('❌ Error signing document:', error)
+    // Erro tratado pela store
   }
 }
 

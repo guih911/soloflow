@@ -83,13 +83,8 @@ const props = defineProps({
 // Estado
 const modalOpen = ref(false)
 
-// ✅ CORRIGIDO: Computed para extrair APENAS anexos de stepExecutions
 const stepAttachmentsOnly = computed(() => {
-  console.log('🔍 AttachmentButton - Filtering step attachments only')
-  
-  // Se attachments foi passado diretamente, assumir que são de etapas
   if (props.attachments && props.attachments.length > 0) {
-    console.log('📎 Using direct attachments (assuming step attachments):', props.attachments.length)
     return props.attachments.map(attachment => ({
       ...attachment,
       attachmentType: 'step',
@@ -97,21 +92,18 @@ const stepAttachmentsOnly = computed(() => {
       displayName: attachment.originalName || attachment.filename || 'Arquivo'
     }))
   }
-  
-  // ✅ CRÍTICO: Extrair APENAS anexos de stepExecutions (IGNORAR formData)
+
   if (props.process?.stepExecutions) {
     const stepAttachments = []
-    
+
     props.process.stepExecutions.forEach(stepExecution => {
       if (stepExecution.attachments && stepExecution.attachments.length > 0) {
         stepExecution.attachments.forEach(attachment => {
           stepAttachments.push({
             ...attachment,
-            // ✅ Marcar como anexo de etapa
             attachmentType: 'step',
             attachmentSource: 'Anexo de Etapa',
             displayName: attachment.originalName || attachment.filename || 'Arquivo',
-            // Adicionar contexto da etapa
             stepName: stepExecution.step?.name,
             stepOrder: stepExecution.step?.order,
             stepExecutionId: stepExecution.id
@@ -119,21 +111,17 @@ const stepAttachmentsOnly = computed(() => {
         })
       }
     })
-    
-    console.log('📎 Found step attachments:', stepAttachments.length)
+
     return stepAttachments
   }
-  
-  console.log('📎 No step attachments found')
+
   return []
 })
 
 const hasStepAttachments = computed(() => stepAttachmentsOnly.value.length > 0)
 const stepAttachmentCount = computed(() => stepAttachmentsOnly.value.length)
 
-// Métodos
 function openModal() {
-  console.log('🔓 Opening step attachments modal with', stepAttachmentsOnly.value.length, 'attachments')
   modalOpen.value = true
 }
 </script>

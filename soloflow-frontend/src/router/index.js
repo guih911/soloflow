@@ -75,27 +75,18 @@ function findFirstAvailableRoute(authStore) {
     { path: '/profile', permission: null }, // Sempre disponível
   ]
 
-  console.log('🔍 findFirstAvailableRoute (router) - Buscando primeira rota disponível...')
-
-  // Encontrar a primeira rota com permissão
   for (const route of routePriority) {
     if (!route.permission) {
-      // Rota sem restrição de permissão
-      console.log('🔍 findFirstAvailableRoute (router) - Fallback:', route.path)
       return route.path
     }
 
     const hasPerm = authStore.hasPermission(route.permission.resource, route.permission.action)
-    console.log(`🔍 findFirstAvailableRoute (router) - ${route.permission.resource}:${route.permission.action} = ${hasPerm}`)
 
     if (hasPerm) {
-      console.log('🔍 findFirstAvailableRoute (router) - ✅ Primeira rota:', route.path)
       return route.path
     }
   }
 
-  // Fallback: perfil do usuário (sempre disponível)
-  console.log('🔍 findFirstAvailableRoute (router) - Nenhuma permissão, indo para /profile')
   return '/profile'
 }
 
@@ -341,7 +332,6 @@ const routes = [
       const authStore = useAuthStore()
       if (authStore.isAuthenticated) {
         const firstAvailableRoute = findFirstAvailableRoute(authStore)
-        console.log('404 - Redirecting to first available route:', firstAvailableRoute)
         next(firstAvailableRoute)
       } else {
         next('/login')
@@ -355,16 +345,13 @@ const router = createRouter({
   routes,
 })
 
-// Navigation guards melhorados
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
-  
-  // Inicializar auth do localStorage se necessário
+
   if (!authStore.user && localStorage.getItem('token')) {
     try {
       authStore.initializeAuth()
     } catch (error) {
-      console.error('Error initializing auth:', error)
       localStorage.clear()
     }
   }
@@ -372,42 +359,23 @@ router.beforeEach(async (to, from, next) => {
   const isAuthenticated = authStore.isAuthenticated
   const userRole = authStore.userRole
 
-  // Debug
-  console.log('Navigation Guard:', {
-    to: to.path,
-    isAuthenticated,
-    userRole,
-    requiresAuth: to.meta.requiresAuth,
-    requiresGuest: to.meta.requiresGuest,
-    requiresRole: to.meta.requiresRole,
-    requiresPermission: to.meta.requiresPermission ?? to.meta.requiresPermissions,
-    isPublic: to.meta.public,
-  })
-
-  // Permitir rotas públicas sem autenticação
   if (to.meta.public === true || to.meta.requiresAuth === false) {
     next()
     return
   }
 
-  // Rota requer autenticação
   if (to.meta.requiresAuth && !isAuthenticated) {
-    console.log('Redirecting to login - not authenticated')
-    // Salvar destino para redirect após login
     sessionStorage.setItem('redirectAfterLogin', to.fullPath)
     next('/login')
     return
   }
 
-  // Rota requer que seja visitante (não autenticado)
   if (to.meta.requiresGuest && isAuthenticated) {
-    console.log('Redirecting to first available route - already authenticated')
     const firstAvailableRoute = findFirstAvailableRoute(authStore)
     next(firstAvailableRoute)
     return
   }
 
-  // Rota requer permissão específica
   if ((to.meta.requiresPermission || to.meta.requiresPermissions) && isAuthenticated) {
     const rawRequirements = to.meta.requiresPermission ?? to.meta.requiresPermissions
     const requirements = Array.isArray(rawRequirements) ? rawRequirements : [rawRequirements]
@@ -428,43 +396,34 @@ router.beforeEach(async (to, from, next) => {
     })
 
     if (!hasPermission) {
-      console.log('Access denied - missing permissions', requirements)
       if (window.showSnackbar) {
         window.showSnackbar('Acesso negado. Redirecionando para página disponível...', 'warning')
       }
       const firstAvailableRoute = findFirstAvailableRoute(authStore)
-      console.log('Redirecting to first available route:', firstAvailableRoute)
       next(firstAvailableRoute)
       return
     }
   }
 
-  // Rota requer role específica (compatibilidade legada)
   if (to.meta.requiresRole && isAuthenticated) {
-    const allowedRoles = Array.isArray(to.meta.requiresRole) 
-      ? to.meta.requiresRole 
+    const allowedRoles = Array.isArray(to.meta.requiresRole)
+      ? to.meta.requiresRole
       : [to.meta.requiresRole]
-    
-    if (!allowedRoles.includes(userRole)) {
-      console.log(`Access denied - user role ${userRole} not in ${allowedRoles}`)
 
-      // Mostrar mensagem de erro se disponível
+    if (!allowedRoles.includes(userRole)) {
       if (window.showSnackbar) {
         window.showSnackbar('Acesso negado. Redirecionando para página disponível...', 'warning')
       }
 
       const firstAvailableRoute = findFirstAvailableRoute(authStore)
-      console.log('Redirecting to first available route:', firstAvailableRoute)
       next(firstAvailableRoute)
       return
     }
   }
 
-  // Verificar se empresa está ativa (para rotas autenticadas)
   if (to.meta.requiresAuth && isAuthenticated) {
     const activeCompany = authStore.activeCompany
     if (!activeCompany) {
-      console.log('No active company - redirecting to first available route')
       if (window.showSnackbar) {
         window.showSnackbar('Erro: nenhuma empresa ativa encontrada', 'error')
       }
@@ -474,10 +433,8 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
-  // Se estiver acessando a raiz '/', redirecionar para primeira rota disponível
   if (to.path === '/' && isAuthenticated) {
     const firstAvailableRoute = findFirstAvailableRoute(authStore)
-    console.log('Root access - redirecting to first available route:', firstAvailableRoute)
     next(firstAvailableRoute)
     return
   }
@@ -485,10 +442,7 @@ router.beforeEach(async (to, from, next) => {
   next()
 })
 
-// Interceptar erros de navegação
 router.onError((error) => {
-  console.error('Router error:', error)
-  
   if (window.showSnackbar) {
     if (error.message.includes('Failed to fetch')) {
       window.showSnackbar('Erro de conexão. Verifique sua internet.', 'error')
@@ -500,9 +454,7 @@ router.onError((error) => {
   }
 })
 
-// Meta dados globais para debugging
 router.beforeResolve((to, from, next) => {
-  // Adicionar título da página se especificado
   if (to.meta.title) {
     document.title = `${to.meta.title} - SoloFlow`
   } else {

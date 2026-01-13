@@ -4,6 +4,23 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 export function useAttachment() {
   /**
+   * Verifica se é um anexo de sub-tarefa pelo ID
+   */
+  function isSubTaskAttachment(attachmentId) {
+    return attachmentId && attachmentId.startsWith('subtask-')
+  }
+
+  /**
+   * Extrai o ID real da sub-tarefa do ID do anexo
+   */
+  function getSubTaskId(attachmentId) {
+    if (isSubTaskAttachment(attachmentId)) {
+      return attachmentId.replace('subtask-', '')
+    }
+    return null
+  }
+
+  /**
    * Busca attachment com autenticação
    */
   async function fetchAttachment(attachmentId) {
@@ -12,15 +29,21 @@ export function useAttachment() {
       throw new Error('Token não encontrado')
     }
 
-    const response = await axios.get(
-      `${API_URL}/processes/attachment/${attachmentId}/view`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
-        responseType: 'blob'
-      }
-    )
+    // Determinar endpoint baseado no tipo de anexo
+    let endpoint
+    if (isSubTaskAttachment(attachmentId)) {
+      const subTaskId = getSubTaskId(attachmentId)
+      endpoint = `${API_URL}/sub-tasks/attachment/${subTaskId}/download`
+    } else {
+      endpoint = `${API_URL}/processes/attachment/${attachmentId}/view`
+    }
+
+    const response = await axios.get(endpoint, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      responseType: 'blob'
+    })
 
     return response.data
   }
@@ -34,15 +57,21 @@ export function useAttachment() {
       throw new Error('Token não encontrado')
     }
 
-    const response = await axios.get(
-      `${API_URL}/processes/attachment/${attachmentId}/download`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
-        responseType: 'blob'
-      }
-    )
+    // Determinar endpoint baseado no tipo de anexo
+    let endpoint
+    if (isSubTaskAttachment(attachmentId)) {
+      const subTaskId = getSubTaskId(attachmentId)
+      endpoint = `${API_URL}/sub-tasks/attachment/${subTaskId}/download`
+    } else {
+      endpoint = `${API_URL}/processes/attachment/${attachmentId}/download`
+    }
+
+    const response = await axios.get(endpoint, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      responseType: 'blob'
+    })
 
     // Criar URL do blob e fazer download
     const url = window.URL.createObjectURL(response.data)
@@ -66,6 +95,8 @@ export function useAttachment() {
   return {
     fetchAttachment,
     downloadAttachment,
-    getPreviewUrl
+    getPreviewUrl,
+    isSubTaskAttachment,
+    getSubTaskId
   }
 }
