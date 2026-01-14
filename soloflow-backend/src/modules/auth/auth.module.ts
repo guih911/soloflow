@@ -19,7 +19,7 @@ import { ScopeGuard } from './guards/scope.guard';
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: {
-        expiresIn: process.env.JWT_EXPIRATION || '8h', // Aumentado para 8 horas
+        expiresIn: (process.env.JWT_EXPIRATION || '8h') as string, // Aumentado para 8 horas
         issuer: 'soloflow-api',
         audience: 'soloflow-client'
       },
