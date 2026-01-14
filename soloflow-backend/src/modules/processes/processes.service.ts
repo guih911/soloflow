@@ -763,11 +763,16 @@ export class ProcessesService {
         const userAssignment = se.stepVersion.assignments?.find(a => a.type === 'USER');
         const sectorAssignment = se.stepVersion.assignments?.find(a => a.type === 'SECTOR');
         
+        // Se a etapa é atribuída ao criador, usar os dados do criador do processo
+        const isAssignedToCreator = se.stepVersion.assignedToCreator;
+        
         return {
           ...se,
           step: {
             ...se.stepVersion,
-            assignedToUser: userAssignment?.user || null,
+            assignedToUser: isAssignedToCreator 
+              ? process.createdBy 
+              : (userAssignment?.user || null),
             assignedToSector: sectorAssignment?.sector || null,
           },
         };
