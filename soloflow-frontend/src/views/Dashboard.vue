@@ -579,7 +579,7 @@ function goToMyProcesses() {
 }
 
 function openTask(task) {
-  router.push(`/processos/${task.processInstance.id}/executar/${task.id}`)
+  router.push(`/processos/${task.processInstance.id}`)
 }
 
 function viewProcess(process) {

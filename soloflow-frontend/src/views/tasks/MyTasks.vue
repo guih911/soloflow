@@ -267,7 +267,7 @@ async function refreshTasks() {
 }
 
 function executeTask(task) {
-  router.push(`/processos/${task.processInstance.id}/executar/${task.id}`)
+  router.push(`/processos/${task.processInstance.id}`)
 }
 
 onMounted(() => {
