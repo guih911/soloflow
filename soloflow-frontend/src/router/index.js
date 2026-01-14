@@ -356,12 +356,15 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
+  console.log('🔍 Navegando para:', to.path)
   const authStore = useAuthStore()
 
+  // Inicializa auth se tiver token
   if (!authStore.user && localStorage.getItem('token')) {
     try {
       authStore.initializeAuth()
     } catch (error) {
+      console.error('❌ Erro ao inicializar auth:', error)
       localStorage.clear()
     }
   }
@@ -369,12 +372,21 @@ router.beforeEach(async (to, from, next) => {
   const isAuthenticated = authStore.isAuthenticated
   const userRole = authStore.userRole
 
+  console.log('🔐 Autenticado:', isAuthenticated)
+
+  // Permite rotas públicas
   if (to.meta.public === true || to.meta.requiresAuth === false) {
+    console.log('✅ Rota pública, permitindo acesso')
     next()
     return
   }
 
-  if (to.meta.requiresAuth && !isAuthenticated) {
+  // Verifica se a rota ou algum parent requer autenticação
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  
+  // Redireciona para login se rota requer autenticação e usuário não está autenticado
+  if (requiresAuth && !isAuthenticated) {
+    console.log('🚫 Rota protegida sem autenticação, redirecionando para /entrar')
     sessionStorage.setItem('redirectAfterLogin', to.fullPath)
     next('/entrar')
     return
