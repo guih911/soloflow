@@ -94,12 +94,11 @@
                 v-else-if="column.type === 'CURRENCY' || column.type === 'Dinheiro' || column.type === 'currency'"
                 :key="`field-${row._id}-${column.key}`"
                 :model-value="row[column.key]"
-                @update:model-value="updateCellByRowId(row._id, column.key, $event)"
+                @input="updateCellByRowId(row._id, column.key, formatCurrency($event.target.value))"
                 variant="outlined"
                 density="compact"
                 hide-details="auto"
-                prefix="R$"
-                :placeholder="column.label"
+                :placeholder="column.label || 'R$ 0,00'"
                 :rules="column.required ? [v => !!v || 'Obrigatório'] : []"
               />
 
@@ -115,6 +114,32 @@
                 hide-details="auto"
                 :placeholder="column.label"
                 :rules="getEmailRules(column)"
+              />
+
+              <!-- CPF -->
+              <v-text-field
+                v-else-if="column.type === 'CPF' || column.type === 'cpf'"
+                :key="`field-${row._id}-${column.key}`"
+                :model-value="row[column.key]"
+                @input="updateCellByRowId(row._id, column.key, formatCPF($event.target.value))"
+                variant="outlined"
+                density="compact"
+                hide-details="auto"
+                :placeholder="'000.000.000-00'"
+                :rules="column.required ? [v => !!v || 'Obrigatório'] : []"
+              />
+
+              <!-- CNPJ -->
+              <v-text-field
+                v-else-if="column.type === 'CNPJ' || column.type === 'cnpj'"
+                :key="`field-${row._id}-${column.key}`"
+                :model-value="row[column.key]"
+                @input="updateCellByRowId(row._id, column.key, formatCNPJ($event.target.value))"
+                variant="outlined"
+                density="compact"
+                hide-details="auto"
+                :placeholder="'00.000.000/0000-00'"
+                :rules="column.required ? [v => !!v || 'Obrigatório'] : []"
               />
 
               <!-- Fallback para qualquer outro tipo -->
@@ -187,6 +212,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { formatCPF, formatCNPJ, formatCurrency } from '@/utils/formatters'
 
 const props = defineProps({
   field: {

@@ -101,7 +101,7 @@
               v-model="formData[field.name]"
               :label="getFieldLabel(field)"
               :placeholder="field.placeholder || '000.000.000-00'"
-              v-mask="'###.###.###-##'"
+              @input="handleCPFInput(field.name, $event.target.value)"
               :required="isFieldRequired(field)"
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
@@ -115,7 +115,7 @@
               v-model="formData[field.name]"
               :label="getFieldLabel(field)"
               :placeholder="field.placeholder || '00.000.000/0000-00'"
-              v-mask="'##.###.###/####-##'"
+              @input="handleCNPJInput(field.name, $event.target.value)"
               :required="isFieldRequired(field)"
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
@@ -142,10 +142,8 @@
               v-else-if="field.type === 'CURRENCY'"
               v-model="formData[field.name]"
               :label="getFieldLabel(field)"
-              :placeholder="field.placeholder"
-              prefix="R$"
-              type="number"
-              step="0.01"
+              :placeholder="field.placeholder || 'R$ 0,00'"
+              @input="handleCurrencyInput(field.name, $event.target.value)"
               :required="isFieldRequired(field)"
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
@@ -252,6 +250,10 @@ import { useProcessStore } from '@/stores/processes'
 import FileUploadField from './FileUploadField.vue'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
+import { 
+  formatCPF, formatCNPJ, formatCurrency,
+  validateCPF, validateCNPJ, validateEmail, validateNumber, validatePhone
+} from '@/utils/formatters'
 import 'dayjs/locale/pt-br'
 
 dayjs.extend(relativeTime)
@@ -391,11 +393,27 @@ function getFieldRules(field) {
   // Validações específicas por tipo
   switch (field.type) {
     case 'EMAIL':
-      rules.push(v => !v || /.+@.+\..+/.test(v) || 'E-mail inválido')
+      rules.push(v => validateEmail(v) || 'E-mail inválido')
       break
     case 'CPF':
-      rules.push(v => !v || /^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(v) || 'CPF inválido')
+      rules.push(v => validateCPF(v) || 'CPF inválido')
       break
+    case 'CNPJ':
+      rules.push(v => validateCNPJ(v) || 'CNPJ inválido')
+      break
+    case 'NUMBER':
+      rules.push(v => !v || validateNumber(v) || 'Apenas números são permitidos')
+      break
+    case 'CURRENCY':
+      rules.push(v => !v || /^R\$\s?[\d.,]+$/.test(v) || 'Valor monetário inválido')
+      break
+    case 'PHONE':
+      rules.push(v => validatePhone(v) || 'Telefone inválido')
+      break
+    case 'DATE':
+      rules.push(v => !v || !isNaN(Date.parse(v)) || 'Data inválida')
+      break
+  }
     case 'CNPJ':
       rules.push(v => !v || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'CNPJ inválido')
       break
@@ -456,6 +474,19 @@ function getFieldRules(field) {
   }
 
   return rules
+}
+
+// Métodos de formatação para campos
+function handleCPFInput(fieldName, value) {
+  formData.value[fieldName] = formatCPF(value)
+}
+
+function handleCNPJInput(fieldName, value) {
+  formData.value[fieldName] = formatCNPJ(value)
+}
+
+function handleCurrencyInput(fieldName, value) {
+  formData.value[fieldName] = formatCurrency(value)
 }
 
 // Pré-preencher dados

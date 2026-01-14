@@ -228,7 +228,7 @@
                     :required="field.required"
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
-                    v-mask="'###.###.###-##'"
+                    @input="handleCPFInput(field.name, $event.target.value)"
                     persistent-hint
                     variant="outlined"
                     prepend-inner-icon="mdi-card-account-details"
@@ -243,7 +243,7 @@
                     :required="field.required"
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
-                    v-mask="'##.###.###/####-##'"
+                    @input="handleCNPJInput(field.name, $event.target.value)"
                     persistent-hint
                     variant="outlined"
                     prepend-inner-icon="mdi-domain"
@@ -270,14 +270,14 @@
                     v-else-if="field.type === 'CURRENCY'"
                     v-model="formData[field.name]"
                     :label="field.label"
-                    :placeholder="field.placeholder"
+                    :placeholder="field.placeholder || 'R$ 0,00'"
                     :required="field.required"
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
+                    @input="handleCurrencyInput(field.name, $event.target.value)"
                     persistent-hint
                     variant="outlined"
                     prepend-inner-icon="mdi-currency-usd"
-                    prefix="R$"
                     class="mb-3"
                   />
 
@@ -555,6 +555,11 @@ import { useProcessStore } from '@/stores/processes'
 import { useProcessTypeStore } from '@/stores/processTypes'
 import { useAuthStore } from '@/stores/auth'
 import DynamicTableInput from '@/components/DynamicTableInput.vue'
+import { 
+  formatCPF, formatCNPJ, formatCurrency, 
+  unformatCPF, unformatCNPJ, unformatCurrency,
+  validateCPF, validateCNPJ, validateEmail, validateNumber, validatePhone
+} from '@/utils/formatters'
 
 const router = useRouter()
 const route = useRoute()
@@ -756,24 +761,28 @@ function getFieldRules(field) {
     })
   }
 
-
+  // Validações específicas por tipo
   switch (field.type) {
     case 'EMAIL':
-      rules.push(v => !v || /.+@.+\..+/.test(v) || 'E-mail inválido')
+      rules.push(v => validateEmail(v) || 'E-mail inválido')
       break
     case 'CPF':
-      rules.push(v => !v || /^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(v) || 'CPF inválido')
+      rules.push(v => validateCPF(v) || 'CPF inválido')
       break
     case 'CNPJ':
-      rules.push(v => !v || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'CNPJ inválido')
+      rules.push(v => validateCNPJ(v) || 'CNPJ inválido')
+      break
+    case 'NUMBER':
+      rules.push(v => !v || validateNumber(v) || 'Apenas números são permitidos')
+      break
+    case 'CURRENCY':
+      rules.push(v => !v || /^R\$\s?[\d.,]+$/.test(v) || 'Valor monetário inválido')
       break
     case 'PHONE':
-      // Aceita formato com máscara (XX) XXXXX-XXXX ou apenas números (10-11 dígitos)
-      rules.push(v => {
-        if (!v) return true
-        const digits = v.replace(/\D/g, '')
-        return (digits.length >= 10 && digits.length <= 11) || 'Telefone deve ter 10 ou 11 dígitos'
-      })
+      rules.push(v => validatePhone(v) || 'Telefone inválido')
+      break
+    case 'DATE':
+      rules.push(v => !v || !isNaN(Date.parse(v)) || 'Data inválida')
       break
   }
 
@@ -1050,6 +1059,19 @@ watch(() => preselectedType.value, async (newTypeId) => {
     }
   }
 }, { immediate: true })
+
+// Métodos de formatação para campos
+function handleCPFInput(fieldName, value) {
+  formData.value[fieldName] = formatCPF(value)
+}
+
+function handleCNPJInput(fieldName, value) {
+  formData.value[fieldName] = formatCNPJ(value)
+}
+
+function handleCurrencyInput(fieldName, value) {
+  formData.value[fieldName] = formatCurrency(value)
+}
 
 // Lifecycle (mantido)
 onMounted(async () => {
