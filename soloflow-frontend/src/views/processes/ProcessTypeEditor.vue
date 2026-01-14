@@ -1583,11 +1583,6 @@ async function save() {
       })
     }
 
-    // Debug: verificar formData antes do mapeamento
-    console.log('🔍 formData.formFields BEFORE mapping:', JSON.stringify(formData.value.formFields.filter(f => f.type === 'TABLE'), null, 2))
-    
-    console.log('📤 Saving payload:', payload)
-    console.log('📤 FormFields with TABLE:', JSON.stringify(payload.formFields.filter(f => f.type === 'TABLE'), null, 2))
 
     if (isEditing.value) {
       await processTypeStore.updateProcessType(formData.value.id, payload)
