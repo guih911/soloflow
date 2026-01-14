@@ -5,11 +5,11 @@
       <div class="d-flex align-center justify-space-between">
         <div class="header-content">
           <h1 class="text-h3 font-weight-bold mb-2 text-primary">
-            <v-icon size="40" class="mr-3" color="primary">mdi-workflow</v-icon>
+       
             Iniciar Novo Processo
           </h1>
           <p class="text-h6 text-medium-emphasis">
-            Escolha um dos tipos de processo disponíveis para começar seu workflow
+            Escolha um dos tipos de processo disponíveis para começar o seu processo
           </p>
         </div>
 

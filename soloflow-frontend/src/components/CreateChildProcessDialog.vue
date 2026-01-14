@@ -233,6 +233,8 @@
                 v-model="formData[field.name]"
                 :label="field.label"
                 :items="field.options || []"
+                item-title="label"
+                item-value="value"
                 :required="field.required"
                 :rules="field.required ? [rules.required] : []"
                 :hint="field.helpText"
@@ -283,20 +285,6 @@
               />
             </div>
           </div>
-
-          <!-- Herdar dados -->
-          <v-divider class="mb-4" />
-          <v-checkbox
-            v-model="form.inheritData"
-            label="Copiar dados do processo pai"
-            color="primary"
-            density="comfortable"
-            hide-details
-            class="mb-2"
-          />
-          <p class="text-caption text-grey mb-4 ml-8">
-            Os campos em comum serão preenchidos automaticamente com os dados do processo pai.
-          </p>
         </v-form>
       </v-card-text>
 
@@ -365,8 +353,7 @@ const formData = ref({}) // Dados dos campos do formulário
 const form = ref({
   childProcessTypeId: null,
   title: '',
-  description: '',
-  inheritData: true
+  description: ''
 })
 
 // Tipo de processo selecionado
@@ -408,24 +395,18 @@ function getAcceptedFileTypes(field) {
     .join(',')
 }
 
-// Quando mudar o tipo de processo, resetar formData e preencher com dados do pai se habilitado
+// Quando mudar o tipo de processo, resetar formData e aplicar valores padrão
 function onProcessTypeChange(typeId) {
   formData.value = {}
 
-  if (form.value.inheritData && props.parentProcess?.formData) {
-    // Copiar dados do pai que sejam compatíveis
-    const parentData = props.parentProcess.formData
-    const selectedType = availableProcessTypes.value.find(pt => pt.id === typeId)
+  const selectedType = availableProcessTypes.value.find(pt => pt.id === typeId)
 
-    if (selectedType?.formFields) {
-      selectedType.formFields.forEach(field => {
-        if (parentData[field.name] !== undefined) {
-          formData.value[field.name] = parentData[field.name]
-        } else if (field.defaultValue) {
-          formData.value[field.name] = field.defaultValue
-        }
-      })
-    }
+  if (selectedType?.formFields) {
+    selectedType.formFields.forEach(field => {
+      if (field.defaultValue) {
+        formData.value[field.name] = field.defaultValue
+      }
+    })
   }
 }
 
@@ -444,13 +425,15 @@ async function loadProcessTypes() {
     const uniqueTypesMap = new Map()
     data.forEach(pt => {
       if (pt.isActive && !uniqueTypesMap.has(pt.id)) {
-        // Se houver tipos permitidos configurados, filtrar por eles
-        // Se não houver configuração, mostrar todos (comportamento anterior)
-        if (allowedChildTypes.length === 0 || allowedChildTypes.includes(pt.id)) {
+        // SEMPRE verificar se está na lista de permitidos
+        // Se a lista estiver vazia, nenhum tipo deve aparecer
+        if (allowedChildTypes.length > 0 && allowedChildTypes.includes(pt.id)) {
           uniqueTypesMap.set(pt.id, pt)
         }
       }
     })
+
+    console.log('Tipos disponíveis após filtro:', Array.from(uniqueTypesMap.values()).map(pt => pt.name))
 
     availableProcessTypes.value = Array.from(uniqueTypesMap.values())
   } catch (err) {
@@ -460,13 +443,6 @@ async function loadProcessTypes() {
   }
 }
 
-// Watch para copiar dados quando mudar a opção inheritData
-watch(() => form.value.inheritData, (inherit) => {
-  if (inherit && props.parentProcess?.formData && form.value.childProcessTypeId) {
-    onProcessTypeChange(form.value.childProcessTypeId)
-  }
-})
-
 // Limpar formulário quando abrir/fechar
 watch(() => props.modelValue, (newVal) => {
   if (newVal) {
@@ -475,8 +451,7 @@ watch(() => props.modelValue, (newVal) => {
     form.value = {
       childProcessTypeId: null,
       title: '',
-      description: '',
-      inheritData: true
+      description: ''
     }
     formData.value = {}
     formValid.value = false
@@ -521,32 +496,13 @@ async function handleCreate() {
       }
     })
 
-    // Mesclar formData preenchido com dados herdados do pai (sem arquivos)
-    let finalFormData = { ...regularFormData }
-
-    if (form.value.inheritData && props.parentProcess.formData) {
-      // Dados do pai como base, sobrescritos pelos dados preenchidos
-      // Excluir campos de arquivo do pai
-      const parentDataWithoutFiles = {}
-      Object.entries(props.parentProcess.formData).forEach(([key, value]) => {
-        if (!fileFieldNames.includes(key) && !Array.isArray(value)) {
-          parentDataWithoutFiles[key] = value
-        }
-      })
-
-      finalFormData = {
-        ...parentDataWithoutFiles,
-        ...regularFormData
-      }
-    }
-
     // Preparar dados para criar
     const createData = {
       parentProcessInstanceId: props.parentProcess.id,
       childProcessTypeId: form.value.childProcessTypeId,
       title: form.value.title || undefined,
       description: form.value.description || undefined,
-      formData: finalFormData
+      formData: regularFormData
     }
 
     const result = await childProcessStore.createChildProcess(createData)

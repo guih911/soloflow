@@ -302,14 +302,6 @@
             <v-divider />
 
             <v-card-text>
-              <v-alert type="info" variant="tonal" density="comfortable" class="mb-4" icon="mdi-information">
-                <template v-slot:title>
-                  <span class="font-weight-bold">Como funciona?</span>
-                </template>
-                Selecione os tipos de processo que podem ser criados como sub-processos deste tipo.
-                Quando um processo deste tipo estiver em execução, o usuário poderá criar sub-processos apenas dos tipos selecionados aqui.
-              </v-alert>
-
               <v-select
                 v-model="formData.allowedChildProcessTypes"
                 :items="availableProcessTypesForChild"
@@ -1028,7 +1020,10 @@ const availableProcessTypesForChild = computed(() => {
     // Não mostrar o próprio tipo de processo
     if (isEditing.value && pt.id === formData.value.id) return false
     // Apenas tipos ativos
-    return pt.isActive
+    if (!pt.isActive) return false
+    // Apenas tipos que são "Somente Subprocesso"
+    if (pt.isChildProcessOnly !== true) return false
+    return true
   })
 })
 

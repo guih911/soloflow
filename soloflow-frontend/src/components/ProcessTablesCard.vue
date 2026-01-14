@@ -167,6 +167,14 @@ function formatCellValue(value, type) {
   const normalizedType = type?.toString().toUpperCase()
 
   switch (normalizedType) {
+    case 'DROPDOWN':
+    case 'SELECT':
+      // Se for um objeto, tentar pegar a propriedade 'label'
+      if (typeof value === 'object' && value !== null) {
+        return value.label || value.value || JSON.stringify(value)
+      }
+      return value
+
     case 'DATE':
     case 'DATA':
       try {

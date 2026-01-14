@@ -110,6 +110,25 @@
               </v-icon>
               <span class="mr-2">{{ processType.name }}</span>
 
+              <!-- Badge de Somente Subprocesso -->
+              <v-tooltip v-if="processType.isChildProcessOnly" location="top">
+                <template v-slot:activator="{ props }">
+                  <v-chip
+                    v-bind="props"
+                    size="x-small"
+                    color="orange"
+                    variant="flat"
+                    class="mr-1"
+                  >
+                    <v-icon start size="12">mdi-lock</v-icon>
+                    Apenas Sub
+                  </v-chip>
+                </template>
+                <span>
+                  Este tipo só pode ser usado como subprocesso
+                </span>
+              </v-tooltip>
+
               <!-- Badge de Sub-Processo -->
               <v-tooltip v-if="processType.isSubProcess" location="top">
                 <template v-slot:activator="{ props }">
