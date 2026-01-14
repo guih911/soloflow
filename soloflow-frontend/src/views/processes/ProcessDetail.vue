@@ -661,7 +661,14 @@ const childProcesses = computed(() => childProcessStore.childProcesses)
 
 // Computed para verificar se o tipo de processo permite subprocessos
 const allowSubProcesses = computed(() => {
-  return process.value?.processType?.allowSubProcesses !== false
+  // Verificar se o tipo de processo permite subprocessos
+  if (process.value?.processType?.allowSubProcesses === false) return false
+  
+  // Verificar se há tipos de processo filho configurados
+  const hasAllowedChildTypes = Array.isArray(process.value?.processType?.allowedChildProcessTypes) &&
+                                process.value.processType.allowedChildProcessTypes.length > 0
+  
+  return hasAllowedChildTypes
 })
 
 // Computed para verificar se o tipo de processo permite subtarefas
