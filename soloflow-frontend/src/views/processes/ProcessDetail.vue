@@ -455,6 +455,7 @@
                     :key="`subtasks-${execution.id}-${subTasksReloadKey}`"
                     :step-execution-id="execution.id"
                     :step-status="execution.status"
+                    :can-user-manage="canExecuteStep(execution)"
                     :users="stepUsers"
                     @updated="refreshProcess"
                     @create="openCreateSubTaskDialog(execution)"

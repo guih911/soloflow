@@ -268,6 +268,10 @@ const props = defineProps({
     type: String,
     default: 'PENDING'
   },
+  canUserManage: {
+    type: Boolean,
+    default: false
+  },
   users: {
     type: Array,
     default: () => []
@@ -320,9 +324,15 @@ const hasRequiredPendingSubTasks = computed(() => {
 })
 
 const canCreateSubTask = computed(() => {
+  // Só pode criar se a etapa está em progresso
   if (props.stepStatus !== 'IN_PROGRESS') return false
+  
+  // Só pode criar se o usuário tem permissão para gerenciar a etapa
+  if (!props.canUserManage) return false
+  
   // Bloquear criação se houver sub-tarefas obrigatórias pendentes
   if (hasRequiredPendingSubTasks.value) return false
+  
   return true
 })
 
