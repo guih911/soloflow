@@ -373,6 +373,10 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
           helpText: field.helpText?.trim() || null,
           options: Array.isArray(field.options) ? field.options : [],
           validations: typeof field.validations === 'object' ? field.validations : {},
+          // Campos específicos para tipo TABLE
+          tableColumns: field.type === 'TABLE' && Array.isArray(field.tableColumns) ? field.tableColumns : undefined,
+          minRows: field.type === 'TABLE' ? (field.minRows || 0) : undefined,
+          maxRows: field.type === 'TABLE' ? (field.maxRows || null) : undefined
         }))
       }
       
@@ -487,7 +491,11 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
           defaultValue: field.defaultValue?.trim() || null,
           helpText: field.helpText?.trim() || null,
           options: Array.isArray(field.options) ? field.options : [],
-          validations: typeof field.validations === 'object' ? field.validations : {}
+          validations: typeof field.validations === 'object' ? field.validations : {},
+          // Campos específicos para tipo TABLE
+          tableColumns: field.type === 'TABLE' && Array.isArray(field.tableColumns) ? field.tableColumns : undefined,
+          minRows: field.type === 'TABLE' ? (field.minRows || 0) : undefined,
+          maxRows: field.type === 'TABLE' ? (field.maxRows || null) : undefined
         }))
       }
 

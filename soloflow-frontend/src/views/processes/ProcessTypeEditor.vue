@@ -508,6 +508,172 @@
                   </v-card>
                 </div>
               </v-col>
+
+              <!-- Configuração de Colunas para Tabela -->
+              <v-col v-if="fieldData.type === 'TABLE'" cols="12">
+                <v-divider class="my-4" />
+                <div class="d-flex align-center justify-space-between mb-4">
+                  <div>
+                    <h4 class="text-h6 mb-1">
+                      <v-icon start color="indigo">mdi-table</v-icon>
+                      Configuração da Tabela
+                    </h4>
+                    <p class="text-caption text-medium-emphasis">
+                      Configure até 5 colunas para a tabela dinâmica
+                    </p>
+                  </div>
+                  <v-btn
+                    color="indigo"
+                    size="small"
+                    prepend-icon="mdi-table-column-plus-after"
+                    variant="elevated"
+                    :disabled="fieldData.tableColumns && fieldData.tableColumns.length >= 5"
+                    @click="addTableColumn"
+                  >
+                    Adicionar Coluna
+                  </v-btn>
+                </div>
+
+                <!-- Indicador de colunas -->
+                <v-chip 
+                  v-if="fieldData.tableColumns && fieldData.tableColumns.length > 0"
+                  size="small" 
+                  color="indigo" 
+                  variant="tonal"
+                  class="mb-3"
+                >
+                  {{ fieldData.tableColumns.length }}/5 colunas configuradas
+                </v-chip>
+
+                <v-alert v-if="!fieldData.tableColumns || fieldData.tableColumns.length === 0"
+                  type="info"
+                  variant="tonal"
+                  density="compact"
+                  class="mb-3"
+                  icon="mdi-information"
+                >
+                  Clique em "Adicionar Coluna" para configurar as colunas da tabela (máximo 5)
+                </v-alert>
+
+                <div v-if="fieldData.tableColumns && fieldData.tableColumns.length > 0" class="table-columns-container">
+                  <v-card
+                    v-for="(column, idx) in fieldData.tableColumns"
+                    :key="idx"
+                    variant="flat"
+                    class="mb-3 pa-4 column-card"
+                  >
+                    <div class="d-flex align-center mb-3">
+                      <v-avatar color="indigo" size="32" class="mr-3">
+                        <span class="text-body-2 font-weight-bold text-white">{{ idx + 1 }}</span>
+                      </v-avatar>
+                      <span class="text-subtitle-1 font-weight-medium">Coluna {{ idx + 1 }}</span>
+                      <v-spacer />
+                      <v-btn
+                        icon="mdi-arrow-up"
+                        size="small"
+                        variant="text"
+                        :disabled="idx === 0"
+                        @click="moveTableColumn(idx, -1)"
+                        title="Mover para cima"
+                      />
+                      <v-btn
+                        icon="mdi-arrow-down"
+                        size="small"
+                        variant="text"
+                        :disabled="idx === fieldData.tableColumns.length - 1"
+                        @click="moveTableColumn(idx, 1)"
+                        title="Mover para baixo"
+                      />
+                      <v-btn
+                        icon="mdi-delete"
+                        size="small"
+                        color="error"
+                        variant="text"
+                        @click="removeTableColumn(idx)"
+                        title="Remover coluna"
+                      />
+                    </div>
+                    <v-row dense>
+                      <v-col cols="12" md="4">
+                        <v-text-field
+                          v-model="column.label"
+                          label="Nome da Coluna *"
+                          placeholder="Ex: Produto, Quantidade..."
+                          density="comfortable"
+                          variant="outlined"
+                          hide-details="auto"
+                          :rules="[v => !!v?.trim() || 'Nome é obrigatório']"
+                          prepend-inner-icon="mdi-format-text"
+                        />
+                      </v-col>
+                      <v-col cols="12" md="4">
+                        <v-select
+                          v-model="column.type"
+                          :items="tableColumnTypes"
+                          label="Tipo *"
+                          density="comfortable"
+                          variant="outlined"
+                          hide-details="auto"
+                          prepend-inner-icon="mdi-format-list-bulleted-type"
+                        />
+                      </v-col>
+                      <v-col cols="12" md="4">
+                        <v-switch
+                          v-model="column.required"
+                          label="Obrigatório"
+                          density="comfortable"
+                          hide-details
+                          color="indigo"
+                          class="mt-1"
+                        />
+                      </v-col>
+                    </v-row>
+                  </v-card>
+                </div>
+
+                <v-alert 
+                  v-if="fieldData.tableColumns && fieldData.tableColumns.length >= 5"
+                  type="warning"
+                  variant="tonal"
+                  density="compact"
+                  class="mt-3"
+                  icon="mdi-alert"
+                >
+                  Limite máximo de 5 colunas atingido
+                </v-alert>
+
+                <v-divider class="my-4" />
+                <v-row>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      v-model.number="fieldData.minRows"
+                      label="Mínimo de linhas"
+                      type="number"
+                      min="0"
+                      max="50"
+                      density="comfortable"
+                      variant="outlined"
+                      hint="0 = sem mínimo"
+                      persistent-hint
+                      prepend-inner-icon="mdi-table-row"
+                    />
+                  </v-col>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      v-model.number="fieldData.maxRows"
+                      label="Máximo de linhas"
+                      type="number"
+                      min="1"
+                      max="100"
+                      density="comfortable"
+                      variant="outlined"
+                      hint="Deixe vazio para ilimitado"
+                      persistent-hint
+                      prepend-inner-icon="mdi-table-row-plus-after"
+                    />
+                  </v-col>
+                </v-row>
+              </v-col>
             </v-row>
           </v-card-text>
 
@@ -912,12 +1078,13 @@ const fieldTypes = [
   { title: 'Lista Suspensa', value: 'DROPDOWN' },
   { title: 'Área de Texto', value: 'TEXTAREA' },
   { title: 'Moeda', value: 'CURRENCY' },
-  { title: 'Arquivo', value: 'FILE' }
+  { title: 'Arquivo', value: 'FILE' },
+  { title: 'Tabela', value: 'TABLE' }
   // CHECKBOX removido - usar DROPDOWN para múltiplas opções
 ]
 
 function getFieldTypeColor(type) {
-  const colors = { TEXT: 'blue', NUMBER: 'green', DATE: 'orange', EMAIL: 'purple', DROPDOWN: 'teal', FILE: 'red' }
+  const colors = { TEXT: 'blue', NUMBER: 'green', DATE: 'orange', EMAIL: 'purple', DROPDOWN: 'teal', FILE: 'red', TABLE: 'indigo' }
   return colors[type] || 'grey'
 }
 
@@ -933,7 +1100,8 @@ function getFieldTypeIcon(type) {
     DROPDOWN: 'mdi-menu-down',
     TEXTAREA: 'mdi-text-long',
     CURRENCY: 'mdi-currency-brl',
-    FILE: 'mdi-paperclip'
+    FILE: 'mdi-paperclip',
+    TABLE: 'mdi-table'
   }
   return icons[type] || 'mdi-help-circle'
 }
@@ -1121,7 +1289,12 @@ function addField() {
 function editField(index) {
   const field = formData.value.formFields[index]
   editingFieldIndex.value = index
-  fieldData.value = { ...field }
+  fieldData.value = { 
+    ...field,
+    tableColumns: field.tableColumns || [],
+    minRows: field.minRows || 0,
+    maxRows: field.maxRows || null
+  }
   fieldDialog.value = true
 }
 
@@ -1140,7 +1313,10 @@ function resetFieldData() {
     defaultValue: '', 
     helpText: '', 
     options: [], 
-    validations: {} 
+    validations: {},
+    tableColumns: [],
+    minRows: 0,
+    maxRows: null
   }
 }
 
@@ -1159,6 +1335,50 @@ function addDropdownOption() {
 
 function removeDropdownOption(index) {
   fieldData.value.options.splice(index, 1)
+}
+
+// Tipos de coluna para tabela (apenas 4 tipos: Texto, Número, Dinheiro, Data)
+const tableColumnTypes = [
+  { title: 'Texto', value: 'TEXT' },
+  { title: 'Número', value: 'NUMBER' },
+  { title: 'Dinheiro', value: 'CURRENCY' },
+  { title: 'Data', value: 'DATE' }
+]
+
+// Table columns management (máximo 5 colunas)
+function addTableColumn() {
+  if (!fieldData.value.tableColumns) {
+    fieldData.value.tableColumns = []
+  }
+  
+  // Limitar a 5 colunas
+  if (fieldData.value.tableColumns.length >= 5) {
+    window.showSnackbar?.('Máximo de 5 colunas permitidas', 'warning')
+    return
+  }
+  
+  // Gerar nome único baseado no índice
+  const columnIndex = fieldData.value.tableColumns.length + 1
+  fieldData.value.tableColumns.push({
+    name: `coluna_${columnIndex}`,
+    label: '',
+    type: 'TEXT',
+    required: false
+  })
+}
+
+function removeTableColumn(index) {
+  fieldData.value.tableColumns.splice(index, 1)
+}
+
+function moveTableColumn(index, direction) {
+  const newIndex = index + direction
+  if (newIndex < 0 || newIndex >= fieldData.value.tableColumns.length) return
+  
+  const columns = [...fieldData.value.tableColumns]
+  const [removed] = columns.splice(index, 1)
+  columns.splice(newIndex, 0, removed)
+  fieldData.value.tableColumns = columns
 }
 
 function saveField() {
@@ -1182,6 +1402,51 @@ function saveField() {
     }
   }
 
+  // Validar colunas para TABLE
+  if (fieldData.value.type === 'TABLE') {
+    if (!fieldData.value.tableColumns || fieldData.value.tableColumns.length === 0) {
+      window.showSnackbar?.('Adicione pelo menos uma coluna para a tabela', 'error')
+      return
+    }
+
+    // Validar se todas as colunas têm label (nome visível)
+    const hasEmptyLabels = fieldData.value.tableColumns.some(col => !col.label?.trim())
+    if (hasEmptyLabels) {
+      window.showSnackbar?.('Todas as colunas devem ter um nome preenchido', 'error')
+      return
+    }
+
+    // Gerar names automáticos baseados no label (para uso interno)
+    fieldData.value.tableColumns.forEach((col, idx) => {
+      if (!col.name || col.name.startsWith('coluna_')) {
+        // Converter label para snake_case
+        col.name = col.label.trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_|_$/g, '')
+          || `coluna_${idx + 1}`
+      }
+    })
+
+    // Validar nomes únicos
+    const names = fieldData.value.tableColumns.map(col => col.name.trim().toLowerCase())
+    if (new Set(names).size !== names.length) {
+      // Se houver duplicatas, adicionar sufixo numérico
+      const usedNames = new Set()
+      fieldData.value.tableColumns.forEach(col => {
+        let baseName = col.name
+        let counter = 1
+        while (usedNames.has(col.name)) {
+          col.name = `${baseName}_${counter}`
+          counter++
+        }
+        usedNames.add(col.name)
+      })
+    }
+  }
+
   const isEditingField = editingFieldIndex.value !== null
 
   const field = {
@@ -1195,8 +1460,14 @@ function saveField() {
     tempId: isEditingField ? formData.value.formFields[editingFieldIndex.value].tempId : Date.now() + Math.random(),
     order: isEditingField ? formData.value.formFields[editingFieldIndex.value].order : (formData.value.formFields.length + 1),
     options: fieldData.value.options || [],
-    validations: fieldData.value.validations || {}
+    validations: fieldData.value.validations || {},
+    tableColumns: fieldData.value.tableColumns || [],
+    minRows: fieldData.value.minRows || 0,
+    maxRows: fieldData.value.maxRows || null
   }
+  
+  console.log('💾 Saving field to formData:', field)
+  console.log('💾 tableColumns being saved:', field.tableColumns)
   
   if (isEditingField) {
     formData.value.formFields[editingFieldIndex.value] = field
@@ -1277,7 +1548,13 @@ async function save() {
       allowSubTasks: formData.value.allowSubTasks ?? true,
       companyId: authStore.activeCompanyId,
       allowedChildProcessTypes: formData.value.allowedChildProcessTypes || [],
-      formFields: formData.value.formFields.map((f, idx) => ({ ...f, order: f.order ?? (idx + 1) })),
+      formFields: formData.value.formFields.map((f, idx) => ({
+        ...f,
+        order: f.order ?? (idx + 1),
+        tableColumns: f.type === 'TABLE' ? (f.tableColumns || []) : undefined,
+        minRows: f.type === 'TABLE' ? (f.minRows || 0) : undefined,
+        maxRows: f.type === 'TABLE' ? (f.maxRows || null) : undefined
+      })),
       steps: formData.value.steps.map((s, idx) => {
         const stepPayload = { ...s }
         
@@ -1306,7 +1583,11 @@ async function save() {
       })
     }
 
-    console.log('Saving payload:', payload)
+    // Debug: verificar formData antes do mapeamento
+    console.log('🔍 formData.formFields BEFORE mapping:', JSON.stringify(formData.value.formFields.filter(f => f.type === 'TABLE'), null, 2))
+    
+    console.log('📤 Saving payload:', payload)
+    console.log('📤 FormFields with TABLE:', JSON.stringify(payload.formFields.filter(f => f.type === 'TABLE'), null, 2))
 
     if (isEditing.value) {
       await processTypeStore.updateProcessType(formData.value.id, payload)
@@ -1447,6 +1728,9 @@ onMounted(async () => {
     if (isEditing.value) {
       await processTypeStore.fetchProcessType(route.params.id)
       const current = processTypeStore.currentProcessType
+      console.log('📥 Loaded process type:', current)
+      console.log('📥 FormFields loaded:', current?.formFields)
+      console.log('📥 TABLE fields loaded:', current?.formFields?.filter(f => f.type === 'TABLE'))
       if (current) {
         formData.value = {
           id: current.id,
@@ -1554,5 +1838,12 @@ onMounted(async () => {
   text-transform: none !important;
   font-weight: 500 !important;
   letter-spacing: normal !important;
+}
+
+/* Estilo para cards de coluna da tabela */
+.column-card {
+  background: #f8f9fa !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px !important;
 }
 </style>

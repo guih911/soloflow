@@ -232,6 +232,9 @@
           </v-list>
         </v-card>
 
+        <!-- Card de Tabelas Informadas -->
+        <ProcessTablesCard v-if="process" :process="process" class="mt-4" />
+
         <!-- Seção de Sub-Processos -->
         <v-card v-if="allowSubProcesses && childProcesses.length > 0" class="mt-4">
           <v-card-title>
@@ -565,6 +568,7 @@ import CreateChildProcessDialog from '@/components/CreateChildProcessDialog.vue'
 import SubTasksList from '@/components/SubTasksList.vue'
 import CreateSubTaskDialog from '@/components/CreateSubTaskDialog.vue'
 import StepExecutionDetailDialog from '@/components/StepExecutionDetailDialog.vue'
+import ProcessTablesCard from '@/components/ProcessTablesCard.vue'
 import { useChildProcessStore } from '@/stores/childProcesses'
 import { useSubTaskStore } from '@/stores/subTasks'
 
@@ -691,6 +695,9 @@ const formattedFormData = computed(() => {
 
     // Pular campos de arquivo (serão mostrados separadamente)
     if (field.type === 'FILE') return
+
+    // Pular campos de tabela (serão mostrados pelo ProcessTablesCard)
+    if (field.type === 'TABLE') return
 
     if (value !== null && value !== undefined && value !== '') {
       // Formatar data para PT-BR (dia/mês/ano)

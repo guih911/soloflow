@@ -54,6 +54,9 @@ interface FormField {
   validations?: any;
   defaultValue?: string | null;
   helpText?: string | null;
+  tableColumns?: any[];
+  minRows?: number;
+  maxRows?: number | null;
 }
 
 @Injectable()
@@ -211,6 +214,9 @@ export class ProcessTypesService {
                 validations: field.validations ? JSON.stringify(field.validations) : undefined,
                 defaultValue: field.defaultValue || undefined,
                 helpText: field.helpText || undefined,
+                tableColumns: field.tableColumns ? JSON.stringify(field.tableColumns) : undefined,
+                minRows: field.minRows || undefined,
+                maxRows: field.maxRows || undefined,
                 processTypeVersionId: version.id,
               },
             });
@@ -363,7 +369,12 @@ export class ProcessTypesService {
 
   // IMPLEMENTAÇÃO DO VERSIONAMENTO NO UPDATE
   async update(id: string, dto: UpdateProcessTypeWithVersioningDto): Promise<ProcessType> {
-    console.log('Updating process type with versioning:', id, dto);
+    console.log('Updating process type with versioning:', id);
+    console.log('📥 DTO formFields:', JSON.stringify(dto.formFields, null, 2));
+    
+    // Log específico para campos TABLE
+    const tableFields = dto.formFields?.filter(f => f.type === 'TABLE') || [];
+    console.log('📊 TABLE fields received:', JSON.stringify(tableFields, null, 2));
 
     // Se está apenas atualizando campos simples sem steps/formFields, usar updateBasic
     const isSimpleUpdate = !dto.steps && !dto.formFields && (
@@ -451,6 +462,9 @@ export class ProcessTypesService {
             validations: existingField.validations,
             defaultValue: existingField.defaultValue,
             helpText: existingField.helpText,
+            tableColumns: existingField.tableColumns,
+            minRows: existingField.minRows,
+            maxRows: existingField.maxRows,
           }));
         }
         
@@ -469,6 +483,9 @@ export class ProcessTypesService {
                 validations: field.validations ? JSON.stringify(field.validations) : undefined,
                 defaultValue: field.defaultValue || undefined,
                 helpText: field.helpText || undefined,
+                tableColumns: field.tableColumns ? JSON.stringify(field.tableColumns) : undefined,
+                minRows: field.minRows || undefined,
+                maxRows: field.maxRows || undefined,
                 processTypeVersionId: newVersion.id,
               },
             });
@@ -743,6 +760,9 @@ export class ProcessTypesService {
           validations: dto.validations ? JSON.stringify(dto.validations) : undefined,
           defaultValue: dto.defaultValue || undefined,
           helpText: dto.helpText || undefined,
+          tableColumns: dto.tableColumns ? JSON.stringify(dto.tableColumns) : undefined,
+          minRows: dto.minRows || undefined,
+          maxRows: dto.maxRows || undefined,
           processTypeVersionId: version.id,
         },
       });
@@ -1046,6 +1066,15 @@ export class ProcessTypesService {
       parsedValidations = fieldVersion.validations;
     }
 
+    let parsedTableColumns = fieldVersion.tableColumns;
+    try {
+      if (fieldVersion.tableColumns && typeof fieldVersion.tableColumns === 'string') {
+        parsedTableColumns = JSON.parse(fieldVersion.tableColumns);
+      }
+    } catch (e) {
+      parsedTableColumns = fieldVersion.tableColumns;
+    }
+
     return {
       id: fieldVersion.id,
       name: fieldVersion.name,
@@ -1058,6 +1087,9 @@ export class ProcessTypesService {
       validations: parsedValidations,
       defaultValue: fieldVersion.defaultValue,
       helpText: fieldVersion.helpText,
+      tableColumns: parsedTableColumns || [],
+      minRows: fieldVersion.minRows || 0,
+      maxRows: fieldVersion.maxRows || null,
     };
   }
 

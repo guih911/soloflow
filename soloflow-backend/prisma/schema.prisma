@@ -191,6 +191,9 @@ model FormFieldVersion {
   validations          Json?
   defaultValue         String?
   helpText             String?
+  tableColumns         Json?              // Colunas para campos do tipo TABLE
+  minRows              Int?               // Mínimo de linhas para tabela
+  maxRows              Int?               // Máximo de linhas para tabela
   createdAt            DateTime           @default(now())
   processTypeVersionId String
   processTypeVersion   ProcessTypeVersion @relation(fields: [processTypeVersionId], references: [id], onDelete: Cascade)
@@ -486,6 +489,7 @@ enum FieldType {
   TEXTAREA
   CURRENCY
   FILE
+  TABLE
 }
 
 enum AssignmentType {

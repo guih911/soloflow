@@ -333,6 +333,17 @@
                     </small>
                   </div>
 
+                  <!-- Campo de Tabela Dinâmica -->
+                  <div
+                    v-else-if="field.type?.toString().toUpperCase() === 'TABLE'"
+                    class="table-field-container mb-4"
+                  >
+                    <DynamicTableInput
+                      :field="field"
+                      v-model="formData[field.name]"
+                    />
+                  </div>
+
                   <!-- Campo de arquivo - Design Profissional -->
                   <div
                     v-else-if="field.type?.toString().toUpperCase() === 'FILE'"
@@ -543,6 +554,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
 import { useProcessTypeStore } from '@/stores/processTypes'
 import { useAuthStore } from '@/stores/auth'
+import DynamicTableInput from '@/components/DynamicTableInput.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -725,6 +737,7 @@ function getFieldCols(field) {
   switch (field.type) {
     case 'TEXTAREA':
     case 'FILE':
+    case 'TABLE':
       return 12  // Largura completa (uma linha inteira)
     default:
       return 4  // 3 campos por linha em desktop

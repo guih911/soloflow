@@ -1,6 +1,21 @@
 import { IsString, IsEnum, IsBoolean, IsOptional, IsInt, IsArray, IsObject, Min, Length } from 'class-validator';
 import { FieldType } from '@prisma/client';
 
+export class TableColumnDto {
+  @IsString()
+  name: string;
+
+  @IsString()
+  label: string;
+
+  @IsString()
+  type: string; // TEXT, NUMBER, CURRENCY, DATE
+
+  @IsBoolean()
+  @IsOptional()
+  required?: boolean;
+}
+
 export class CreateFormFieldDto {
   @IsString()
   @Length(1, 50)
@@ -46,4 +61,19 @@ export class CreateFormFieldDto {
   @IsOptional()
   @IsString()
   helpText?: string;
+
+  // Campos para tipo TABLE
+  @IsOptional()
+  @IsArray()
+  tableColumns?: TableColumnDto[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  minRows?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxRows?: number;
 }

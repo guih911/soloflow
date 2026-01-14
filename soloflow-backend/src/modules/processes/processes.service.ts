@@ -740,7 +740,24 @@ export class ProcessesService {
         ...process.processTypeVersion.processType,
         allowedChildProcessTypes: allowedChildProcessTypes || [],
         steps: process.processTypeVersion.steps,
-        formFields: process.processTypeVersion.formFields,
+        formFields: process.processTypeVersion.formFields.map(field => {
+          // Parse tableColumns se for string JSON
+          let tableColumns = field.tableColumns;
+          try {
+            if (tableColumns && typeof tableColumns === 'string') {
+              tableColumns = JSON.parse(tableColumns);
+            }
+          } catch (e) {
+            tableColumns = [];
+          }
+          
+          return {
+            ...field,
+            tableColumns: tableColumns || [],
+            minRows: field.minRows || 0,
+            maxRows: field.maxRows || null,
+          };
+        }),
       },
       stepExecutions: process.stepExecutions.map(se => {
         const userAssignment = se.stepVersion.assignments?.find(a => a.type === 'USER');
