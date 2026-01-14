@@ -32,30 +32,29 @@
             <th class="text-center column-index" style="width: 60px;">#</th>
             <th 
               v-for="column in columns" 
-              :key="column.name"
+              :key="column.key"
               class="text-left column-header"
             >
-              {{ column.label || column.name }}
+              {{ column.label || column.key }}
               <span v-if="column.required" class="text-error">*</span>
             </th>
             <th class="text-center column-actions" style="width: 80px;">Ações</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, rowIndex) in rows" :key="rowIndex" class="table-row">
+          <tr v-for="(row, rowIndex) in rows" :key="row._id" class="table-row">
             <td class="text-center">
               <v-chip size="x-small" color="indigo" variant="flat">
                 {{ rowIndex + 1 }}
               </v-chip>
             </td>
-            <td v-for="column in columns" :key="`${rowIndex}-${column.name}`" class="pa-2">
-              <!-- Debug: mostrar tipo da coluna -->
-              <!-- {{ column.type }} -->
-              
+            <td v-for="column in columns" :key="`${row._id}-${column.key}`" class="pa-2">
               <!-- TEXT ou fallback -->
               <v-text-field
-                v-if="column.type === 'TEXT' || column.type === 'Texto' || !column.type"
-                v-model="row[column.name]"
+                v-if="column.type === 'TEXT' || column.type === 'Texto' || column.type === 'text' || !column.type"
+                :key="`field-${row._id}-${column.key}`"
+                :model-value="row[column.key]"
+                @update:model-value="updateCellByRowId(row._id, column.key, $event)"
                 variant="outlined"
                 density="compact"
                 hide-details="auto"
@@ -65,8 +64,10 @@
               
               <!-- NUMBER -->
               <v-text-field
-                v-else-if="column.type === 'NUMBER' || column.type === 'Número'"
-                v-model.number="row[column.name]"
+                v-else-if="column.type === 'NUMBER' || column.type === 'Número' || column.type === 'number'"
+                :key="`field-${row._id}-${column.key}`"
+                :model-value="row[column.key]"
+                @update:model-value="updateCellByRowId(row._id, column.key, $event ? Number($event) : null)"
                 type="number"
                 variant="outlined"
                 density="compact"
@@ -77,8 +78,10 @@
 
               <!-- DATE -->
               <v-text-field
-                v-else-if="column.type === 'DATE' || column.type === 'Data'"
-                v-model="row[column.name]"
+                v-else-if="column.type === 'DATE' || column.type === 'Data' || column.type === 'date'"
+                :key="`field-${row._id}-${column.key}`"
+                :model-value="row[column.key]"
+                @update:model-value="updateCellByRowId(row._id, column.key, $event)"
                 type="date"
                 variant="outlined"
                 density="compact"
@@ -88,8 +91,10 @@
 
               <!-- CURRENCY -->
               <v-text-field
-                v-else-if="column.type === 'CURRENCY' || column.type === 'Dinheiro'"
-                v-model="row[column.name]"
+                v-else-if="column.type === 'CURRENCY' || column.type === 'Dinheiro' || column.type === 'currency'"
+                :key="`field-${row._id}-${column.key}`"
+                :model-value="row[column.key]"
+                @update:model-value="updateCellByRowId(row._id, column.key, $event)"
                 variant="outlined"
                 density="compact"
                 hide-details="auto"
@@ -100,8 +105,10 @@
 
               <!-- EMAIL -->
               <v-text-field
-                v-else-if="column.type === 'EMAIL'"
-                v-model="row[column.name]"
+                v-else-if="column.type === 'EMAIL' || column.type === 'email'"
+                :key="`field-${row._id}-${column.key}`"
+                :model-value="row[column.key]"
+                @update:model-value="updateCellByRowId(row._id, column.key, $event)"
                 type="email"
                 variant="outlined"
                 density="compact"
@@ -113,7 +120,9 @@
               <!-- Fallback para qualquer outro tipo -->
               <v-text-field
                 v-else
-                v-model="row[column.name]"
+                :key="`field-${row._id}-${column.key}`"
+                :model-value="row[column.key]"
+                @update:model-value="updateCellByRowId(row._id, column.key, $event)"
                 variant="outlined"
                 density="compact"
                 hide-details="auto"
@@ -177,7 +186,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 
 const props = defineProps({
   field: {
@@ -199,6 +208,8 @@ const columns = computed(() => {
   const cols = props.field.tableColumns || []
   console.log('🔍 DynamicTableInput - field:', props.field)
   console.log('🔍 DynamicTableInput - tableColumns:', cols)
+  console.log('🔍 DynamicTableInput - FULL columns structure:', JSON.stringify(cols, null, 2))
+  console.log('🔍 DynamicTableInput - column keys:', cols.map(c => c.key))
   return cols
 })
 
@@ -233,27 +244,93 @@ const validationErrorMessage = computed(() => {
 
 // Funções
 function createEmptyRow() {
-  const row = {}
+  const row = {
+    _id: `row_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+  // Criar uma cópia profunda para cada coluna
   columns.value.forEach(col => {
-    row[col.name] = col.type === 'NUMBER' ? null : ''
+    // Garantir que cada propriedade seja única e não compartilhada
+    if (col.type === 'NUMBER' || col.type === 'Número' || col.type === 'number') {
+      row[col.key] = null
+    } else {
+      // Usar String() para garantir novo valor primitivo
+      row[col.key] = String('')
+    }
   })
+  console.log('🆕 Criando nova linha:', JSON.stringify(row))
   return row
+}
+
+// Funções para acessar/modificar valores de células de forma segura
+function getCellValue(rowIndex, columnName) {
+  if (!rows.value[rowIndex]) return ''
+  return rows.value[rowIndex][columnName] ?? ''
+}
+
+// Nova função que usa row._id para garantir atualização correta
+function updateCellByRowId(rowId, columnName, value) {
+  console.log(`📝 updateCellByRowId [${rowId}][${columnName}] = "${value}"`)
+  
+  // Encontrar o índice da linha pelo _id
+  const rowIndex = rows.value.findIndex(r => r._id === rowId)
+  
+  if (rowIndex === -1) {
+    console.error('❌ Row não encontrada com _id:', rowId)
+    return
+  }
+  
+  // ABORDAGEM DIRETA: Modificar diretamente o objeto reativo
+  rows.value[rowIndex][columnName] = value
+  
+  console.log(`✅ Célula atualizada [${rowIndex}][${columnName}]:`, value)
+  console.log(`📊 Linha completa após update:`, JSON.stringify(rows.value[rowIndex]))
+  
+  // Usar nextTick para garantir que a atualização foi processada antes de emitir
+  nextTick(() => {
+    emitValue()
+  })
+}
+
+function setCellValue(rowIndex, columnName, value) {
+  console.log(`📝 setCellValue [${rowIndex}][${columnName}] = "${value}"`)
+  
+  if (!rows.value[rowIndex]) {
+    console.error('❌ Row não existe:', rowIndex)
+    return
+  }
+  
+  // Usar a nova função com _id
+  const rowId = rows.value[rowIndex]._id
+  updateCellByRowId(rowId, columnName, value)
+}
+
+function updateCellValue(rowIndex, columnName, value) {
+  setCellValue(rowIndex, columnName, value)
 }
 
 function addRow() {
   if (isMaxRowsReached.value) return
-  rows.value.push(createEmptyRow())
+  const newRow = createEmptyRow()
+  rows.value = [...rows.value, newRow]
+  console.log('➕ Linha adicionada. Total:', rows.value.length)
   emitValue()
 }
 
 function removeRow(index) {
   if (isMinRowsReached.value && rows.value.length <= (props.field.minRows || 0)) return
-  rows.value.splice(index, 1)
+  rows.value = rows.value.filter((_, idx) => idx !== index)
+  console.log('➖ Linha removida. Total:', rows.value.length)
   emitValue()
 }
 
 function emitValue() {
-  emit('update:modelValue', [...rows.value])
+  // Fazer deep copy para garantir que não há referências compartilhadas
+  // Remover o _id interno antes de emitir
+  const valuesToEmit = rows.value.map(row => {
+    const { _id, ...cleanRow } = row
+    return cleanRow
+  })
+  emit('update:modelValue', valuesToEmit)
 }
 
 function getEmailRules(column) {
@@ -266,25 +343,42 @@ function getEmailRules(column) {
 }
 
 // Watchers
-watch(rows, () => {
-  emitValue()
-}, { deep: true })
-
 watch(() => props.modelValue, (newVal) => {
-  if (JSON.stringify(newVal) !== JSON.stringify(rows.value)) {
-    rows.value = newVal && newVal.length > 0 ? [...newVal] : []
+  console.log('👁️ modelValue changed:', newVal)
+  if (JSON.stringify(newVal) !== JSON.stringify(rows.value.map(r => { const { _id, ...rest } = r; return rest }))) {
+    // Fazer deep copy para evitar referências compartilhadas e adicionar _id
+    rows.value = newVal && newVal.length > 0 
+      ? newVal.map(row => ({ 
+          _id: `row_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          ...row 
+        })) 
+      : []
+    console.log('✅ Rows atualizadas do modelValue:', rows.value)
   }
 }, { deep: true })
 
 // Lifecycle
 onMounted(() => {
+  console.log('🎬 DynamicTableInput montado')
+  console.log('📦 Props field:', props.field)
+  console.log('📦 Props modelValue:', props.modelValue)
+  console.log('📦 Colunas:', columns.value)
+  
   if (props.modelValue && props.modelValue.length > 0) {
-    rows.value = [...props.modelValue]
-  } else if (props.field.minRows > 0) {
+    // Fazer deep copy de cada linha para evitar referências compartilhadas e adicionar _id
+    rows.value = props.modelValue.map(row => ({ 
+      _id: `row_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      ...row 
+    }))
+    console.log('✅ Linhas carregadas do modelValue:', rows.value)
+  } else if (props.field.minRows && props.field.minRows > 0) {
     // Adicionar linhas mínimas
+    const newRows = []
     for (let i = 0; i < props.field.minRows; i++) {
-      rows.value.push(createEmptyRow())
+      newRows.push(createEmptyRow())
     }
+    rows.value = newRows
+    console.log(`✅ ${props.field.minRows} linha(s) mínima(s) criada(s)`)
     emitValue()
   }
 })

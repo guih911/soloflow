@@ -344,7 +344,7 @@
                     />
                   </div>
 
-                  <!-- Campo de arquivo - Design Profissional -->
+                  <!-- Campo de arquivo -->
                   <div
                     v-else-if="field.type?.toString().toUpperCase() === 'FILE'"
                     class="file-upload-container mb-4"
@@ -1029,6 +1029,9 @@ function initializeFormData(processType) {
       if (field.defaultValue) {
         formData.value[field.name] = field.defaultValue
       } else if (field.type === 'CHECKBOX') {
+        formData.value[field.name] = []
+      } else if (field.type === 'TABLE') {
+        // Inicial vazio para tabela dinâmica , 
         formData.value[field.name] = []
       }
     })

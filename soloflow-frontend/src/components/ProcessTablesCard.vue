@@ -44,10 +44,10 @@
                 <th class="text-center bg-grey-lighten-4" style="width: 60px;">#</th>
                 <th 
                   v-for="col in selectedTable.columns" 
-                  :key="col.name"
+                  :key="col.key || col.name"
                   class="font-weight-bold bg-grey-lighten-4"
                 >
-                  {{ col.label || col.name }}
+                  {{ col.label || col.key || col.name }}
                   <v-chip v-if="col.required" size="x-small" color="error" variant="flat" class="ml-1">
                     *
                   </v-chip>
@@ -63,10 +63,10 @@
                 </td>
                 <td 
                   v-for="col in selectedTable.columns" 
-                  :key="`${idx}-${col.name}`"
+                  :key="`${idx}-${col.key || col.name}`"
                 >
-                  <span :class="getCellClass(row[col.name], col.type)">
-                    {{ formatCellValue(row[col.name], col.type) || '-' }}
+                  <span :class="getCellClass(row[col.key || col.name], col.type)">
+                    {{ formatCellValue(row[col.key || col.name], col.type) || '-' }}
                   </span>
                 </td>
               </tr>
@@ -163,8 +163,12 @@ function formatCellValue(value, type) {
     return null
   }
 
-  switch (type) {
+  // Normalizar tipo para uppercase
+  const normalizedType = type?.toString().toUpperCase()
+
+  switch (normalizedType) {
     case 'DATE':
+    case 'DATA':
       try {
         const date = new Date(value)
         if (!isNaN(date.getTime())) {
@@ -176,6 +180,7 @@ function formatCellValue(value, type) {
       break
 
     case 'CURRENCY':
+    case 'DINHEIRO':
       try {
         const num = typeof value === 'string' ? parseFloat(value.replace(/[^\d.,]/g, '').replace(',', '.')) : value
         if (!isNaN(num)) {
@@ -190,6 +195,7 @@ function formatCellValue(value, type) {
       break
 
     case 'NUMBER':
+    case 'NÚMERO':
       return typeof value === 'number' ? value.toLocaleString('pt-BR') : value
 
     default:
@@ -202,10 +208,14 @@ function formatCellValue(value, type) {
 function getCellClass(value, type) {
   if (!value) return 'text-medium-emphasis'
   
-  switch (type) {
+  const normalizedType = type?.toString().toUpperCase()
+  
+  switch (normalizedType) {
     case 'CURRENCY':
+    case 'DINHEIRO':
       return 'font-weight-medium text-success'
     case 'NUMBER':
+    case 'NÚMERO':
       return 'font-weight-medium'
     case 'EMAIL':
       return 'text-primary'
