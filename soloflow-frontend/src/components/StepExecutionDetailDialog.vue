@@ -386,10 +386,21 @@ const isOverdue = computed(() => {
 const parsedMetadata = computed(() => {
   if (!props.execution?.metadata) return {}
   try {
+    let metadata = {}
     if (typeof props.execution.metadata === 'string') {
-      return JSON.parse(props.execution.metadata)
+      metadata = JSON.parse(props.execution.metadata)
+    } else {
+      metadata = props.execution.metadata
     }
-    return props.execution.metadata
+    
+    // Filtrar para remover fieldsUpdated e timestamp
+    const filtered = {}
+    for (const [key, value] of Object.entries(metadata)) {
+      if (key !== 'fieldsUpdated' && key !== 'timestamp') {
+        filtered[key] = value
+      }
+    }
+    return filtered
   } catch {
     return {}
   }
