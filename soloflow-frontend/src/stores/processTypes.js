@@ -140,6 +140,11 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
 
   conditions = typeof conditions === 'object' && conditions !== null ? { ...conditions } : {}
 
+  // Log para debug de assignedToCreator
+  if (step.assignedToCreator !== undefined) {
+    console.log(`🔍 Normalizando step "${step.name}": assignedToCreator =`, step.assignedToCreator, '→', Boolean(step.assignedToCreator))
+  }
+
     return {
       ...step,
       actions: Array.isArray(actions) ? [...actions] : [],
@@ -156,6 +161,10 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       allowAttachment: Boolean(step.allowAttachment),
       requiresSignature: Boolean(step.requiresSignature),
       requireAttachment: Boolean(step.requireAttachment),
+      // Garantir que assignedToCreator seja sempre um boolean
+      assignedToCreator: Boolean(step.assignedToCreator),
+      assignedToUserId: step.assignedToUserId || null,
+      assignedToSectorId: step.assignedToSectorId || null,
     }
   }
 

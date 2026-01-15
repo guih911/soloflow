@@ -1120,6 +1120,23 @@ function save() {
 
   const stepToSave = { ...localStepData.value }
 
+  // Garantir que assignedToCreator seja mantido corretamente
+  // Se for criador, limpar assignedToUserId e assignedToSectorId
+  if (responsibleType.value === 'creator') {
+    stepToSave.assignedToCreator = true
+    stepToSave.assignedToUserId = null
+    stepToSave.assignedToSectorId = null
+  } else {
+    stepToSave.assignedToCreator = false
+  }
+
+  console.log('💾 Salvando etapa com responsável:', {
+    responsibleType: responsibleType.value,
+    assignedToCreator: stepToSave.assignedToCreator,
+    assignedToUserId: stepToSave.assignedToUserId,
+    assignedToSectorId: stepToSave.assignedToSectorId
+  })
+
   if (stepToSave.slaDays) {
     stepToSave.slaHours = stepToSave.slaDays * 24
     delete stepToSave.slaDays
@@ -1213,12 +1230,27 @@ watch(() => props.modelValue, (isOpen) => {
     }
 
     // Determinar o tipo de responsável baseado nos dados
+    console.log('📋 Carregando etapa:', {
+      name: props.stepData.name,
+      assignedToCreator: props.stepData.assignedToCreator,
+      assignedToUserId: props.stepData.assignedToUserId,
+      assignedToSectorId: props.stepData.assignedToSectorId
+    })
+
     if (props.stepData.assignedToCreator) {
       responsibleType.value = 'creator'
+      localStepData.value.assignedToCreator = true
+      localStepData.value.assignedToUserId = null
+      localStepData.value.assignedToSectorId = null
+      console.log('✅ Responsável definido como CRIADOR')
     } else if (props.stepData.assignedToUserId) {
       responsibleType.value = 'user'
+      localStepData.value.assignedToCreator = false
+      console.log('✅ Responsável definido como USUÁRIO:', props.stepData.assignedToUserId)
     } else {
       responsibleType.value = 'sector'
+      localStepData.value.assignedToCreator = false
+      console.log('✅ Responsável definido como SETOR:', props.stepData.assignedToSectorId)
     }
 
     if (localStepData.value.type === 'INPUT') {
