@@ -950,7 +950,7 @@ function initializeFormData(processType) {
   
   // Definir valores padrão dos campos
   if (processType?.formFields) {
-    // ✨ Inicializar todos os campos, incluindo FILE
+    // ✨ Inicializar todos os campos, incluindo FILE e TABLE
     getVisibleFormFields(processType).forEach(field => {
       if (field.defaultValue) {
         formData.value[field.name] = field.defaultValue
@@ -959,6 +959,10 @@ function initializeFormData(processType) {
       } else if (field.type === 'FILE') {
         formData.value[field.name] = []
         fileData.value[field.name] = []
+      } else if (field.type === 'TABLE') {
+        // Criar novo array único para cada tabela para evitar compartilhamento de referências
+        formData.value[field.name] = []
+        console.log(`✅ Inicializado campo TABLE: ${field.name} com array vazio`)
       }
     })
   }

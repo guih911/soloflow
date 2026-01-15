@@ -44,10 +44,10 @@
                 <th class="text-center bg-grey-lighten-4" style="width: 60px;">#</th>
                 <th 
                   v-for="col in selectedTable.columns" 
-                  :key="col.key || col.name"
+                  :key="col.name || col.key"
                   class="font-weight-bold bg-grey-lighten-4"
                 >
-                  {{ col.label || col.key || col.name }}
+                  {{ col.label || col.name || col.key }}
                   <v-chip v-if="col.required" size="x-small" color="error" variant="flat" class="ml-1">
                     *
                   </v-chip>
@@ -63,10 +63,10 @@
                 </td>
                 <td 
                   v-for="col in selectedTable.columns" 
-                  :key="`${idx}-${col.key || col.name}`"
+                  :key="`${idx}-${col.name || col.key}`"
                 >
-                  <span :class="getCellClass(row[col.key || col.name], col.type)">
-                    {{ formatCellValue(row[col.key || col.name], col.type) || '-' }}
+                  <span :class="getCellClass(row[col.name || col.key], col.type)">
+                    {{ formatCellValue(row[col.name || col.key], col.type) || '-' }}
                   </span>
                 </td>
               </tr>

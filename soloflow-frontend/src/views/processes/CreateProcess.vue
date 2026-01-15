@@ -1038,10 +1038,12 @@ function initializeFormData(processType) {
       if (field.defaultValue) {
         formData.value[field.name] = field.defaultValue
       } else if (field.type === 'CHECKBOX') {
+        // Criar novo array para cada checkbox
         formData.value[field.name] = []
       } else if (field.type === 'TABLE') {
-        // Inicial vazio para tabela dinâmica , 
+        // Criar novo array único para cada tabela para evitar compartilhamento de referências
         formData.value[field.name] = []
+        console.log(`✅ Inicializado campo TABLE: ${field.name} com array vazio`)
       }
     })
   }
