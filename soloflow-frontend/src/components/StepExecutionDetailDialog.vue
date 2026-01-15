@@ -124,11 +124,40 @@
               :key="key"
               class="metadata-item"
             >
-              <v-icon size="18" color="grey" class="metadata-icon">{{ getFieldIcon(key) }}</v-icon>
-              <div class="metadata-content">
-                <span class="metadata-label">{{ formatFieldLabel(key) }}</span>
-                <span class="metadata-value">{{ formatFieldValue(value, key) }}</span>
-              </div>
+              <!-- Campo Tabela -->
+              <template v-if="Array.isArray(value) && value.length > 0 && typeof value[0] === 'object'">
+                <div class="w-100 mb-4">
+                  <h5 class="text-subtitle-2 font-weight-medium mb-2 d-flex align-center">
+                    <v-icon size="18" class="mr-2" color="primary">mdi-table</v-icon>
+                    {{ formatFieldLabel(key) }}
+                  </h5>
+                  <v-table density="compact" class="table-data-view">
+                    <thead>
+                      <tr>
+                        <th v-for="column in Object.keys(value[0])" :key="column" class="text-left">
+                          {{ formatFieldLabel(column) }}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, rowIndex) in value" :key="rowIndex">
+                        <td v-for="column in Object.keys(value[0])" :key="column">
+                          {{ formatFieldValue(row[column], column) }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </div>
+              </template>
+              
+              <!-- Campo Normal -->
+              <template v-else>
+                <v-icon size="18" color="grey" class="metadata-icon">{{ getFieldIcon(key) }}</v-icon>
+                <div class="metadata-content">
+                  <span class="metadata-label">{{ formatFieldLabel(key) }}</span>
+                  <span class="metadata-value">{{ formatFieldValue(value, key) }}</span>
+                </div>
+              </template>
             </div>
           </div>
         </div>
@@ -264,47 +293,66 @@
   </v-dialog>
 
   <!-- Modal de Visualização de Anexo -->
-  <v-dialog v-model="attachmentPreviewDialog" max-width="900" scrollable>
+  <v-dialog 
+    v-model="attachmentPreviewDialog" 
+    max-width="1100" 
+    scrollable
+    :z-index="2100"
+    :attach="false"
+  >
     <v-card v-if="selectedAttachment" class="attachment-preview-card">
-      <v-card-title class="d-flex align-center justify-space-between pa-4">
-        <div class="d-flex align-center">
-          <v-icon :color="getAttachmentColor(selectedAttachment)" size="28" class="mr-3">
-            {{ getAttachmentIcon(selectedAttachment) }}
-          </v-icon>
-          <div>
-            <span class="text-h6 font-weight-bold">{{ selectedAttachment.originalName }}</span>
-            <div class="text-caption text-grey">{{ formatFileSize(selectedAttachment.size) }}</div>
+      <v-card-title class="pa-0">
+        <div class="preview-header d-flex align-center justify-space-between px-6 py-3" style="background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);">
+          <div class="d-flex align-center flex-grow-1" style="min-width: 0; gap: 16px;">
+            <v-icon color="white" size="40">
+              {{ getAttachmentIcon(selectedAttachment) }}
+            </v-icon>
+            <div class="flex-grow-1" style="min-width: 0;">
+              <div class="text-subtitle-1 font-weight-bold text-white text-truncate" :title="selectedAttachment.originalName">
+                {{ selectedAttachment.originalName }}
+              </div>
+              <div class="text-caption d-flex align-center" style="color: rgba(255,255,255,0.9); margin-top: 2px;">
+                <v-icon size="14" color="white" class="mr-1">mdi-file-document</v-icon>
+                {{ formatFileSize(selectedAttachment.size) }}
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="d-flex ga-2">
-          <v-btn
-            v-if="isPdfAttachment || isImageAttachment"
-            variant="tonal"
-            color="secondary"
-            @click="openInNewTab(selectedAttachment)"
-          >
-            <v-icon start>mdi-open-in-new</v-icon>
-            Abrir
-          </v-btn>
-          <v-btn
-            variant="tonal"
-            color="primary"
-            @click="downloadAttachment(selectedAttachment)"
-          >
-            <v-icon start>mdi-download</v-icon>
-            Baixar
-          </v-btn>
-          <v-btn
-            icon="mdi-close"
-            variant="text"
-            @click="attachmentPreviewDialog = false"
-          />
+          <div class="d-flex align-center flex-shrink-0" style="gap: 12px;">
+            <v-btn
+              v-if="isPdfAttachment || isImageAttachment"
+              variant="elevated"
+              color="white"
+              class="text-primary font-weight-medium"
+              @click="openInNewTab(selectedAttachment)"
+            >
+              <v-icon start size="20">mdi-open-in-new</v-icon>
+              Abrir
+            </v-btn>
+            <v-btn
+              variant="elevated"
+              color="white"
+              class="text-primary font-weight-medium"
+              @click="downloadAttachment(selectedAttachment)"
+            >
+              <v-icon start size="20">mdi-download</v-icon>
+              Baixar
+            </v-btn>
+            <v-btn
+              icon
+              variant="text"
+              color="white"
+              size="small"
+              @click="attachmentPreviewDialog = false"
+            >
+              <v-icon size="24">mdi-close</v-icon>
+            </v-btn>
+          </div>
         </div>
       </v-card-title>
 
       <v-divider />
 
-      <v-card-text class="pa-0" style="height: 70vh; overflow: hidden;">
+      <v-card-text class="pa-0" style="height: 80vh; overflow: hidden;">
         <!-- Loading -->
         <div v-if="loadingPreview" class="loading-preview-container">
           <v-progress-circular indeterminate color="primary" size="48" />
@@ -317,7 +365,9 @@
           :src="attachmentPreviewUrl"
           width="100%"
           height="100%"
-          style="border: none;"
+          style="border: none; display: block; min-height: 80vh;"
+          loading="lazy"
+          title="Visualização de PDF"
         />
 
         <!-- Preview de Imagem -->
@@ -682,8 +732,12 @@ async function loadPreviewContent(attachment) {
   }
 }
 
-function openInNewTab() {
-  if (attachmentPreviewUrl.value) {
+function openInNewTab(attachment = null) {
+  // Se não tiver URL preview carregada mas tiver o attachment, abrir direto da API
+  if (!attachmentPreviewUrl.value && attachment) {
+    const url = `${import.meta.env.VITE_API_URL}/attachments/${attachment.id}/download`
+    window.open(url, '_blank')
+  } else if (attachmentPreviewUrl.value) {
     window.open(attachmentPreviewUrl.value, '_blank')
   }
 }
@@ -929,6 +983,44 @@ async function downloadAttachment(attachment) {
   word-break: break-word;
 }
 
+/* Tabelas de dados */
+.table-data-view {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+}
+
+.table-data-view thead {
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+}
+
+.table-data-view thead th {
+  color: white !important;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  padding: 12px 16px;
+}
+
+.table-data-view tbody tr {
+  transition: background-color 0.2s;
+}
+
+.table-data-view tbody tr:hover {
+  background-color: #f5f5f5;
+}
+
+.table-data-view tbody td {
+  font-size: 0.8125rem;
+  color: #424242;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.table-data-view tbody tr:last-child td {
+  border-bottom: none;
+}
+
 /* Estilos para seção de revisão */
 .review-container {
   display: flex;
@@ -1015,5 +1107,54 @@ async function downloadAttachment(attachment) {
 .signature-date {
   font-size: 0.75rem;
   color: #757575;
+}
+
+/* Estilos para modal de preview de anexo */
+.attachment-preview-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 95vh;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.attachment-preview-card .v-card-title {
+  flex-shrink: 0;
+}
+
+.attachment-preview-card .v-card-text {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+  background: #f5f5f5;
+}
+
+.loading-preview-container,
+.no-preview-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px;
+}
+
+.image-preview-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  overflow: auto;
+  background: #f5f5f5;
+  padding: 16px;
+}
+
+.image-preview {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 </style>
