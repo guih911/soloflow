@@ -458,10 +458,9 @@
                 </v-alert>
 
                 <div v-if="fieldData.options && fieldData.options.length > 0" class="options-container">
-                  <v-card
+                  <div
                     v-for="(option, idx) in fieldData.options"
                     :key="idx"
-                    variant="outlined"
                     class="mb-3 pa-3"
                   >
                     <v-row dense align="center">
@@ -497,7 +496,68 @@
                         />
                       </v-col>
                     </v-row>
-                  </v-card>
+                  </div>
+                </div>
+              </v-col>
+
+              <!-- Opções para Checkbox -->
+              <v-col v-if="fieldData.type === 'CHECKBOX'" cols="12">
+                <v-divider class="my-4" />
+                <div class="d-flex align-center justify-space-between mb-4">
+                  <div>
+                    <h4 class="text-h6 mb-1">Opções de Checkbox</h4>
+                    <p class="text-caption text-medium-emphasis">Configure múltiplas opções ou deixe vazio para checkbox único</p>
+                  </div>
+                  <v-btn
+                    color="primary"
+                    size="small"
+                    prepend-icon="mdi-plus"
+                    variant="elevated"
+                    @click="addCheckboxOption"
+                  >
+                    Adicionar Opção
+                  </v-btn>
+                </div>
+
+                <v-alert
+                  type="info"
+                  variant="tonal"
+                  density="compact"
+                  class="mb-3"
+                  icon="mdi-information"
+                >
+                  <strong>Dica:</strong> Sem opções = checkbox único (sim/não). Com opções = múltipla seleção.
+                </v-alert>
+
+                <div v-if="fieldData.options && fieldData.options.length > 0" class="options-container">
+                  <div
+                    v-for="(option, idx) in fieldData.options"
+                    :key="idx"
+                    class="mb-3 pa-3"
+                  >
+                    <v-row dense align="center">
+                      <v-col cols="10">
+                        <v-text-field
+                          v-model="fieldData.options[idx]"
+                          label="Opção"
+                          density="comfortable"
+                          variant="outlined"
+                          hide-details="auto"
+                          :rules="[v => !!v?.trim() || 'Campo obrigatório']"
+                          prepend-inner-icon="mdi-checkbox-marked"
+                        />
+                      </v-col>
+                      <v-col cols="2" class="text-center">
+                        <v-btn
+                          icon="mdi-delete"
+                          size="small"
+                          color="error"
+                          variant="tonal"
+                          @click="removeCheckboxOption(idx)"
+                        />
+                      </v-col>
+                    </v-row>
+                  </div>
                 </div>
               </v-col>
 
@@ -1329,6 +1389,18 @@ function addDropdownOption() {
 }
 
 function removeDropdownOption(index) {
+  fieldData.value.options.splice(index, 1)
+}
+
+// Checkbox options management
+function addCheckboxOption() {
+  if (!fieldData.value.options) {
+    fieldData.value.options = []
+  }
+  fieldData.value.options.push('')
+}
+
+function removeCheckboxOption(index) {
   fieldData.value.options.splice(index, 1)
 }
 

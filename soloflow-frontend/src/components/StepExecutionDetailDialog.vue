@@ -163,14 +163,14 @@
         </div>
 
         <!-- Anexos -->
-        <div v-if="hasAttachments" class="mb-6">
+        <div v-if="hasStepAttachments" class="mb-6">
           <h4 class="text-subtitle-2 font-weight-medium mb-3 d-flex align-center">
             <v-icon size="18" class="mr-2" color="info">mdi-paperclip</v-icon>
-            Anexos ({{ execution.attachments.length }})
+            Anexos ({{ stepAttachments.length }})
           </h4>
           <div class="attachments-list">
             <div
-              v-for="attachment in execution.attachments"
+              v-for="attachment in stepAttachments"
               :key="attachment.id"
               class="attachment-item"
               @click="openAttachmentPreview(attachment)"
@@ -485,6 +485,23 @@ const hasMetadata = computed(() => {
 
 const hasAttachments = computed(() => {
   return props.execution?.attachments?.length > 0
+})
+
+// Filtrar apenas anexos desta etapa específica
+const stepAttachments = computed(() => {
+  if (!props.execution?.attachments) return []
+  
+  // Filtrar anexos que:
+  // 1. NÃO são do formulário principal (isFormField !== true)
+  // 2. NÃO são de campos da etapa (isStepFormField !== true) - esses já aparecem nos dados
+  // 3. SÃO anexos gerais adicionados na etapa
+  return props.execution.attachments.filter(att => {
+    return !att.isFormField && !att.isStepFormField
+  })
+})
+
+const hasStepAttachments = computed(() => {
+  return stepAttachments.value.length > 0
 })
 
 const reviewData = computed(() => {

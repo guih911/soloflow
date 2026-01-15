@@ -317,12 +317,24 @@
                       {{ field.label }}
                       <span v-if="field.required" class="text-error">*</span>
                     </label>
+                    <!-- Se tem opções, criar múltiplos checkboxes -->
+                    <template v-if="field.options && field.options.length > 0">
+                      <v-checkbox
+                        v-for="(option, idx) in field.options"
+                        :key="idx"
+                        v-model="formData[field.name]"
+                        :label="option"
+                        :value="option"
+                        hide-details
+                        density="compact"
+                        class="mt-1"
+                      />
+                    </template>
+                    <!-- Se não tem opções, criar checkbox único (true/false) -->
                     <v-checkbox
-                      v-for="(option, idx) in (field.options || [])"
-                      :key="idx"
+                      v-else
                       v-model="formData[field.name]"
-                      :label="option"
-                      :value="option"
+                      :label="field.label"
                       hide-details
                       density="compact"
                       class="mt-1"
@@ -1037,8 +1049,9 @@ function initializeFormData(processType) {
       if (field.defaultValue) {
         formData.value[field.name] = field.defaultValue
       } else if (field.type === 'CHECKBOX') {
-        // Criar novo array para cada checkbox
-        formData.value[field.name] = []
+        // Se tem opções, criar array para múltipla seleção
+        // Se não tem opções, é checkbox único (true/false)
+        formData.value[field.name] = field.options && field.options.length > 0 ? [] : false
       } else if (field.type === 'TABLE') {
         // Criar novo array único para cada tabela para evitar compartilhamento de referências
         formData.value[field.name] = []
