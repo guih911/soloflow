@@ -88,7 +88,9 @@
             </v-sheet>
 
             <v-card-title class="pb-1 d-flex align-center">
-              <span>{{ process.code }} - {{ process.processType.name }}</span>
+              <div class="text-truncate" style="max-width: 280px;" :title="process.code + ' - ' + (process.title || process.processType.name)">
+                {{ process.code }} - {{ process.title || process.processType.name }}
+              </div>
               <v-chip
                 v-if="process.isChildProcess"
                 size="x-small"

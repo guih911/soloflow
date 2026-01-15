@@ -6,11 +6,11 @@
       <div class="ml-4 flex-grow-1">
         <div class="d-flex align-center">
           <h1 class="text-h4 font-weight-bold">
-            {{ process.code }} - {{ process.processType.name }}
+            {{ process.code }}{{ process.title ? ` - ${process.title}` : ` - ${process.processType.name}` }}
           </h1>
         </div>
-        <p v-if="process.title && process.title !== 'undefined'" class="text-subtitle-1 text-medium-emphasis">
-          {{ process.title }}
+        <p v-if="process.processType?.name" class="text-subtitle-1 text-medium-emphasis">
+          {{ process.processType.name }}
         </p>
       </div>
 
@@ -177,8 +177,14 @@
           <v-divider />
           <v-list density="compact">
             <v-list-item v-for="(value, key) in formattedFormData" :key="key">
-              <v-list-item-title class="text-caption">{{ key }}</v-list-item-title>
-              <v-list-item-subtitle>{{ value }}</v-list-item-subtitle>
+              <template v-slot:default>
+                <div class="w-100">
+                  <div class="text-caption text-medium-emphasis mb-1">{{ key }}</div>
+                  <div class="text-body-2" style="white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;">
+                    {{ value }}
+                  </div>
+                </div>
+              </template>
             </v-list-item>
             
             <template v-for="field in fileFields" :key="field.name">

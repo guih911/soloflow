@@ -102,20 +102,12 @@
               <v-btn
                 variant="text"
                 size="small"
-                @click="viewSector(sector)"
-              >
-                <v-icon start>mdi-eye</v-icon>
-                Detalhes
-              </v-btn>
-              <v-spacer />
-              <v-btn
-                variant="text"
-                size="small"
                 @click="openDialog(sector)"
               >
                 <v-icon start>mdi-pencil</v-icon>
                 Editar
               </v-btn>
+              <v-spacer />
               <v-btn
                 v-if="canDelete(sector)"
                 variant="text"

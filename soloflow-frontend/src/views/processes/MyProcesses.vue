@@ -296,7 +296,8 @@ function normalizeProcesses() {
         'Processo'
 
       const processCode = process.code || '-'
-      const processTitle = `${processCode} - ${processTypeName}`
+      const userTitle = process.title || processTypeName
+      const processTitle = `${processCode} - ${userTitle}`
 
       map.set(process.id, {
         id: process.id,

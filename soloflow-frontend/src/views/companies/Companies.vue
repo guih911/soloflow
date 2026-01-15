@@ -93,15 +93,6 @@
               <v-btn
                 variant="text"
                 size="small"
-                @click="viewCompany(company)"
-              >
-                <v-icon start>mdi-eye</v-icon>
-                Detalhes
-              </v-btn>
-              <v-spacer />
-              <v-btn
-                variant="text"
-                size="small"
                 @click="openDialog(company)"
               >
                 <v-icon start>mdi-pencil</v-icon>

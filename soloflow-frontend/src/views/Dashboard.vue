@@ -307,13 +307,13 @@
               </template>
 
               <v-list-item-title class="text-body-2 font-weight-medium">
-                {{ process.code }} - {{ process.processType.name }}
+                {{ process.code }}{{ process.title ? ` - ${process.title}` : ` - ${process.processType.name}` }}
               </v-list-item-title>
 
               <v-list-item-subtitle class="text-caption">
-                <div v-if="process.title">
-                  <v-icon size="12">mdi-text</v-icon>
-                  {{ process.title }}
+                <div>
+                  <v-icon size="12">mdi-file-document</v-icon>
+                  {{ process.processType.name }}
                 </div>
                 <div class="mt-1">
                   <v-icon size="12">mdi-calendar</v-icon>
