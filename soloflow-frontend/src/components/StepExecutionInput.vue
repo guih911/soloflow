@@ -414,10 +414,6 @@ function getFieldRules(field) {
       rules.push(v => !v || !isNaN(Date.parse(v)) || 'Data inválida')
       break
   }
-    case 'CNPJ':
-      rules.push(v => !v || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'CNPJ inválido')
-      break
-  }
 
   // Validações de override
   if (override) {
