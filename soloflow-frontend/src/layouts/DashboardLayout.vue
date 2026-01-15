@@ -19,25 +19,15 @@
       </v-app-bar-nav-icon>
       
       <!-- Logo e Título -->
-      <div class="d-flex align-center ml-4">
-        <div>
-          <v-app-bar-title class="text-h5 font-weight-bold logo-text">
-            SoloFlow
-          </v-app-bar-title>
-          <div class="text-caption text-medium-emphasis">
-            Sistema de processos
-          </div>
-        </div>
+      <div class="d-flex flex-column align-start" style="line-height: 1; margin-left: 18px;">
+        <img src="/logo.png" alt="SoloFlow" style="height: 26px; width: auto; margin-bottom: 2px;" />
+        <span class="text-caption text-medium-emphasis" style="font-size: 0.65rem; margin-left: 18px;">Sistema de processos</span>
       </div>
 
       <v-spacer />
 
-      <!-- ✨ Notifications -->
-      <v-btn icon variant="text" class="mr-2" @click="showNotifications">
-        <v-badge :content="unreadNotifications" :model-value="unreadNotifications > 0" color="error">
-          <v-icon>mdi-bell</v-icon>
-        </v-badge>
-      </v-btn>
+      <!-- ✨ Notifications - Novo Componente -->
+      <NotificationMenu @show-modal="showNotifications" />
 
       <!-- Seletor de Empresa Melhorado -->
       <v-menu 
@@ -540,6 +530,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useProcessStore } from '@/stores/processes'
 import { useNotificationsStore } from '@/stores/notifications'
 
+
 const processStore = useProcessStore()
 const notificationsStore = useNotificationsStore()
 const router = useRouter()
@@ -622,7 +613,10 @@ async function openNotification(notification) {
     if (!isRead(notification.id)) {
       await notificationsStore.markAsRead(notification.id)
     }
-    if (notification.link) {
+    if (notification.actionUrl) {
+      router.push(notification.actionUrl)
+      notificationsDialog.value = false
+    } else if (notification.link) {
       router.push(notification.link)
       notificationsDialog.value = false
     }
