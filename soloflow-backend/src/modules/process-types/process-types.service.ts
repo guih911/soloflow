@@ -40,6 +40,8 @@ interface Step {
   assignedToUser?: any;
   assignedToSector?: any;
   assignedToCreator: boolean;
+  reuseData?: any;
+  reviewSettings?: any;
 }
 
 interface FormField {
@@ -565,6 +567,8 @@ export class ProcessTypesService {
 
                 // Novos campos
                 assignedToCreator: step.assignedToCreator || false,
+                reuseData: step.reuseData ? JSON.stringify(step.reuseData) : undefined,
+                reviewSettings: step.reviewSettings ? JSON.stringify(step.reviewSettings) : undefined,
 
                 processTypeVersionId: newVersion.id,
               },
@@ -915,6 +919,27 @@ export class ProcessTypesService {
 
       // Assinaturas só são permitidas para etapas UPLOAD ou SIGNATURE
       const allowsSignatureEdit = dto.type === 'UPLOAD' || dto.type === 'SIGNATURE';
+      
+      // Preparar reuseData se fornecido
+      let reuseDataToSave = undefined;
+      if (dto.reuseData !== undefined) {
+        reuseDataToSave = Array.isArray(dto.reuseData) 
+          ? JSON.stringify(dto.reuseData)
+          : dto.reuseData;
+      }
+      
+      // Preparar reviewSettings se fornecido
+      let reviewSettingsToSave: any = undefined;
+      if (dto.reviewSettings !== undefined) {
+        reviewSettingsToSave = dto.reviewSettings 
+          ? JSON.stringify(dto.reviewSettings)
+          : undefined;
+      }
+      
+      console.log(`📝 Updating step ${stepId}`);
+      console.log(`📋 reuseData to save:`, reuseDataToSave);
+      console.log(`📋 reviewSettings to save:`, reviewSettingsToSave);
+      
       const updated = await this.prisma.stepVersion.update({
         where: { id: stepId },
         data: {
@@ -931,6 +956,8 @@ export class ProcessTypesService {
           maxAttachments: dto.maxAttachments,
           allowedFileTypes: dto.allowedFileTypes ? JSON.stringify(dto.allowedFileTypes) : undefined,
           conditions: processedConditions !== undefined ? processedConditions : undefined,
+          reuseData: reuseDataToSave,
+          reviewSettings: reviewSettingsToSave,
         },
         include: {
           assignments: {
@@ -941,6 +968,10 @@ export class ProcessTypesService {
           },
         },
       });
+
+      console.log(`✅ Step updated in database`);
+      console.log(`📋 Saved reuseData:`, (updated as any).reuseData);
+      console.log(`📋 Saved reviewSettings:`, (updated as any).reviewSettings);
 
       return this.adaptStepResponse(updated);
     } catch (error) {
@@ -997,6 +1028,9 @@ export class ProcessTypesService {
   }
     
   private adaptStepResponse(stepVersion: any): Step {
+    console.log('🔍 adaptStepResponse - stepVersion.reuseData:', stepVersion.reuseData);
+    console.log('🔍 adaptStepResponse - stepVersion.reviewSettings:', stepVersion.reviewSettings);
+    
     const userAssignment = stepVersion.assignments?.find(a => a.type === 'USER');
     const sectorAssignment = stepVersion.assignments?.find(a => a.type === 'SECTOR');
     const conditionalAssignment = stepVersion.assignments?.find(a => a.type === 'CONDITIONAL');
@@ -1018,6 +1052,24 @@ export class ProcessTypesService {
     } catch (e) {
       parsedAllowedFileTypes = stepVersion.allowedFileTypes;
     }
+
+    let parsedReuseData = stepVersion.reuseData;
+    try {
+      if (stepVersion.reuseData && typeof stepVersion.reuseData === 'string') {
+        parsedReuseData = JSON.parse(stepVersion.reuseData);
+      }
+    } catch (e) {
+      parsedReuseData = stepVersion.reuseData;
+    }
+
+    let parsedReviewSettings = stepVersion.reviewSettings;
+    try {
+      if (stepVersion.reviewSettings && typeof stepVersion.reviewSettings === 'string') {
+        parsedReviewSettings = JSON.parse(stepVersion.reviewSettings);
+      }
+    } catch (e) {
+      parsedReviewSettings = stepVersion.reviewSettings;
+    }
   
     return {
       id: stepVersion.id,
@@ -1035,6 +1087,8 @@ export class ProcessTypesService {
       maxAttachments: stepVersion.maxAttachments,
       allowedFileTypes: parsedAllowedFileTypes,
       conditions: parsedConditions,
+      reuseData: parsedReuseData,
+      reviewSettings: parsedReviewSettings,
 
       // Novos campos
       assignedToCreator: stepVersion.assignedToCreator || false,

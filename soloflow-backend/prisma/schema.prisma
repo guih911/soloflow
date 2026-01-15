@@ -219,6 +219,8 @@ model StepVersion {
   allowedFileTypes      Json?
   conditions            Json?
   assignedToCreator     Boolean                @default(false)
+  reuseData             Json?                  // Configuração de reutilização de dados de etapas anteriores (REVIEW)
+  reviewSettings        Json?                  // Configurações do campo de notas de revisão (REVIEW)
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   processTypeVersionId  String

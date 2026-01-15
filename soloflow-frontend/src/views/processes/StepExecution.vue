@@ -70,6 +70,47 @@
               </div>
             </div>
 
+            <!-- Seção de Dados para Revisão (campos de etapas anteriores) -->
+            <div v-if="stepExecution.step.type === 'REVIEW' && reviewDataFields.length > 0" class="form-section mb-6">
+              <div class="section-header mb-4">
+                <h3 class="text-subtitle-1 font-weight-bold d-flex align-center">
+                  <v-icon color="indigo" class="mr-2">mdi-text-box-check</v-icon>
+                  Dados para Revisão
+                  <v-chip size="x-small" color="indigo" variant="tonal" class="ml-2">
+                    {{ reviewDataFields.length }}
+                  </v-chip>
+                </h3>
+                <p class="text-caption text-medium-emphasis mt-1">
+                  Dados das etapas anteriores selecionadas para revisão
+                </p>
+              </div>
+
+              <v-card variant="outlined" class="review-data-card">
+                <v-list>
+                  <template v-for="(field, index) in reviewDataFields" :key="index">
+                    <v-list-item>
+                      <template v-slot:prepend>
+                        <v-icon color="indigo">mdi-form-textbox</v-icon>
+                      </template>
+                      <v-list-item-title class="text-body-2 font-weight-medium">
+                        {{ field.fieldLabel }}
+                      </v-list-item-title>
+                      <v-list-item-subtitle class="text-caption mt-1">
+                        <div class="d-flex align-center ga-2">
+                          <v-icon size="12">mdi-debug-step-over</v-icon>
+                          Etapa {{ field.stepOrder }}: {{ field.stepName }}
+                        </div>
+                        <div class="mt-2 text-body-2 text-high-emphasis">
+                          {{ field.value || 'Não informado' }}
+                        </div>
+                      </v-list-item-subtitle>
+                    </v-list-item>
+                    <v-divider v-if="index < reviewDataFields.length - 1" />
+                  </template>
+                </v-list>
+              </v-card>
+            </div>
+
             <!-- Seção de Documentos do Processo para etapas de REVISÃO -->
             <div v-if="stepExecution.step.type === 'REVIEW' && processDocuments.length > 0" class="form-section mb-6">
               <div class="section-header mb-4">
@@ -137,6 +178,19 @@
                   </div>
                 </div>
               </div>
+            </div>
+
+            <!-- Alerta quando não há dados/documentos configurados para revisão -->
+            <div v-if="stepExecution.step.type === 'REVIEW' && reviewDataFields.length === 0 && processDocuments.length === 0" class="form-section mb-6">
+              <v-alert type="warning" variant="tonal" prominent border="start">
+                <v-alert-title class="text-subtitle-1 font-weight-bold mb-3">
+                  <v-icon start>mdi-information-outline</v-icon>
+                  Nenhum dado configurado para revisão
+                </v-alert-title>
+                <div class="text-body-2">
+                  Configure esta etapa em <strong>Tipos de Processo</strong> para exibir dados e arquivos de etapas anteriores.
+                </div>
+              </v-alert>
             </div>
 
             <v-form ref="form" v-model="valid" class="execution-form">
@@ -964,32 +1018,56 @@ const reuseDataFields = computed(() => {
             const metadata = typeof sourceStep.metadata === 'string'
               ? JSON.parse(sourceStep.metadata)
               : sourceStep.metadata
-            fieldValue = metadata[config.fieldName]
+            
+            if (metadata[config.fieldName] !== undefined) {
+              fieldValue = metadata[config.fieldName]
+            }
           }
           
-          // Buscar no formData do processo se for campo do formulário inicial
-          if (!fieldValue && sourceStep.step.order === 1) {
-            fieldValue = process.value?.formData?.[config.fieldName]
+          // Tentar obter o label correto do campo
+          // Primeiro, verificar se é um campo da etapa INPUT
+          if (sourceStep.step.type === 'INPUT' && sourceStep.step.conditions) {
+            try {
+              const conditions = typeof sourceStep.step.conditions === 'string'
+                ? JSON.parse(sourceStep.step.conditions)
+                : sourceStep.step.conditions
+              
+              if (conditions.fields) {
+                const fieldDef = conditions.fields.find(f => f.name === config.fieldName)
+                if (fieldDef) {
+                  fieldLabel = fieldDef.label || fieldDef.name
+                }
+              }
+            } catch (e) {
+              console.error('Error parsing step conditions:', e)
+            }
+          }
+          
+          // Se não encontrou acima e é da ordem 1, tentar buscar nos formFields do processo
+          if (sourceStep.step.order === 1 && (!fieldValue || fieldValue === null)) {
+            const formData = process.value?.formData
+            if (formData && formData[config.fieldName] !== undefined) {
+              fieldValue = formData[config.fieldName]
+            }
             
-            // Obter label do campo
+            // Obter label do campo do formulário do processo
             const formField = process.value?.processType?.formFields?.find(
               f => f.name === config.fieldName
             )
             if (formField) {
-              fieldLabel = formField.label
+              fieldLabel = formField.label || formField.name
             }
           }
           
-          if (fieldValue !== undefined && fieldValue !== null) {
-            fields.push({
-              type: 'field',
-              stepName: sourceStep.step.name,
-              stepOrder: sourceStep.step.order,
-              fieldName: config.fieldName,
-              fieldLabel: fieldLabel,
-              value: fieldValue
-            })
-          }
+          // Sempre adicionar o campo, mesmo que vazio (para mostrar na revisão)
+          fields.push({
+            type: 'field',
+            stepName: sourceStep.step.name,
+            stepOrder: sourceStep.step.order,
+            fieldName: config.fieldName,
+            fieldLabel: fieldLabel,
+            value: fieldValue !== null && fieldValue !== undefined ? fieldValue : ''
+          })
         }
       }
     })
@@ -999,6 +1077,12 @@ const reuseDataFields = computed(() => {
     console.error('Error parsing reuse data:', error)
     return []
   }
+})
+
+// Campos de dados para revisão (apenas os campos, sem anexos)
+const reviewDataFields = computed(() => {
+  if (stepExecution.value?.step.type !== 'REVIEW') return []
+  return reuseDataFields.value.filter(field => field.type === 'field')
 })
 
 // Para etapas de APROVAÇÃO, mostrar dados da etapa anterior
@@ -2078,6 +2162,16 @@ onMounted(async () => {
     console.log('Allow attachment:', stepExecution.value?.step.allowAttachment)
     console.log('Requires signature:', stepExecution.value?.step.requiresSignature)
     console.log('Should show signature config:', stepExecution.value?.step.allowAttachment && stepExecution.value?.step.requiresSignature)
+    
+    // Debug para etapas de REVISÃO
+    if (stepExecution.value?.step.type === 'REVIEW') {
+      console.log('=== REVIEW Step Debug ===')
+      console.log('reuseData raw:', stepExecution.value.step.reuseData)
+      console.log('reviewDataFields:', reviewDataFields.value)
+      console.log('processDocuments:', processDocuments.value)
+      console.log('reviewSettings:', reviewSettings.value)
+      console.log('Process executions:', process.value?.stepExecutions)
+    }
 
     // Carregar usuários da empresa para seleção de assinantes
     const companyId = authStore.activeCompany?.companyId || authStore.currentCompany?.id
@@ -2127,6 +2221,21 @@ onUnmounted(() => {
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 16px;
+}
+
+/* Dados para Revisão */
+.review-data-card {
+  border: 1px solid rgba(63, 81, 181, 0.15);
+  overflow: hidden;
+}
+
+.review-data-card .v-list-item {
+  padding: 16px;
+  transition: background 0.2s ease;
+}
+
+.review-data-card .v-list-item:hover {
+  background: rgba(63, 81, 181, 0.03);
 }
 
 /* Documentos para Revisão */

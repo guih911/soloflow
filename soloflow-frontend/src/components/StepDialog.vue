@@ -868,38 +868,54 @@ const reviewAttachmentOptions = computed(() => {
 
   // Campos FILE do formulário principal
   if (Array.isArray(props.formFields)) {
-    props.formFields
-      .filter(f => f.type === 'FILE')
-      .forEach(field => {
+    const formFileFields = props.formFields.filter(f => f.type === 'FILE')
+    
+    if (formFileFields.length > 0) {
+      // Adicionar header do grupo
+      if (formFileFields.length === 1) {
+        // Se só tem 1 campo, adicionar direto
         options.push({
-          title: `Formulário: ${field.label || field.name}`,
-          value: JSON.stringify({ source: 'form', fieldName: field.name })
+          title: `📋 Formulário: ${formFileFields[0].label || formFileFields[0].name}`,
+          value: JSON.stringify({ source: 'form', fieldName: formFileFields[0].name })
         })
-      })
+      } else {
+        // Se tem múltiplos, adicionar cada um
+        formFileFields.forEach(field => {
+          options.push({
+            title: `📋 Formulário: ${field.label || field.name}`,
+            value: JSON.stringify({ source: 'form', fieldName: field.name })
+          })
+        })
+      }
+    }
   }
 
-  // Campos FILE de etapas anteriores (do conditions.fields de cada etapa)
+  // Etapas anteriores com anexos
   orderedSteps.value
     .filter(step => step.order < currentStepOrder.value)
     .forEach(step => {
-      // Campos FILE definidos no conditions da etapa
       const stepConditions = toObject(step.conditions, {})
-      if (Array.isArray(stepConditions.fields)) {
+      const hasFileFields = Array.isArray(stepConditions.fields) && 
+                           stepConditions.fields.some(f => f.type === 'FILE')
+      const hasAttachments = step.allowAttachment || step.type === 'UPLOAD'
+      
+      // Se a etapa tem campos FILE específicos, listar cada um
+      if (hasFileFields) {
         stepConditions.fields
           .filter(f => f.type === 'FILE')
           .forEach(field => {
             options.push({
               title: `${step.order}. ${step.name}: ${field.label || field.name}`,
-              value: JSON.stringify({ sourceStep: step.order, fieldName: field.name })
+              value: JSON.stringify({ sourceStep: step.order, fieldName: field.name, type: 'attachment' })
             })
           })
       }
-
-      // Etapas de UPLOAD ou com allowAttachment - opção "todos os anexos"
-      if (step.allowAttachment || step.type === 'UPLOAD') {
+      
+      // Se a etapa permite anexos gerais (não campos específicos), adicionar opção "todos"
+      if (hasAttachments && !hasFileFields) {
         options.push({
-          title: `${step.order}. ${step.name} (todos os anexos)`,
-          value: JSON.stringify({ sourceStep: step.order })
+          title: `${step.order}. ${step.name}`,
+          value: JSON.stringify({ sourceStep: step.order, type: 'attachment' })
         })
       }
     })
@@ -1160,17 +1176,23 @@ function save() {
   }
 
   if (stepToSave.type === 'REVIEW') {
-    stepToSave.reuseData = Array.isArray(localStepData.value.reuseData)
+    console.log('💾 Saving REVIEW step')
+    console.log('📋 localStepData.reuseData:', localStepData.value.reuseData)
+    console.log('📋 reviewAttachmentSelection:', reviewAttachmentSelection.value)
+    
+    stepToSave.reuseData = Array.isArray(localStepData.value.reuseData) && localStepData.value.reuseData.length > 0
       ? [...localStepData.value.reuseData]
-      : reviewAttachmentSelection.value.map(order => ({
-          type: 'attachment',
-          sourceStep: order
-        }))
+      : []
+    
+    console.log('✅ Final reuseData to save:', stepToSave.reuseData)
   } else if (!Array.isArray(stepToSave.reuseData)) {
     stepToSave.reuseData = []
   }
 
   if (stepToSave.type === 'REVIEW') {
+    console.log('💾 Saving REVIEW settings')
+    console.log('📋 localStepData.reviewSettings:', localStepData.value.reviewSettings)
+    
     const reviewSettings = cloneReviewSettings(localStepData.value.reviewSettings)
     if (reviewSettings.enabled) {
       const fieldName = sanitizeFieldIdentifier(reviewSettings.fieldName, 'reviewNotes')
@@ -1182,8 +1204,10 @@ function save() {
         hint: reviewSettings.hint?.trim() || ''
       }
       localStepData.value.reviewSettings = { ...stepToSave.reviewSettings }
+      console.log('✅ Final reviewSettings to save:', stepToSave.reviewSettings)
     } else {
       stepToSave.reviewSettings = null
+      console.log('⚠️ reviewSettings disabled, saving null')
     }
   } else {
     stepToSave.reviewSettings = null
@@ -1207,6 +1231,10 @@ watch(() => props.modelValue, (isOpen) => {
   if (!isOpen) return
 
   if (props.stepData) {
+    console.log('🔄 Modal opened with stepData:', props.stepData)
+    console.log('📦 reuseData from props:', props.stepData.reuseData)
+    console.log('📦 reviewSettings from props:', props.stepData.reviewSettings)
+    
     const normalizedConditions = toObject(props.stepData.conditions, {})
     const normalizedActions = toArray(props.stepData.actions)
     const normalizedAllowedFiles = toArray(props.stepData.allowedFileTypes)
@@ -1266,6 +1294,9 @@ watch(() => props.modelValue, (isOpen) => {
     }
 
     // Carregar seleções de reutilização de anexos no novo formato
+    console.log('📦 normalizedReuse:', normalizedReuse)
+    console.log('📦 props.stepData.reuseData:', props.stepData.reuseData)
+    
     reviewAttachmentSelection.value = normalizedReuse
       .filter(item => item && item.type === 'attachment')
       .map(item => {
@@ -1277,6 +1308,8 @@ watch(() => props.modelValue, (isOpen) => {
         }
         return JSON.stringify({ sourceStep: item.sourceStep })
       })
+    
+    console.log('✅ reviewAttachmentSelection loaded:', reviewAttachmentSelection.value)
   } else {
     localStepData.value = getEmptyStepData()
     responsibleType.value = 'creator'  // Padrão: Criador do Processo
@@ -1359,22 +1392,30 @@ watch(
 
 watch(reviewAttachmentSelection, (selected) => {
   if (localStepData.value.type !== 'REVIEW') return
+  
+  console.log('🔄 reviewAttachmentSelection changed:', selected)
+  
   const existing = Array.isArray(localStepData.value.reuseData)
     ? localStepData.value.reuseData.filter(item => item?.type !== 'attachment')
     : []
+  
   // Converter seleções JSON de volta para objetos de reutilização
   const attachments = selected.map(jsonStr => {
     try {
       const config = JSON.parse(jsonStr)
+      console.log('📦 Parsed config:', config)
       return {
         type: 'attachment',
         ...config
       }
     } catch {
+      console.warn('⚠️ Failed to parse:', jsonStr)
       return { type: 'attachment', sourceStep: jsonStr }
     }
   })
+  
   localStepData.value.reuseData = [...existing, ...attachments]
+  console.log('✅ Updated reuseData:', localStepData.value.reuseData)
 })
 
 watch(reviewAttachmentOptions, (options) => {

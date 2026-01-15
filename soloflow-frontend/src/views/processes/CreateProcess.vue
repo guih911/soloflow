@@ -137,7 +137,6 @@
               <v-text-field
                 v-model="processData.title"
                 label="Título do Processo *"
-                placeholder="Ex: Pagamento fornecedor ABC - Janeiro/2026"
                 :rules="[v => !!v || 'Título é obrigatório', v => (v && v.length >= 3) || 'Mínimo 3 caracteres']"
                 variant="outlined"
                 prepend-inner-icon="mdi-format-title"

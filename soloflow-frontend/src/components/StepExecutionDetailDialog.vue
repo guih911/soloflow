@@ -85,8 +85,8 @@
           </div>
         </div>
 
-        <!-- Ação Executada (Aprovação) -->
-        <div v-if="execution.action" class="mb-6">
+        <!-- Ação Executada (Aprovação) - apenas para etapas de APPROVAL -->
+        <div v-if="execution.action && stepType === 'APPROVAL'" class="mb-6">
           <h4 class="text-subtitle-2 font-weight-medium mb-2 d-flex align-center">
             <v-icon size="18" class="mr-2" color="warning">mdi-gesture-tap</v-icon>
             Decisão
@@ -120,7 +120,7 @@
           </h4>
           <div class="metadata-list">
             <div 
-              v-for="(value, key, index) in parsedMetadata" 
+              v-for="(value, key, index) in nonReviewMetadata" 
               :key="key"
               class="metadata-item"
             >
@@ -208,22 +208,16 @@
             <v-icon size="18" class="mr-2" color="teal">mdi-text-box-check</v-icon>
             Revisão
           </h4>
-          <div class="review-container">
-            <div v-if="reviewData.approved !== undefined" class="review-status-item">
-              <v-chip
-                :color="reviewData.approved ? 'success' : 'error'"
-                variant="flat"
-                size="large"
-              >
-                <v-icon start>{{ reviewData.approved ? 'mdi-check-decagram' : 'mdi-close-octagon' }}</v-icon>
-                {{ reviewData.approved ? 'Aprovado' : 'Reprovado' }}
-              </v-chip>
-            </div>
-            <div v-if="reviewData.comments" class="review-comments-item">
-              <v-icon size="18" color="grey" class="mr-3">mdi-comment-text</v-icon>
-              <div class="review-comments-content">
-                <span class="review-comments-label">Observações da Revisão</span>
-                <span class="review-comments-value">{{ reviewData.comments }}</span>
+          <div class="metadata-list">
+            <div 
+              v-for="(value, key) in reviewData" 
+              :key="key"
+              class="metadata-item"
+            >
+              <v-icon size="18" color="teal" class="metadata-icon">mdi-text-box-check</v-icon>
+              <div class="metadata-content">
+                <span class="metadata-label">{{ formatFieldLabel(key) }}</span>
+                <span class="metadata-value">{{ formatFieldValue(value, key) }}</span>
               </div>
             </div>
           </div>
@@ -434,7 +428,14 @@ const isOverdue = computed(() => {
 })
 
 const parsedMetadata = computed(() => {
-  if (!props.execution?.metadata) return {}
+  console.log('🔍 StepExecutionDetailDialog - execution:', props.execution)
+  console.log('🔍 StepExecutionDetailDialog - metadata:', props.execution?.metadata)
+  console.log('🔍 StepExecutionDetailDialog - stepType:', stepType.value)
+  
+  if (!props.execution?.metadata) {
+    console.log('❌ No metadata found')
+    return {}
+  }
   try {
     let metadata = {}
     if (typeof props.execution.metadata === 'string') {
@@ -443,21 +444,43 @@ const parsedMetadata = computed(() => {
       metadata = props.execution.metadata
     }
     
-    // Filtrar para remover fieldsUpdated e timestamp
+    console.log('📦 Parsed metadata:', metadata)
+    
+    // Filtrar campos técnicos que não devem ser exibidos
     const filtered = {}
     for (const [key, value] of Object.entries(metadata)) {
-      if (key !== 'fieldsUpdated' && key !== 'timestamp') {
+      // Remover campos técnicos: fieldsUpdated, timestamp, e campos *_files (IDs de arquivos)
+      if (key !== 'fieldsUpdated' && key !== 'timestamp' && !key.endsWith('_files')) {
         filtered[key] = value
       }
     }
+    
+    console.log('✅ Filtered metadata:', filtered)
+    console.log('📊 Has metadata:', Object.keys(filtered).length > 0)
+    
     return filtered
-  } catch {
+  } catch (e) {
+    console.error('❌ Error parsing metadata:', e)
     return {}
   }
 })
 
+// Para etapas REVIEW, separar dados de revisão dos dados normais
+const nonReviewMetadata = computed(() => {
+  if (!isReviewStep.value) return parsedMetadata.value
+  
+  // Para REVIEW, filtrar campos que começam com 'review' do metadata normal
+  const filtered = {}
+  for (const [key, value] of Object.entries(parsedMetadata.value)) {
+    if (!key.toLowerCase().includes('review')) {
+      filtered[key] = value
+    }
+  }
+  return filtered
+})
+
 const hasMetadata = computed(() => {
-  return Object.keys(parsedMetadata.value).length > 0
+  return Object.keys(nonReviewMetadata.value).length > 0
 })
 
 const hasAttachments = computed(() => {
@@ -466,7 +489,16 @@ const hasAttachments = computed(() => {
 
 const reviewData = computed(() => {
   if (!isReviewStep.value) return null
-  return parsedMetadata.value.review || parsedMetadata.value
+  
+  // Extrair campos de revisão do metadata
+  const reviewFields = {}
+  for (const [key, value] of Object.entries(parsedMetadata.value)) {
+    if (key.toLowerCase().includes('review')) {
+      reviewFields[key] = value
+    }
+  }
+  
+  return Object.keys(reviewFields).length > 0 ? reviewFields : null
 })
 
 const signatureRecords = computed(() => {

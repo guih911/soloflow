@@ -169,10 +169,13 @@ export class CreateStepDto {
   @IsObject()
   flowConditions?: Record<string, any>;
 
-
+  // Configuração de reutilização de dados de etapas anteriores (para REVIEW)
   @IsOptional()
-  @IsBoolean()
-  reuseData?: boolean;
+  reuseData?: any; // Array de configurações ou JSON string
+
+  // Configurações específicas para etapas de revisão
+  @IsOptional()
+  reviewSettings?: any; // Objeto com configurações de campo de revisão ou JSON string
 
   @IsOptional()
   @IsArray()

@@ -1742,8 +1742,9 @@ export class ProcessesService {
         data: { formData: newFormData },
       });
 
-      // Preparar metadata da execução
+      // Preparar metadata da execução - MANTER OS DADOS ORIGINAIS
       const executionMetadata: any = {
+        ...executeDto.metadata, // Manter todos os campos preenchidos
         fieldsUpdated: Object.keys(executeDto.metadata || {}),
         timestamp: new Date().toISOString(),
       };
