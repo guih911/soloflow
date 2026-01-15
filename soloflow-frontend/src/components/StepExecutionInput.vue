@@ -528,13 +528,24 @@ async function executeStep() {
       }
     }
     
-    // Preparar apenas os dados dos campos visíveis
+    // Preparar apenas os dados dos campos visíveis (incluindo TABLE)
     const metadata = {}
+    
+    // Adicionar campos normais
     visibleFields.value.forEach(field => {
       if (formData.value[field.name] !== undefined) {
         metadata[field.name] = formData.value[field.name]
       }
     })
+    
+    // Adicionar campos TABLE
+    tableFields.value.forEach(field => {
+      if (formData.value[field.name] !== undefined) {
+        metadata[field.name] = formData.value[field.name]
+      }
+    })
+    
+   
     
     await processStore.executeStep({
       stepExecutionId: props.stepExecution.id,
