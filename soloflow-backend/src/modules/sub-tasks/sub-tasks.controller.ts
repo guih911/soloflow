@@ -12,15 +12,13 @@ import {
   Request,
   Res,
   StreamableFile,
+  NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { createReadStream, existsSync } from 'fs';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SubTasksService } from './sub-tasks.service';
+import { multerConfig } from '../../config/multer.config';
 import {
   CreateSubTaskTemplateDto,
   UpdateSubTaskTemplateDto,
@@ -28,15 +26,6 @@ import {
   ExecuteSubTaskDto,
   UpdateSubTaskDto,
 } from './dto';
-
-// Configuração do Multer para upload de anexos de sub-tarefas
-const storage = diskStorage({
-  destination: './uploads/subtasks',
-  filename: (req, file, callback) => {
-    const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
-    callback(null, uniqueName);
-  },
-});
 
 @Controller('sub-tasks')
 @UseGuards(JwtAuthGuard)
@@ -142,7 +131,7 @@ export class SubTasksController {
   }
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', { storage }))
+  @UseInterceptors(FileInterceptor('file', multerConfig))
   async uploadAttachment(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: {
@@ -165,10 +154,7 @@ export class SubTasksController {
 
     return this.subTasksService.uploadAttachment(
       body.subTaskId,
-      file.path,
-      file.originalname,
-      file.size,
-      file.mimetype,
+      file,
       req.user.id,
       body.requireSignature === 'true',
       body.signatureType || 'SEQUENTIAL',
@@ -182,19 +168,18 @@ export class SubTasksController {
     @Request() req,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const { path, filename, mimeType } = await this.subTasksService.getAttachmentForDownload(subTaskId, req.user.id);
+    try {
+      const { stream, filename, mimeType, size } = await this.subTasksService.downloadAttachment(subTaskId, req.user.id);
 
-    if (!existsSync(path)) {
-      throw new Error('Arquivo não encontrado no sistema');
+      res.set({
+        'Content-Type': mimeType,
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
+        'Content-Length': size.toString(),
+      });
+
+      return new StreamableFile(stream);
+    } catch (error) {
+      throw new NotFoundException('Arquivo não encontrado');
     }
-
-    const file = createReadStream(path);
-
-    res.set({
-      'Content-Type': mimeType,
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
-    });
-
-    return new StreamableFile(file);
   }
 }

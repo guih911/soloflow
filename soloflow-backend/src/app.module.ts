@@ -16,6 +16,7 @@ import { CacheModule } from './modules/cache/cache.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ChildProcessesModule } from './modules/child-processes/child-processes.module';
 import { SubTasksModule } from './modules/sub-tasks/sub-tasks.module';
+import { StorageModule } from './modules/storage/storage.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SubTasksModule } from './modules/sub-tasks/sub-tasks.module';
        envFilePath: path.resolve(__dirname, '..', '.env'),
     }),
     PrismaModule,
+    StorageModule,
     CacheModule,
     AuthModule,
     UsersModule,

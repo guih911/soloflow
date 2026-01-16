@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService, R2_FOLDERS } from '../storage/storage.service';
 import {
   CreateSubTaskTemplateDto,
   UpdateSubTaskTemplateDto,
@@ -22,7 +23,10 @@ import {
 
 @Injectable()
 export class SubTasksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storageService: StorageService,
+  ) {}
 
   // ════════════════════════════════════════════════════════════════════════════════
   // TEMPLATES DE SUB-TAREFAS (Configuração no tipo de processo)
@@ -514,10 +518,7 @@ export class SubTasksService {
 
   async uploadAttachment(
     subTaskId: string,
-    filePath: string,
-    originalName: string,
-    fileSize: number,
-    mimeType: string,
+    file: Express.Multer.File,
     userId: string,
     requireSignature: boolean = false,
     signatureType: string = 'SEQUENTIAL',
@@ -538,13 +539,16 @@ export class SubTasksService {
 
     await this.checkStepPermission(subTask.stepExecution, userId);
 
+    // Upload to R2
+    const uploadResult = await this.storageService.upload(file, R2_FOLDERS.SUBTAREFAS);
+
     return this.prisma.subTask.update({
       where: { id: subTaskId },
       data: {
-        attachmentPath: filePath,
-        attachmentName: originalName,
-        attachmentSize: fileSize,
-        attachmentMimeType: mimeType,
+        attachmentPath: uploadResult.key, // Store R2 key
+        attachmentName: file.originalname,
+        attachmentSize: file.size,
+        attachmentMimeType: file.mimetype,
         requireSignature: requireSignature,
         signatureType: requireSignature ? signatureType : null,
         signers: requireSignature && signerIds.length > 0 ? JSON.stringify(signerIds) : null,
@@ -561,7 +565,7 @@ export class SubTasksService {
   async getAttachmentForDownload(
     subTaskId: string,
     userId: string,
-  ): Promise<{ path: string; filename: string; mimeType: string; size: number }> {
+  ): Promise<{ key: string; filename: string; mimeType: string; size: number }> {
     const subTask = await this.prisma.subTask.findUnique({
       where: { id: subTaskId },
       include: {
@@ -582,10 +586,29 @@ export class SubTasksService {
     await this.checkViewPermission(subTask.stepExecution.processInstance, userId);
 
     return {
-      path: subTask.attachmentPath,
+      key: subTask.attachmentPath, // R2 key
       filename: subTask.attachmentName,
       mimeType: subTask.attachmentMimeType || 'application/octet-stream',
       size: subTask.attachmentSize || 0,
+    };
+  }
+
+  /**
+   * Download attachment stream from R2
+   */
+  async downloadAttachment(
+    subTaskId: string,
+    userId: string,
+  ): Promise<{ stream: import('stream').Readable; filename: string; mimeType: string; size: number }> {
+    const attachmentInfo = await this.getAttachmentForDownload(subTaskId, userId);
+
+    const { stream, metadata } = await this.storageService.download(attachmentInfo.key);
+
+    return {
+      stream,
+      filename: attachmentInfo.filename,
+      mimeType: attachmentInfo.mimeType,
+      size: metadata.size, // Usar tamanho real do R2 (pode diferir após assinatura)
     };
   }
 }

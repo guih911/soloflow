@@ -6,9 +6,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { createReadStream, existsSync } from 'fs';
-import { join } from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService, R2_FOLDERS } from '../storage/storage.service';
 import { CreateProcessInstanceDto } from './dto/create-process-instance.dto';
 import { ExecuteStepDto } from './dto/execute-step.dto';
 import { ValidateSignatureDto } from './dto/validate-signature.dto';
@@ -52,7 +51,10 @@ export interface UploadResponse {
 
 @Injectable()
 export class ProcessesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storageService: StorageService,
+  ) {}
 
   async createInstance(
     createDto: CreateProcessInstanceDto,
@@ -177,13 +179,16 @@ export class ProcessesService {
       throw new BadRequestException('Nenhuma etapa disponível para anexo');
     }
 
+    // Upload to R2
+    const uploadResult = await this.storageService.upload(file, R2_FOLDERS.ANEXOS);
+
     const attachment: Attachment = await this.prisma.attachment.create({
       data: {
-        filename: file.filename,
+        filename: uploadResult.filename,
         originalName: file.originalname,
         mimeType: file.mimetype,
         size: file.size,
-        path: file.path,
+        path: uploadResult.key, // Store R2 key
         stepExecutionId: stepExecution.id,
         signatureData: JSON.stringify({ isFormField: true, fieldName }),
       },
@@ -264,18 +269,23 @@ export class ProcessesService {
 
     const createdAttachments: Attachment[] = [];
 
+    // Upload files to R2 and create attachments
     const attachmentPromises: Promise<Attachment>[] = files.map(
-      (file: Express.Multer.File) =>
-        this.prisma.attachment.create({
+      async (file: Express.Multer.File) => {
+        // Upload to R2
+        const uploadResult = await this.storageService.upload(file, R2_FOLDERS.ANEXOS);
+
+        return this.prisma.attachment.create({
           data: {
-            filename: file.filename,
+            filename: uploadResult.filename,
             originalName: file.originalname,
             mimeType: file.mimetype,
             size: file.size,
-            path: file.path,
+            path: uploadResult.key, // Store R2 key
             stepExecutionId: stepExecution.id,
           },
-        }),
+        });
+      },
     );
 
     const attachments: Attachment[] = await Promise.all(attachmentPromises);
@@ -350,6 +360,9 @@ export class ProcessesService {
       await this.checkViewPermission(stepExecution.processInstance, userId);
     }
 
+    // Upload to R2
+    const uploadResult = await this.storageService.upload(file, R2_FOLDERS.ANEXOS);
+
     // Se é um arquivo de campo do formulário da etapa, marcar no signatureData
     const signatureData = isStepFormField
       ? JSON.stringify({ isStepFormField: true, fieldName: fieldName || null })
@@ -357,11 +370,11 @@ export class ProcessesService {
 
     const attachment: Attachment = await this.prisma.attachment.create({
       data: {
-        filename: file.filename,
+        filename: uploadResult.filename,
         originalName: file.originalname,
         mimeType: file.mimetype,
         size: file.size,
-        path: file.path,
+        path: uploadResult.key, // Store R2 key
         stepExecutionId,
         signatureData,
       },
@@ -401,19 +414,18 @@ export class ProcessesService {
       userId,
     );
 
-    const filePath = attachment.path;
-    if (!existsSync(filePath)) {
-      throw new NotFoundException('Arquivo não encontrado no sistema');
-    }
+    // Download from R2
+    const { stream, metadata } = await this.storageService.download(attachment.path);
 
     res.setHeader('Content-Type', attachment.mimeType);
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="${encodeURIComponent(attachment.originalName)}"`,
     );
+    // Usar tamanho real do arquivo no R2 (pode diferir do DB após assinatura)
+    res.setHeader('Content-Length', metadata.size.toString());
 
-    const fileStream = createReadStream(filePath);
-    fileStream.pipe(res);
+    stream.pipe(res);
   }
 
   async viewAttachment(
@@ -439,19 +451,18 @@ export class ProcessesService {
       userId,
     );
 
-    const filePath = attachment.path;
-    if (!existsSync(filePath)) {
-      throw new NotFoundException('Arquivo não encontrado no sistema');
-    }
+    // Download from R2
+    const { stream, metadata } = await this.storageService.download(attachment.path);
 
     res.setHeader('Content-Type', attachment.mimeType);
     res.setHeader(
       'Content-Disposition',
       `inline; filename="${encodeURIComponent(attachment.originalName)}"`,
     );
+    // Usar tamanho real do arquivo no R2 (pode diferir do DB após assinatura)
+    res.setHeader('Content-Length', metadata.size.toString());
 
-    const fileStream = createReadStream(filePath);
-    fileStream.pipe(res);
+    stream.pipe(res);
   }
 
   private getFieldFileConfig(field: any): {

@@ -6,18 +6,20 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService, R2_FOLDERS } from '../storage/storage.service';
 import { SimpleSignatureService, SignatureMetadata } from './simple-signature.service';
 import { ModernSignatureService, SignatureMetadata as ModernSignatureMetadata } from './modern-signature.service';
 import { SignDocumentSimpleDto } from './dto/sign-document-simple.dto';
 import { CreateSignatureRequirementDto } from './dto/create-signature-requirement.dto';
 import { join } from 'path';
 import * as bcrypt from 'bcrypt';
-import { copyFileSync, unlinkSync } from 'fs';
+import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
 
 @Injectable()
 export class SignaturesService {
   constructor(
     private prisma: PrismaService,
+    private storageService: StorageService,
     private simpleSignatureService: SimpleSignatureService,
     private modernSignatureService: ModernSignatureService,
   ) {}
@@ -196,23 +198,43 @@ export class SignaturesService {
 
     console.log(`📝 Assinando arquivo ${attachment.originalName} - Assinatura #${existingSignaturesCount + 1}`);
 
-    // 11. Assinar PDF com design moderno, QR Code e página de validação
-    const signedFilename = `signed-${Date.now()}-${attachment.filename}`;
-    const tempSignedPath = join(process.cwd(), 'uploads', 'signatures', signedFilename);
+    // 11. Baixar PDF do R2 para processamento local
+    const tempDir = join(process.cwd(), 'uploads', 'signatures');
+    if (!existsSync(tempDir)) {
+      mkdirSync(tempDir, { recursive: true });
+    }
 
+    const tempInputPath = join(tempDir, `input-${Date.now()}-${attachment.filename}`);
+    const tempSignedPath = join(tempDir, `signed-${Date.now()}-${attachment.filename}`);
+
+    // Baixar arquivo do R2
+    const pdfBuffer = await this.storageService.getBuffer(attachment.path);
+    writeFileSync(tempInputPath, pdfBuffer);
+
+    // Assinar PDF com design moderno, QR Code e página de validação
     const signatureResult = await this.modernSignatureService.signPDF(
-      attachment.path,
+      tempInputPath,
       tempSignedPath,
       metadata,
       dto.userPassword,
       existingSignaturesCount, // Passa a ordem para empilhar assinaturas verticalmente
     );
 
-    // 11.5. Substituir arquivo original pelo assinado
-    console.log(`🔄 Substituindo arquivo original ${attachment.path} pelo assinado`);
-    copyFileSync(tempSignedPath, attachment.path);
+    // 11.5. Fazer upload do arquivo assinado de volta para R2 (substituindo o original)
+    console.log(`🔄 Fazendo upload do arquivo assinado para R2: ${attachment.path}`);
+    const signedBuffer = require('fs').readFileSync(tempSignedPath);
+    // Usar replaceBuffer para manter o mesmo key/path do arquivo original
+    await this.storageService.replaceBuffer(
+      signedBuffer,
+      attachment.path, // Usa o mesmo key existente
+      attachment.originalName,
+      'application/pdf',
+    );
+
+    // Limpar arquivos temporários
+    unlinkSync(tempInputPath);
     unlinkSync(tempSignedPath);
-    console.log(`✅ Arquivo original substituído com sucesso`);
+    console.log(`✅ Arquivo assinado enviado para R2 com sucesso`);
 
     // 12. Criar registro de assinatura
     const signatureRecord = await this.prisma.signatureRecord.create({
@@ -1018,20 +1040,40 @@ export class SignaturesService {
       ipAddress: dto.ipAddress,
     };
 
-    // 10. Aplicar assinatura visual no PDF
-    const signedFilename = `signed-subtask-${Date.now()}-${subTask.attachmentName}`;
-    const tempSignedPath = join(process.cwd(), 'uploads', 'signatures', signedFilename);
+    // 10. Baixar PDF do R2 para processamento local
+    const tempDir = join(process.cwd(), 'uploads', 'signatures');
+    if (!existsSync(tempDir)) {
+      mkdirSync(tempDir, { recursive: true });
+    }
 
+    const tempInputPath = join(tempDir, `input-subtask-${Date.now()}-${subTask.attachmentName}`);
+    const tempSignedPath = join(tempDir, `signed-subtask-${Date.now()}-${subTask.attachmentName}`);
+
+    // Baixar arquivo do R2
+    const pdfBuffer = await this.storageService.getBuffer(subTask.attachmentPath);
+    writeFileSync(tempInputPath, pdfBuffer);
+
+    // Aplicar assinatura visual no PDF
     const signatureResult = await this.modernSignatureService.signPDF(
-      subTask.attachmentPath,
+      tempInputPath,
       tempSignedPath,
       metadata,
       dto.userPassword,
       existingSignatures.length, // Ordem da assinatura
     );
 
-    // 11. Substituir arquivo original pelo assinado
-    copyFileSync(tempSignedPath, subTask.attachmentPath);
+    // 11. Fazer upload do arquivo assinado de volta para R2 (substituindo o original)
+    const signedBuffer = require('fs').readFileSync(tempSignedPath);
+    // Usar replaceBuffer para manter o mesmo key/path do arquivo original
+    await this.storageService.replaceBuffer(
+      signedBuffer,
+      subTask.attachmentPath, // Usa o mesmo key existente
+      subTask.attachmentName,
+      'application/pdf',
+    );
+
+    // Limpar arquivos temporários
+    unlinkSync(tempInputPath);
     unlinkSync(tempSignedPath);
 
     // 12. Registrar assinatura nos metadados da sub-tarefa
