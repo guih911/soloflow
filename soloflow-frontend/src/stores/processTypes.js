@@ -140,10 +140,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
 
   conditions = typeof conditions === 'object' && conditions !== null ? { ...conditions } : {}
 
-  // Log para debug de assignedToCreator
-  if (step.assignedToCreator !== undefined) {
-    console.log(`🔍 Normalizando step "${step.name}": assignedToCreator =`, step.assignedToCreator, '→', Boolean(step.assignedToCreator))
-  }
 
     return {
       ...step,

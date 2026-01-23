@@ -5,48 +5,70 @@
     max-width="1000"
     class="attachment-preview-modal"
   >
-    <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
-        <div>
-          <v-icon color="primary" class="mr-2">{{ getFileIcon(attachment?.mimeType) }}</v-icon>
-          {{ attachment?.originalName || attachment?.displayName }}
+    <v-card class="preview-card">
+      <!-- Modern Header -->
+      <div class="preview-header">
+        <div class="header-info">
+          <div class="file-icon-badge" :class="getFileColorClass(attachment?.mimeType)">
+            <v-icon size="20" color="white">{{ getFileIcon(attachment?.mimeType) }}</v-icon>
+          </div>
+          <div class="file-details">
+            <span class="file-name">{{ attachment?.originalName || attachment?.displayName }}</span>
+            <span class="file-meta">{{ formatFileSize(attachment?.size) }} • {{ getFileTypeName(attachment?.mimeType) }}</span>
+          </div>
         </div>
-        <div>
+        <div class="header-actions">
           <v-btn
-            icon="mdi-download"
+            icon
             variant="text"
+            size="small"
             @click="downloadFile"
             :loading="downloading"
-          />
+            class="action-btn"
+          >
+            <v-icon>mdi-download</v-icon>
+            <v-tooltip activator="parent" location="bottom">Download</v-tooltip>
+          </v-btn>
           <v-btn
-            icon="mdi-open-in-new"
+            icon
             variant="text"
+            size="small"
             @click="openInNewTab"
-          />
+            class="action-btn"
+          >
+            <v-icon>mdi-open-in-new</v-icon>
+            <v-tooltip activator="parent" location="bottom">Abrir em nova aba</v-tooltip>
+          </v-btn>
           <v-btn
-            icon="mdi-close"
+            icon
             variant="text"
+            size="small"
             @click="close"
-          />
+            class="action-btn close-action"
+          >
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
         </div>
-      </v-card-title>
+      </div>
       
-      <v-divider />
-      
-      <v-card-text class="preview-content">
-        <div v-if="loading" class="text-center py-12">
-          <v-progress-circular indeterminate color="primary" />
-          <p class="mt-4">Carregando arquivo...</p>
+      <!-- Preview Content -->
+      <div class="preview-body">
+        <!-- Loading State -->
+        <div v-if="loading" class="loading-state">
+          <v-progress-circular indeterminate color="primary" size="48" />
+          <p class="loading-text">Carregando visualização...</p>
         </div>
-        
+
+        <!-- Image Preview -->
         <div v-else-if="isImage" class="image-preview">
-          <img 
-            :src="previewUrl" 
+          <img
+            :src="previewUrl"
             :alt="attachment?.originalName"
             class="preview-image"
           />
         </div>
-        
+
+        <!-- PDF Preview -->
         <div v-else-if="isPdf" class="pdf-preview">
           <iframe
             :src="previewUrl"
@@ -54,35 +76,26 @@
             frameborder="0"
           />
         </div>
-        
-        <div v-else class="no-preview text-center py-12">
-          <v-icon size="64" color="grey">{{ getFileIcon(attachment?.mimeType) }}</v-icon>
-          <h3 class="mt-4">Visualização não disponível</h3>
-          <p class="text-grey mt-2">
-            Este tipo de arquivo não pode ser visualizado diretamente.
-          </p>
+
+        <!-- No Preview -->
+        <div v-else class="no-preview-state">
+          <div class="no-preview-icon">
+            <v-icon size="48" color="grey">{{ getFileIcon(attachment?.mimeType) }}</v-icon>
+          </div>
+          <h3 class="no-preview-title">Visualização não disponível</h3>
+          <p class="no-preview-text">Este tipo de arquivo não pode ser visualizado no navegador.</p>
           <v-btn
             color="primary"
-            variant="elevated"
-            class="mt-4"
+            variant="flat"
             @click="downloadFile"
             :loading="downloading"
+            prepend-icon="mdi-download"
+            class="download-btn"
           >
-            <v-icon start>mdi-download</v-icon>
             Baixar Arquivo
           </v-btn>
         </div>
-      </v-card-text>
-      
-      <v-divider />
-      
-      <v-card-actions>
-        <div class="text-caption text-grey">
-          {{ formatFileSize(attachment?.size) }} • {{ attachment?.mimeType }}
-        </div>
-        <v-spacer />
-        <v-btn variant="text" @click="close">Fechar</v-btn>
-      </v-card-actions>
+      </div>
     </v-card>
   </v-dialog>
 </template>
@@ -119,6 +132,25 @@ function getFileIcon(mimeType) {
   if (mimeType.includes('word')) return 'mdi-file-word'
   if (mimeType.includes('excel')) return 'mdi-file-excel'
   return 'mdi-file'
+}
+
+function getFileColorClass(mimeType) {
+  if (!mimeType) return 'file-grey'
+  if (mimeType.includes('pdf')) return 'file-red'
+  if (mimeType.includes('image')) return 'file-blue'
+  if (mimeType.includes('word')) return 'file-indigo'
+  if (mimeType.includes('excel')) return 'file-green'
+  return 'file-grey'
+}
+
+function getFileTypeName(mimeType) {
+  if (!mimeType) return 'Arquivo'
+  if (mimeType.includes('pdf')) return 'PDF'
+  if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'JPEG'
+  if (mimeType.includes('png')) return 'PNG'
+  if (mimeType.includes('word')) return 'Word'
+  if (mimeType.includes('excel')) return 'Excel'
+  return mimeType.split('/')[1]?.toUpperCase() || 'Arquivo'
 }
 
 function formatFileSize(bytes) {
@@ -203,35 +235,178 @@ watch(() => props.attachment, () => {
   z-index: 2100;
 }
 
-.preview-content {
+.preview-card {
+  border-radius: 16px !important;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Header */
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--color-neutral-50);
+  border-bottom: 1px solid var(--color-neutral-200);
+}
+
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-icon-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.file-icon-badge.file-red { background: var(--color-error-500); }
+.file-icon-badge.file-blue { background: var(--color-info-500); }
+.file-icon-badge.file-indigo { background: var(--color-primary-500); }
+.file-icon-badge.file-green { background: var(--color-success-500); }
+.file-icon-badge.file-grey { background: var(--color-neutral-400); }
+
+.file-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-meta {
+  font-size: 0.75rem;
+  color: var(--color-neutral-500);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.action-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px !important;
+}
+
+.action-btn:hover {
+  background: var(--color-neutral-200);
+}
+
+.close-action:hover {
+  background: var(--color-error-50);
+  color: var(--color-error-500);
+}
+
+/* Preview Body */
+.preview-body {
   min-height: 400px;
   max-height: 70vh;
   overflow: auto;
+  background: var(--color-neutral-100);
 }
 
+/* Loading State */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: 16px;
+}
+
+.loading-text {
+  font-size: 0.9375rem;
+  color: var(--color-neutral-500);
+  margin: 0;
+}
+
+/* Image Preview */
 .image-preview {
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 400px;
+  padding: 24px;
 }
 
 .preview-image {
   max-width: 100%;
-  max-height: 60vh;
+  max-height: 65vh;
   object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+/* PDF Preview */
 .pdf-preview {
-  height: 60vh;
+  height: 70vh;
 }
 
 .pdf-iframe {
   width: 100%;
   height: 100%;
+  border: none;
 }
 
-.no-preview {
-  min-height: 300px;
+/* No Preview State */
+.no-preview-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.no-preview-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--color-neutral-200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.no-preview-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+  margin: 0 0 8px 0;
+}
+
+.no-preview-text {
+  font-size: 0.9375rem;
+  color: var(--color-neutral-500);
+  margin: 0 0 24px 0;
+}
+
+.download-btn {
+  text-transform: none;
+  font-weight: 500;
+  border-radius: 10px;
 }
 </style>

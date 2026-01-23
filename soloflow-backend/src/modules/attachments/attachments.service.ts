@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService, R2_FOLDERS } from '../storage/storage.service';
 import { Readable } from 'stream';
+import { fixFilenameEncoding } from '../../config/multer.config';
 
 export interface CreateAttachmentData {
   filename: string;
@@ -36,7 +37,7 @@ export class AttachmentsService {
     // Create attachment record
     return this.createAttachment({
       filename: uploadResult.filename,
-      originalName: file.originalname,
+      originalName: fixFilenameEncoding(file.originalname),
       mimeType: file.mimetype,
       size: file.size,
       path: uploadResult.key, // Store R2 key

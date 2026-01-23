@@ -4,10 +4,11 @@
     @update:model-value="$emit('update:modelValue', $event)"
     max-width="700"
     persistent
+    aria-labelledby="execute-substep-title"
   >
-    <v-card v-if="subStep" class="execute-substep-card">
+    <v-card v-if="subStep" class="execute-substep-card" role="dialog" aria-modal="true">
       <!-- Header -->
-      <div class="substep-header" :class="getHeaderClass()">
+      <div class="substep-header" :class="getHeaderClass()" id="execute-substep-title">
         <div class="d-flex align-center justify-space-between pa-4">
           <div class="d-flex align-center">
             <v-icon class="mr-3" :color="getHeaderIconColor()" size="28">
@@ -162,6 +163,7 @@
             :show-size="true"
             accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
             @change="handleFileChange"
+            aria-label="Selecionar arquivo para anexar"
           >
             <template v-slot:selection="{ fileNames }">
               <v-chip
@@ -339,6 +341,7 @@
             density="comfortable"
             rows="3"
             prepend-inner-icon="mdi-comment-text-outline"
+            aria-label="Comentário sobre a execução"
           />
         </div>
       </v-card-text>

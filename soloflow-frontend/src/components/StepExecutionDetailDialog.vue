@@ -2,303 +2,229 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="700"
+    max-width="640"
     scrollable
+    aria-labelledby="step-detail-title"
   >
-    <v-card v-if="execution" class="step-detail-card">
-      <!-- Header -->
-      <div class="step-header" :class="getHeaderClass()">
-        <div class="d-flex align-center justify-space-between pa-4">
-          <div class="d-flex align-center">
-            <v-avatar :color="getStepTypeColor()" size="48" class="mr-3">
-              <v-icon color="white" size="24">{{ getStepTypeIcon() }}</v-icon>
-            </v-avatar>
-            <div>
-              <v-chip size="x-small" :color="getStepTypeColor()" variant="flat" class="mb-1">
-                {{ getStepTypeLabel() }}
-              </v-chip>
-              <h3 class="text-h6 font-weight-bold" :class="{ 'text-white': execution.status === 'IN_PROGRESS' }">
-                {{ execution.step?.name || 'Etapa' }}
-              </h3>
-            </div>
+    <v-card v-if="execution" class="step-detail-card" role="dialog" aria-modal="true">
+      <!-- Header Minimalista -->
+      <div class="step-header" id="step-detail-title">
+        <div class="header-top">
+          <div class="step-type-badge" :class="`type-${stepType.toLowerCase()}`">
+            <v-icon size="16">{{ getStepTypeIcon() }}</v-icon>
+            <span>{{ getStepTypeLabel() }}</span>
           </div>
-          <v-chip
-            :color="getStatusColor()"
-            :variant="execution.status === 'IN_PROGRESS' ? 'flat' : 'tonal'"
+          <v-btn
+            icon
+            variant="text"
+            size="small"
+            @click="$emit('update:modelValue', false)"
+            class="close-btn"
           >
-            <v-icon start size="16">{{ getStatusIcon() }}</v-icon>
-            {{ getStatusLabel() }}
-          </v-chip>
+            <v-icon size="20">mdi-close</v-icon>
+          </v-btn>
+        </div>
+        <h2 class="step-title">{{ execution.step?.name || 'Etapa' }}</h2>
+        <div class="status-badge" :class="`status-${execution.status?.toLowerCase()}`">
+          <v-icon size="14">{{ getStatusIcon() }}</v-icon>
+          <span>{{ getStatusLabel() }}</span>
         </div>
       </div>
 
-      <v-divider />
-
-      <v-card-text class="pa-6" style="max-height: 70vh; overflow-y: auto;">
+      <v-card-text class="modal-content">
         <!-- Descrição/Instruções -->
-        <div v-if="execution.step?.description || execution.step?.instructions" class="mb-6">
-          <h4 class="text-subtitle-2 font-weight-medium mb-2 d-flex align-center">
-            <v-icon size="18" class="mr-2" color="info">mdi-clipboard-text</v-icon>
-            Instruções
-          </h4>
-          <v-alert type="info" variant="tonal" density="compact">
+        <div v-if="execution.step?.description || execution.step?.instructions" class="section instructions-section">
+          <p class="instructions-text">
             {{ execution.step?.instructions || execution.step?.description }}
-          </v-alert>
+          </p>
         </div>
 
         <!-- Informações Básicas -->
-        <div class="info-grid mb-6">
-          <div v-if="getResponsibleName()" class="info-card">
-            <v-icon size="20" color="primary">mdi-account-check</v-icon>
-            <div>
-              <span class="info-label">Responsável</span>
-              <span class="info-value">{{ getResponsibleName() }}</span>
-            </div>
+        <div class="section info-section">
+          <div class="info-row" v-if="getResponsibleName()">
+            <span class="info-label">Responsável</span>
+            <span class="info-value">{{ getResponsibleName() }}</span>
           </div>
 
-          <div v-if="execution.executor" class="info-card">
-            <v-icon size="20" color="success">mdi-account-edit</v-icon>
-            <div>
-              <span class="info-label">Executado por</span>
-              <span class="info-value">{{ execution.executor.name }}</span>
-            </div>
+          <div class="info-row" v-if="execution.executor">
+            <span class="info-label">Executado por</span>
+            <span class="info-value">{{ execution.executor.name }}</span>
           </div>
 
-          <div v-if="execution.dueAt" class="info-card" :class="{ 'error-bg': isOverdue }">
-            <v-icon size="20" :color="isOverdue ? 'error' : 'warning'">
-              {{ isOverdue ? 'mdi-clock-alert' : 'mdi-clock-outline' }}
-            </v-icon>
-            <div>
-              <span class="info-label">Prazo</span>
-              <span class="info-value" :class="{ 'text-error': isOverdue }">
-                {{ formatDate(execution.dueAt) }}
-              </span>
-            </div>
+          <div class="info-row" v-if="execution.dueAt">
+            <span class="info-label">Prazo</span>
+            <span class="info-value" :class="{ 'overdue': isOverdue }">
+              {{ formatDate(execution.dueAt) }}
+              <v-icon v-if="isOverdue" size="14" color="error" class="ml-1">mdi-alert-circle</v-icon>
+            </span>
           </div>
 
-          <div v-if="execution.completedAt" class="info-card">
-            <v-icon size="20" color="success">mdi-check-circle</v-icon>
-            <div>
-              <span class="info-label">Concluído em</span>
-              <span class="info-value">{{ formatDate(execution.completedAt) }}</span>
-            </div>
+          <div class="info-row" v-if="execution.completedAt">
+            <span class="info-label">Concluído em</span>
+            <span class="info-value">{{ formatDate(execution.completedAt) }}</span>
           </div>
         </div>
 
         <!-- Ação Executada (Aprovação) - apenas para etapas de APPROVAL -->
-        <div v-if="execution.action && stepType === 'APPROVAL'" class="mb-6">
-          <h4 class="text-subtitle-2 font-weight-medium mb-2 d-flex align-center">
-            <v-icon size="18" class="mr-2" color="warning">mdi-gesture-tap</v-icon>
-            Decisão
-          </h4>
-          <v-chip
-            :color="getActionColor(execution.action)"
-            variant="flat"
-            size="large"
-          >
-            <v-icon start>{{ getActionIcon(execution.action) }}</v-icon>
-            {{ getActionLabel(execution.action) }}
-          </v-chip>
+        <div v-if="execution.action && stepType === 'APPROVAL'" class="section">
+          <h4 class="section-title">Decisão</h4>
+          <div class="decision-badge" :class="`decision-${getActionColor(execution.action)}`">
+            <v-icon size="18">{{ getActionIcon(execution.action) }}</v-icon>
+            <span>{{ getActionLabel(execution.action) }}</span>
+          </div>
         </div>
 
         <!-- Comentário -->
-        <div v-if="execution.comment" class="mb-6">
-          <h4 class="text-subtitle-2 font-weight-medium mb-2 d-flex align-center">
-            <v-icon size="18" class="mr-2" color="secondary">mdi-comment-text</v-icon>
-            Comentário
-          </h4>
-          <v-card variant="tonal" color="secondary" class="pa-3">
-            <p class="text-body-2 mb-0">{{ execution.comment }}</p>
-          </v-card>
+        <div v-if="execution.comment" class="section">
+          <h4 class="section-title">Comentário</h4>
+          <div class="comment-box">
+            <p>{{ execution.comment }}</p>
+          </div>
         </div>
 
         <!-- Dados Preenchidos (INPUT / REVIEW) - não exibir para APPROVAL -->
-        <div v-if="hasMetadata && stepType !== 'APPROVAL'" class="mb-6">
-          <h4 class="text-subtitle-2 font-weight-medium mb-3 d-flex align-center">
-            <v-icon size="18" class="mr-2" color="primary">mdi-form-textbox</v-icon>
-            Dados Preenchidos
-          </h4>
-          <div class="metadata-list">
-            <div 
-              v-for="(value, key, index) in nonReviewMetadata" 
-              :key="key"
-              class="metadata-item"
-            >
+        <div v-if="hasMetadata && stepType !== 'APPROVAL'" class="section">
+          <h4 class="section-title">Dados Preenchidos</h4>
+          <div class="data-list">
+            <template v-for="(value, key) in nonReviewMetadata" :key="key">
               <!-- Campo Tabela -->
-              <template v-if="Array.isArray(value) && value.length > 0 && typeof value[0] === 'object'">
-                <div class="w-100 mb-4">
-                  <h5 class="text-subtitle-2 font-weight-medium mb-2 d-flex align-center">
-                    <v-icon size="18" class="mr-2" color="primary">mdi-table</v-icon>
-                    {{ formatFieldLabel(key) }}
-                  </h5>
-                  <v-table density="compact" class="table-data-view">
-                    <thead>
-                      <tr>
-                        <th v-for="column in Object.keys(value[0])" :key="column" class="text-left">
-                          {{ formatFieldLabel(column) }}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="(row, rowIndex) in value" :key="rowIndex">
-                        <td v-for="column in Object.keys(value[0])" :key="column">
-                          {{ formatFieldValue(row[column], column) }}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </v-table>
-                </div>
-              </template>
-              
+              <div v-if="Array.isArray(value) && value.length > 0 && typeof value[0] === 'object'" class="table-container">
+                <span class="table-label">{{ formatFieldLabel(key) }}</span>
+                <v-table density="compact" class="data-table">
+                  <thead>
+                    <tr>
+                      <th v-for="column in Object.keys(value[0])" :key="column">
+                        {{ formatFieldLabel(column) }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, rowIndex) in value" :key="rowIndex">
+                      <td v-for="column in Object.keys(value[0])" :key="column">
+                        {{ formatFieldValue(row[column], column) }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </div>
+
               <!-- Campo Normal -->
-              <template v-else>
-                <v-icon size="18" color="grey" class="metadata-icon">{{ getFieldIcon(key) }}</v-icon>
-                <div class="metadata-content">
-                  <span class="metadata-label">{{ formatFieldLabel(key) }}</span>
-                  <span class="metadata-value">{{ formatFieldValue(value, key) }}</span>
-                </div>
-              </template>
-            </div>
+              <div v-else class="data-row">
+                <span class="data-label">{{ formatFieldLabel(key) }}</span>
+                <span class="data-value">{{ formatFieldValue(value, key) }}</span>
+              </div>
+            </template>
           </div>
         </div>
 
         <!-- Anexos -->
-        <div v-if="hasStepAttachments" class="mb-6">
-          <h4 class="text-subtitle-2 font-weight-medium mb-3 d-flex align-center">
-            <v-icon size="18" class="mr-2" color="info">mdi-paperclip</v-icon>
-            Anexos ({{ stepAttachments.length }})
+        <div v-if="hasStepAttachments" class="section">
+          <h4 class="section-title">
+            Anexos
+            <span class="count-badge">{{ stepAttachments.length }}</span>
           </h4>
-          <div class="attachments-list">
+          <div class="files-list">
             <div
               v-for="attachment in stepAttachments"
               :key="attachment.id"
-              class="attachment-item"
+              class="file-item"
               @click="openAttachmentPreview(attachment)"
             >
-              <div class="attachment-icon">
-                <v-icon :color="getAttachmentColor(attachment)" size="28">
-                  {{ getAttachmentIcon(attachment) }}
-                </v-icon>
+              <div class="file-icon" :class="`file-${getFileTypeClass(attachment)}`">
+                <v-icon size="18">{{ getAttachmentIcon(attachment) }}</v-icon>
               </div>
-              <div class="attachment-info">
-                <span class="attachment-name">{{ attachment.originalName }}</span>
-                <div class="attachment-meta">
-                  <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
-                  <v-chip v-if="attachment.isSigned" size="x-small" color="success" variant="tonal" class="ml-2">
-                    <v-icon start size="10">mdi-check-decagram</v-icon>
+              <div class="file-info">
+                <span class="file-name">{{ attachment.originalName }}</span>
+                <span class="file-meta">
+                  {{ formatFileSize(attachment.size) }}
+                  <span v-if="attachment.isSigned" class="signed-badge">
+                    <v-icon size="12">mdi-check-decagram</v-icon>
                     Assinado
-                  </v-chip>
-                </div>
+                  </span>
+                </span>
               </div>
-              <v-btn
-                icon="mdi-download"
-                size="small"
-                variant="tonal"
-                color="primary"
-                class="download-btn"
+              <button
+                class="file-action"
                 @click.stop="downloadAttachment(attachment)"
-              />
+                title="Baixar"
+              >
+                <v-icon size="18">mdi-download</v-icon>
+              </button>
             </div>
           </div>
         </div>
 
         <!-- Revisão Específica -->
-        <div v-if="isReviewStep && reviewData" class="mb-6">
-          <h4 class="text-subtitle-2 font-weight-medium mb-3 d-flex align-center">
-            <v-icon size="18" class="mr-2" color="teal">mdi-text-box-check</v-icon>
-            Revisão
-          </h4>
-          <div class="metadata-list">
-            <div 
-              v-for="(value, key) in reviewData" 
+        <div v-if="isReviewStep && reviewData" class="section">
+          <h4 class="section-title">Revisão</h4>
+          <div class="data-list">
+            <div
+              v-for="(value, key) in reviewData"
               :key="key"
-              class="metadata-item"
+              class="data-row"
             >
-              <v-icon size="18" color="teal" class="metadata-icon">mdi-text-box-check</v-icon>
-              <div class="metadata-content">
-                <span class="metadata-label">{{ formatFieldLabel(key) }}</span>
-                <span class="metadata-value">{{ formatFieldValue(value, key) }}</span>
-              </div>
+              <span class="data-label">{{ formatFieldLabel(key) }}</span>
+              <span class="data-value">{{ formatFieldValue(value, key) }}</span>
             </div>
           </div>
         </div>
 
         <!-- Assinaturas -->
-        <div v-if="hasSignatures" class="mb-6">
-          <h4 class="text-subtitle-2 font-weight-medium mb-3 d-flex align-center">
-            <v-icon size="18" class="mr-2" color="error">mdi-draw-pen</v-icon>
+        <div v-if="hasSignatures" class="section">
+          <h4 class="section-title">
             Assinaturas
+            <span class="count-badge">{{ signatureRecords.length }}</span>
           </h4>
           <div class="signatures-list">
-            <div 
-              v-for="(record, index) in signatureRecords" 
+            <div
+              v-for="record in signatureRecords"
               :key="record.id"
-              class="signature-item"
+              class="signer-item"
+              :class="{ 'signed': record.status === 'COMPLETED' }"
             >
-              <v-icon 
-                :color="record.status === 'SIGNED' ? 'success' : 'warning'" 
-                size="28"
-                class="signature-icon"
-              >
-                {{ record.status === 'SIGNED' ? 'mdi-check-decagram' : 'mdi-clock-outline' }}
-              </v-icon>
-              <div class="signature-content">
-                <span class="signature-name">{{ record.signer?.name || 'Assinante' }}</span>
-                <div class="signature-meta">
-                  <v-chip 
-                    size="x-small" 
-                    :color="record.status === 'SIGNED' ? 'success' : 'warning'" 
-                    variant="tonal"
-                  >
-                    {{ record.status === 'SIGNED' ? 'Assinado' : 'Pendente' }}
-                  </v-chip>
-                  <span v-if="record.signedAt" class="signature-date">
-                    em {{ formatDate(record.signedAt) }}
-                  </span>
-                </div>
+              <div class="signer-avatar" :class="record.status === 'COMPLETED' ? 'avatar-signed' : 'avatar-pending'">
+                <v-icon size="16">{{ record.status === 'COMPLETED' ? 'mdi-check' : 'mdi-clock-outline' }}</v-icon>
+              </div>
+              <div class="signer-info">
+                <span class="signer-name">{{ record.signer?.name || record.signerName || 'Assinante' }}</span>
+                <span class="signer-status">
+                  {{ record.status === 'COMPLETED' ? 'Assinado' : 'Aguardando assinatura' }}
+                  <template v-if="record.signedAt"> · {{ formatDate(record.signedAt) }}</template>
+                </span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Etapa Pendente/Em Progresso -->
-        <div v-if="execution.status === 'PENDING' || execution.status === 'IN_PROGRESS'" class="text-center py-4">
-          <v-icon size="48" color="grey-lighten-1" class="mb-2">
-            {{ execution.status === 'IN_PROGRESS' ? 'mdi-progress-clock' : 'mdi-clock-outline' }}
-          </v-icon>
-          <p class="text-body-2 text-grey">
+        <div v-if="execution.status === 'PENDING' || execution.status === 'IN_PROGRESS'" class="empty-state">
+          <div class="empty-icon" :class="execution.status === 'IN_PROGRESS' ? 'in-progress' : ''">
+            <v-icon size="24">
+              {{ execution.status === 'IN_PROGRESS' ? 'mdi-progress-clock' : 'mdi-clock-outline' }}
+            </v-icon>
+          </div>
+          <p class="empty-text">
             {{ execution.status === 'IN_PROGRESS' ? 'Esta etapa está em andamento' : 'Esta etapa ainda não foi iniciada' }}
           </p>
         </div>
       </v-card-text>
-
-      <v-divider />
-
-      <v-card-actions class="pa-4">
-        <v-spacer />
-        <v-btn
-          variant="text"
-          @click="$emit('update:modelValue', false)"
-        >
-          Fechar
-        </v-btn>
-      </v-card-actions>
     </v-card>
   </v-dialog>
 
   <!-- Modal de Visualização de Anexo -->
-  <v-dialog 
-    v-model="attachmentPreviewDialog" 
-    max-width="1100" 
+  <v-dialog
+    v-model="attachmentPreviewDialog"
+    max-width="1100"
     scrollable
     :z-index="2100"
     :attach="false"
+    aria-labelledby="attachment-preview-title"
   >
-    <v-card v-if="selectedAttachment" class="attachment-preview-card">
+    <v-card v-if="selectedAttachment" class="attachment-preview-card" role="dialog" aria-modal="true">
       <v-card-title class="pa-0">
-        <div class="preview-header d-flex align-center justify-space-between px-6 py-3" style="background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);">
+        <div id="attachment-preview-title" class="preview-header d-flex align-center justify-space-between px-6 py-3" style="background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);">
           <div class="d-flex align-center flex-grow-1" style="min-width: 0; gap: 16px;">
-            <v-icon color="white" size="40">
+            <v-icon color="white" size="40" aria-hidden="true">
               {{ getAttachmentIcon(selectedAttachment) }}
             </v-icon>
             <div class="flex-grow-1" style="min-width: 0;">
@@ -738,6 +664,15 @@ function getAttachmentColor(attachment) {
   return 'grey'
 }
 
+function getFileTypeClass(attachment) {
+  const mimeType = attachment?.mimeType || ''
+  if (mimeType.includes('pdf')) return 'pdf'
+  if (mimeType.includes('image')) return 'image'
+  if (mimeType.includes('word')) return 'word'
+  if (mimeType.includes('excel')) return 'excel'
+  return 'default'
+}
+
 function formatFileSize(bytes) {
   if (!bytes) return '0 B'
   const k = 1024
@@ -813,357 +748,553 @@ async function downloadAttachment(attachment) {
 </script>
 
 <style scoped>
+/* ========================================
+   MODAL DESIGN SYSTEM - CLEAN & MODERN
+   ======================================== */
+
 .step-detail-card {
-  border-radius: 16px;
+  border-radius: 16px !important;
+  overflow: hidden;
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.12) !important;
+  border: 1px solid var(--color-neutral-200);
+}
+
+/* Header Minimalista */
+.step-header {
+  padding: 20px 24px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-neutral-200);
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.step-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.step-type-badge.type-input {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.step-type-badge.type-approval {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.step-type-badge.type-upload {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
+
+.step-type-badge.type-review {
+  background: rgba(20, 184, 166, 0.1);
+  color: #14b8a6;
+}
+
+.step-type-badge.type-signature {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.close-btn {
+  color: var(--color-neutral-400) !important;
+}
+
+.close-btn:hover {
+  background: var(--color-neutral-100) !important;
+  color: var(--color-neutral-600) !important;
+}
+
+.step-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.status-badge.status-pending {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-600);
+}
+
+.status-badge.status-in_progress {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.status-badge.status-completed {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+.status-badge.status-skipped {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.status-badge.status-rejected {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+/* Modal Content */
+.modal-content {
+  padding: 0 !important;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+/* Sections */
+.section {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-neutral-100);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 12px 0;
+}
+
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-600);
+  border-radius: 10px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+/* Instructions */
+.instructions-section {
+  background: var(--color-neutral-50);
+}
+
+.instructions-text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-neutral-700);
+  line-height: 1.6;
+}
+
+/* Info Section */
+.info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-neutral-100);
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-row .info-label {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-500);
+}
+
+.info-row .info-value {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-neutral-800);
+  display: flex;
+  align-items: center;
+}
+
+.info-row .info-value.overdue {
+  color: #dc2626;
+}
+
+/* Decision Badge */
+.decision-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.decision-badge.decision-success {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+.decision-badge.decision-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.decision-badge.decision-warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.decision-badge.decision-info {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.decision-badge.decision-grey {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-600);
+}
+
+/* Comment Box */
+.comment-box {
+  padding: 14px 16px;
+  background: var(--color-neutral-50);
+  border-radius: 8px;
+  border-left: 3px solid var(--color-neutral-300);
+}
+
+.comment-box p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-neutral-700);
+  line-height: 1.5;
+}
+
+/* Data List */
+.data-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-neutral-100);
+}
+
+.data-row:last-child {
+  border-bottom: none;
+}
+
+.data-label {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-500);
+  flex-shrink: 0;
+  margin-right: 16px;
+}
+
+.data-value {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-neutral-800);
+  text-align: right;
+  word-break: break-word;
+}
+
+/* Table Container */
+.table-container {
+  margin-bottom: 16px;
+}
+
+.table-container:last-child {
+  margin-bottom: 0;
+}
+
+.table-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-neutral-600);
+  margin-bottom: 8px;
+}
+
+.data-table {
+  border: 1px solid var(--color-neutral-200);
+  border-radius: 8px;
   overflow: hidden;
 }
 
-.step-header {
-  transition: all 0.3s ease;
+.data-table thead {
+  background: var(--color-neutral-100);
 }
 
-.header-pending {
-  background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
-}
-
-.header-in-progress {
-  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
-  color: white;
-}
-
-.header-completed {
-  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-}
-
-.header-skipped {
-  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-}
-
-.info-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #f5f5f5;
-  border-radius: 8px;
-}
-
-.info-card.error-bg {
-  background: #ffebee;
-}
-
-.info-label {
-  display: block;
+.data-table thead th {
   font-size: 0.75rem;
-  color: #757575;
-  margin-bottom: 2px;
+  font-weight: 600;
+  color: var(--color-neutral-600);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 10px 12px;
+  text-align: left;
 }
 
-.info-value {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #212121;
+.data-table tbody td {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-700);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-neutral-100);
 }
 
-.cursor-pointer {
-  cursor: pointer;
+.data-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
-.cursor-pointer:hover {
-  background-color: rgba(0, 0, 0, 0.04);
-}
-
-/* Estilos para anexos modernizados */
-.attachments-list {
+/* Files List */
+.files-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.attachment-item {
+.file-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f4 100%);
-  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--color-neutral-50);
+  border: 1px solid var(--color-neutral-200);
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
-.attachment-item:hover {
-  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-  transform: translateX(4px);
+.file-item:hover {
+  background: white;
+  border-color: var(--color-primary-300);
 }
 
-.attachment-icon {
+.file-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 
-.attachment-info {
+.file-icon.file-pdf {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.file-icon.file-image {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+.file-icon.file-word {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.file-icon.file-excel {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+.file-icon.file-default {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-500);
+}
+
+.file-info {
   flex: 1;
   min-width: 0;
 }
 
-.attachment-name {
+.file-name {
   display: block;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
-  color: #1a1a1a;
+  color: var(--color-neutral-800);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.attachment-meta {
+.file-meta {
   display: flex;
   align-items: center;
-  margin-top: 2px;
-}
-
-.attachment-size {
-  font-size: 0.75rem;
-  color: #757575;
-}
-
-.download-btn {
-  flex-shrink: 0;
-}
-
-/* Estilos do modal de preview de anexo */
-.attachment-preview-card {
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.image-preview-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  background: #1a1a1a;
-  padding: 16px;
-}
-
-.image-preview {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
-.no-preview-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 32px;
-  background: #fafafa;
-  text-align: center;
-}
-
-.loading-preview-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  background: #fafafa;
-}
-
-/* Estilos para lista de metadados sem bordas */
-.metadata-list {
-  display: flex;
-  flex-direction: column;
   gap: 8px;
-}
-
-.metadata-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f4 100%);
-  border-radius: 12px;
-  transition: all 0.2s ease;
-}
-
-.metadata-item:hover {
-  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-}
-
-.metadata-icon {
+  font-size: 0.75rem;
+  color: var(--color-neutral-500);
   margin-top: 2px;
-  flex-shrink: 0;
 }
 
-.metadata-content {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.metadata-label {
-  font-size: 0.75rem;
-  color: #757575;
-  margin-bottom: 2px;
-}
-
-.metadata-value {
-  font-size: 0.875rem;
+.signed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #16a34a;
   font-weight: 500;
-  color: #1a1a1a;
-  word-break: break-word;
 }
 
-/* Tabelas de dados */
-.table-data-view {
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  overflow: hidden;
-  background: white;
-}
-
-.table-data-view thead {
-  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
-}
-
-.table-data-view thead th {
-  color: white !important;
-  font-weight: 600;
-  font-size: 0.8125rem;
-  padding: 12px 16px;
-}
-
-.table-data-view tbody tr {
-  transition: background-color 0.2s;
-}
-
-.table-data-view tbody tr:hover {
-  background-color: #f5f5f5;
-}
-
-.table-data-view tbody td {
-  font-size: 0.8125rem;
-  color: #424242;
-  padding: 12px 16px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.table-data-view tbody tr:last-child td {
-  border-bottom: none;
-}
-
-/* Estilos para seção de revisão */
-.review-container {
+.file-action {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--color-neutral-400);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.review-status-item {
-  padding: 16px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f4 100%);
-  border-radius: 12px;
-  text-align: center;
+.file-action:hover {
+  background: var(--color-primary-100);
+  color: var(--color-primary-600);
 }
 
-.review-comments-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 16px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f4 100%);
-  border-radius: 12px;
-}
-
-.review-comments-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.review-comments-label {
-  font-size: 0.75rem;
-  color: #757575;
-  margin-bottom: 4px;
-}
-
-.review-comments-value {
-  font-size: 0.875rem;
-  color: #1a1a1a;
-}
-
-/* Estilos para lista de assinaturas */
+/* Signatures List */
 .signatures-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.signature-item {
+.signer-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f4 100%);
-  border-radius: 12px;
-  transition: all 0.2s ease;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-neutral-100);
 }
 
-.signature-item:hover {
-  background: linear-gradient(135deg, #fce4ec 0%, #f8bbd0 100%);
+.signer-item:last-child {
+  border-bottom: none;
 }
 
-.signature-icon {
+.signer-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
-.signature-content {
-  display: flex;
-  flex-direction: column;
+.signer-avatar.avatar-signed {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+.signer-avatar.avatar-pending {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-500);
+}
+
+.signer-info {
+  flex: 1;
   min-width: 0;
 }
 
-.signature-name {
+.signer-name {
+  display: block;
   font-size: 0.875rem;
   font-weight: 500;
-  color: #1a1a1a;
+  color: var(--color-neutral-800);
 }
 
-.signature-meta {
+.signer-status {
+  font-size: 0.75rem;
+  color: var(--color-neutral-500);
+}
+
+.signer-item.signed .signer-status {
+  color: #16a34a;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.empty-icon {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-400);
+  margin-bottom: 12px;
 }
 
-.signature-date {
-  font-size: 0.75rem;
-  color: #757575;
+.empty-icon.in-progress {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
 }
 
-/* Estilos para modal de preview de anexo */
+.empty-text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-neutral-500);
+}
+
+/* Attachment Preview Modal */
 .attachment-preview-card {
   display: flex;
   flex-direction: column;
   max-height: 95vh;
-  border-radius: 12px;
+  border-radius: 16px !important;
   overflow: hidden;
 }
 
@@ -1176,7 +1307,7 @@ async function downloadAttachment(attachment) {
   overflow: hidden;
   position: relative;
   min-height: 0;
-  background: #f5f5f5;
+  background: var(--color-neutral-100);
 }
 
 .loading-preview-container,
@@ -1195,7 +1326,7 @@ async function downloadAttachment(attachment) {
   justify-content: center;
   height: 100%;
   overflow: auto;
-  background: #f5f5f5;
+  background: var(--color-neutral-900);
   padding: 16px;
 }
 
@@ -1204,6 +1335,11 @@ async function downloadAttachment(attachment) {
   max-height: 100%;
   object-fit: contain;
   border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* Global Overrides */
+:deep(.v-btn) {
+  text-transform: none;
+  font-weight: 500;
 }
 </style>

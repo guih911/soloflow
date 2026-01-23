@@ -1,155 +1,172 @@
 <template>
-  <div>
-    <!-- Header -->
-    <div class="d-flex align-center justify-space-between mb-6">
-      <div>
-        <h1 class="text-h4 font-weight-bold">Empresas</h1>
-        <p class="text-subtitle-1 text-medium-emphasis">
-          Gerencie as empresas cadastradas no sistema
-        </p>
+  <div class="companies-page">
+    <!-- Modern Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <div class="header-icon">
+          <v-icon size="28" color="white">mdi-domain</v-icon>
+        </div>
+        <div class="header-text">
+          <h1 class="page-title">Empresas</h1>
+          <p class="page-subtitle">Gerencie as empresas e organizações do sistema</p>
+        </div>
       </div>
       <v-btn
-        color="primary"
+        variant="flat"
+        color="white"
         @click="openDialog()"
         prepend-icon="mdi-plus"
+        class="action-btn"
       >
         Nova Empresa
       </v-btn>
     </div>
 
-    <!-- Lista de Empresas -->
-    <v-row>
-      <v-col
-        v-for="company in paginatedCompanies"
-        :key="company.id"
-        cols="12"
-        md="6"
-        lg="4"
+    <!-- Filters -->
+    <div class="filters-card">
+      <div class="filters-grid">
+        <v-text-field
+          v-model="search"
+          placeholder="Buscar empresas..."
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          class="filter-input"
+        />
+        <v-select
+          v-model="filterActive"
+          :items="activeOptions"
+          placeholder="Status"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          class="filter-input"
+        />
+      </div>
+    </div>
+
+    <!-- Loading State - Skeleton -->
+    <div v-if="loading && companies.length === 0" class="loading-state" aria-label="Carregando empresas">
+      <v-skeleton-loader type="table-heading, table-row@5" class="skeleton-table" />
+    </div>
+
+    <!-- Companies Table -->
+    <div v-if="!loading || companies.length > 0" class="table-card">
+      <v-data-table
+        :headers="headers"
+        :items="filteredCompanies"
+        :loading="loading"
+        item-key="id"
+        :items-per-page="10"
+        density="comfortable"
+        :no-data-text="search ? 'Nenhuma empresa encontrada com os filtros.' : 'Nenhuma empresa cadastrada.'"
+        class="modern-table"
       >
-        <v-hover v-slot="{ isHovering, props }">
-          <v-card
-            v-bind="props"
-            :elevation="isHovering ? 8 : 2"
-            class="h-100 d-flex flex-column"
+        <!-- Name -->
+        <template #item.name="{ item }">
+          <div class="company-name">
+            <v-icon color="primary" size="20" class="mr-2">mdi-domain</v-icon>
+            <span class="name-text">{{ item.name }}</span>
+          </div>
+        </template>
+
+        <!-- CNPJ -->
+        <template #item.cnpj="{ value }">
+          <span class="cnpj-text">{{ formatCNPJ(value) }}</span>
+        </template>
+
+        <!-- Status -->
+        <template #item.isActive="{ value }">
+          <v-chip
+            size="small"
+            :color="value ? 'success' : 'error'"
+            variant="flat"
           >
-            <v-card-title class="d-flex align-center">
-              <v-icon
-                :color="company.isActive ? 'primary' : 'grey'"
-                class="mr-2"
-              >
-                mdi-domain
-              </v-icon>
-              {{ company.name }}
-              <v-spacer />
-              <v-chip
-                v-if="!company.isActive"
-                size="small"
-                color="error"
-                variant="tonal"
-              >
-                Inativa
-              </v-chip>
-            </v-card-title>
+            <v-icon start size="14">{{ value ? 'mdi-check-circle' : 'mdi-cancel' }}</v-icon>
+            {{ value ? 'Ativa' : 'Inativa' }}
+          </v-chip>
+        </template>
 
-            <v-card-text class="flex-grow-1">
-              <div class="mb-3">
-                <div class="d-flex align-center mb-2">
-                  <v-icon size="20" class="mr-2">mdi-card-account-details</v-icon>
-                  <span class="text-body-2">
-                    CNPJ: {{ formatCNPJ(company.cnpj) }}
-                  </span>
-                </div>
-                <div v-if="company.email" class="d-flex align-center mb-2">
-                  <v-icon size="20" class="mr-2">mdi-email</v-icon>
-                  <span class="text-body-2">{{ company.email }}</span>
-                </div>
-                <div v-if="company.phone" class="d-flex align-center mb-2">
-                  <v-icon size="20" class="mr-2">mdi-phone</v-icon>
-                  <span class="text-body-2">{{ formatPhone(company.phone) }}</span>
-                </div>
-              </div>
+        <!-- Users Count -->
+        <template #item.usersCount="{ value }">
+          <div class="users-count">
+            <v-icon size="16" class="mr-1">mdi-account-group</v-icon>
+            <span>{{ value }} usuários</span>
+          </div>
+        </template>
 
-              <v-divider class="my-3" />
+        <!-- Contact -->
+        <template #item.contact="{ item }">
+          <div class="contact-info">
+            <div v-if="item.email" class="contact-item">
+              <v-icon size="14" class="mr-1">mdi-email</v-icon>
+              <span>{{ item.email }}</span>
+            </div>
+            <div v-if="item.phone" class="contact-item">
+              <v-icon size="14" class="mr-1">mdi-phone</v-icon>
+              <span>{{ formatPhone(item.phone) }}</span>
+            </div>
+            <span v-if="!item.email && !item.phone" class="no-contact">-</span>
+          </div>
+        </template>
 
-              <div>
-                <div class="d-flex align-center mb-2">
-                  <v-icon size="20" class="mr-2">mdi-account-group</v-icon>
-                  <span class="text-body-2">
-                    {{ company._count?.userCompanies || 0 }} usuários
-                  </span>
-                </div>
-                <div class="d-flex align-center">
-                  <v-icon size="20" class="mr-2">mdi-calendar</v-icon>
-                  <span class="text-body-2">
-                    Criada em {{ formatDate(company.createdAt) }}
-                  </span>
-                </div>
-              </div>
-            </v-card-text>
+        <!-- Created At -->
+        <template #item.createdAt="{ value }">
+          <span class="date-cell">{{ formatDate(value) }}</span>
+        </template>
 
-            <v-divider />
+        <!-- Actions -->
+        <template #item.actions="{ item }">
+          <v-btn
+            size="small"
+            variant="tonal"
+            color="primary"
+            @click="openDialog(item)"
+          >
+            <v-icon start size="16">mdi-pencil</v-icon>
+            Editar
+          </v-btn>
+        </template>
 
-            <v-card-actions>
-              <v-btn
-                variant="text"
-                size="small"
-                @click="openDialog(company)"
-              >
-                <v-icon start>mdi-pencil</v-icon>
-                Editar
-              </v-btn>
-            </v-card-actions>
-          </v-card>
-        </v-hover>
-      </v-col>
-    </v-row>
+        <!-- Loading -->
+        <template #loading>
+          <div class="table-loading">
+            <v-progress-circular indeterminate color="primary" size="40" />
+          </div>
+        </template>
+      </v-data-table>
+    </div>
 
-    <!-- ✨ Paginação -->
-    <PaginationControls
-      v-model:current-page="currentPage"
-      v-model:items-per-page="itemsPerPage"
-      :total-items="companies.length"
-      item-label="empresas"
-    />
-
-    <!-- Estado vazio -->
-    <v-card
+    <!-- Empty State -->
+    <div
       v-if="!loading && companies.length === 0"
-      class="text-center py-12"
+      class="empty-state"
     >
       <v-icon size="64" color="grey-lighten-1">
         mdi-domain
       </v-icon>
-      <p class="text-h6 mt-4 text-grey">
-        Nenhuma empresa cadastrada
+      <p class="empty-title">Nenhuma empresa cadastrada ainda</p>
+      <p class="empty-subtitle">
+        Crie uma nova empresa para começar a gerenciar o sistema
       </p>
-      <v-btn
-        color="primary"
-        @click="openDialog()"
-        class="mt-4"
-      >
+      <v-btn color="primary" @click="openDialog()" size="large">
         <v-icon start>mdi-plus</v-icon>
-        Criar Primeira Empresa
+        Criar a Primeira Empresa
       </v-btn>
-    </v-card>
-
-    <!-- Loading -->
-    <div v-if="loading" class="text-center py-12">
-      <v-progress-circular
-        indeterminate
-        color="primary"
-        size="64"
-      />
     </div>
 
     <!-- Dialog de Criação/Edição -->
     <v-dialog
       v-model="dialog"
-      max-width="600"
+      max-width="500"
       persistent
+      aria-labelledby="company-dialog-title"
     >
-      <v-card>
-        <v-card-title>
+      <v-card class="dialog-card" role="dialog" aria-modal="true">
+        <v-card-title id="company-dialog-title" class="dialog-title">
           {{ editingItem?.id ? 'Editar Empresa' : 'Nova Empresa' }}
         </v-card-title>
 
@@ -160,13 +177,15 @@
           v-model="valid"
           @submit.prevent="save"
         >
-          <v-card-text>
+          <v-card-text class="pa-6">
             <v-text-field
               v-model="formData.name"
               label="Nome da Empresa"
               :rules="nameRules"
+              variant="outlined"
               required
               class="mb-4"
+              aria-required="true"
             />
 
             <v-text-field
@@ -175,8 +194,10 @@
               label="CNPJ"
               :rules="cnpjRules"
               :disabled="!!editingItem?.id"
+              variant="outlined"
               required
               class="mb-4"
+              aria-required="true"
             />
 
             <v-text-field
@@ -184,7 +205,9 @@
               label="E-mail"
               type="email"
               :rules="emailRules"
+              variant="outlined"
               class="mb-4"
+              autocomplete="email"
             />
 
             <v-text-field
@@ -192,7 +215,9 @@
               v-mask="['(##) ####-####', '(##) #####-####']"
               label="Telefone"
               :rules="phoneRules"
+              variant="outlined"
               class="mb-4"
+              autocomplete="tel"
             />
 
             <v-switch
@@ -205,7 +230,7 @@
 
           <v-divider />
 
-          <v-card-actions>
+          <v-card-actions class="pa-4">
             <v-spacer />
             <v-btn
               variant="text"
@@ -216,7 +241,6 @@
             <v-btn
               type="submit"
               color="primary"
-              variant="elevated"
               :loading="saving"
               :disabled="!valid"
             >
@@ -230,25 +254,20 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
 import { useCompanyStore } from '@/stores/company'
 import { formatCNPJ, formatPhone } from '@/utils/format'
 import dayjs from 'dayjs'
-import PaginationControls from '@/components/PaginationControls.vue'
 
-const router = useRouter()
 const companyStore = useCompanyStore()
 
 // Estado
 const dialog = ref(false)
 const valid = ref(false)
 const saving = ref(false)
+const search = ref('')
+const filterActive = ref(null)
 const editingItem = ref(null)
-
-// ✨ Estado de paginação
-const currentPage = ref(1)
-const itemsPerPage = ref(12)
 
 const form = ref(null)
 const formData = ref({
@@ -259,40 +278,70 @@ const formData = ref({
   isActive: true
 })
 
+// Options
+const activeOptions = [
+  { title: 'Ativas', value: true },
+  { title: 'Inativas', value: false }
+]
+
+const headers = [
+  { title: 'Empresa', key: 'name', width: '250px', align: 'start' },
+  { title: 'CNPJ', key: 'cnpj', width: '180px', align: 'start' },
+  { title: 'Status', key: 'isActive', width: '120px', align: 'center' },
+  { title: 'Usuários', key: 'usersCount', width: '130px', align: 'center' },
+  { title: 'Contato', key: 'contact', width: '200px', align: 'start', sortable: false },
+  { title: 'Criada em', key: 'createdAt', width: '120px', align: 'center' },
+  { title: '', key: 'actions', width: '100px', align: 'center', sortable: false },
+]
+
 // Computed
 const loading = computed(() => companyStore.loading)
 const companies = computed(() => companyStore.companies)
 
-// ✨ Computed de paginação
-const paginatedCompanies = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value
-  const end = start + itemsPerPage.value
-  return companies.value.slice(start, end)
+const companiesWithInfo = computed(() => {
+  return companies.value.map(company => ({
+    ...company,
+    usersCount: company._count?.userCompanies || 0
+  }))
 })
 
-// ✨ Watcher para resetar página quando itens por página mudam
-watch(itemsPerPage, () => {
-  currentPage.value = 1
+const filteredCompanies = computed(() => {
+  let result = companiesWithInfo.value
+
+  if (search.value) {
+    const searchLower = search.value.toLowerCase()
+    result = result.filter(c =>
+      c.name.toLowerCase().includes(searchLower) ||
+      c.cnpj?.includes(search.value) ||
+      c.email?.toLowerCase().includes(searchLower)
+    )
+  }
+
+  if (filterActive.value !== null) {
+    result = result.filter(c => c.isActive === filterActive.value)
+  }
+
+  return result
 })
 
 // Regras de validação
 const nameRules = [
-  v => !!v || 'Nome é obrigatório',
-  v => v.length >= 3 || 'Nome deve ter no mínimo 3 caracteres',
-  v => v.length <= 100 || 'Nome deve ter no máximo 100 caracteres'
+  v => !!v || 'O nome é obrigatório',
+  v => v.length >= 3 || 'O nome deve ter no mínimo 3 caracteres',
+  v => v.length <= 100 || 'O nome deve ter no máximo 100 caracteres'
 ]
 
 const cnpjRules = [
-  v => !!v || 'CNPJ é obrigatório',
-  v => /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'CNPJ inválido'
+  v => !!v || 'O CNPJ é obrigatório',
+  v => /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'O CNPJ informado é inválido'
 ]
 
 const emailRules = [
-  v => !v || /.+@.+\..+/.test(v) || 'E-mail deve ser válido'
+  v => !v || /.+@.+\..+/.test(v) || 'O e-mail deve ser válido'
 ]
 
 const phoneRules = [
-  v => !v || /^\(\d{2}\) \d{4,5}-\d{4}$/.test(v) || 'Telefone inválido'
+  v => !v || /^\(\d{2}\) \d{4,5}-\d{4}$/.test(v) || 'O telefone informado é inválido'
 ]
 
 // Métodos
@@ -349,70 +398,253 @@ async function save() {
   }
 }
 
-function viewCompany(company) {
-  router.push(`/companies/${company.id}`)
-}
-
 onMounted(() => {
   companyStore.fetchCompanies()
 })
 </script>
 
 <style scoped>
-/* ✨ Paginação */
-.pagination-section {
-  margin-top: 32px;
+.companies-page {
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-.pagination-card {
+/* Modern Page Header with Gradient */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
   border-radius: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  background: white;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
 }
 
-.pagination-info {
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white !important;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
+}
+
+.action-btn {
+  text-transform: none;
   font-weight: 500;
+  border-radius: 10px;
+  color: var(--color-primary-600) !important;
 }
 
-.pagination-controls {
-  flex-wrap: wrap;
+/* Filters */
+.filters-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
 }
 
-.items-per-page-select :deep(.v-field) {
-  border-radius: 12px;
+.filters-grid {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  gap: 16px;
 }
 
-.pagination-component :deep(.v-pagination__item) {
-  border-radius: 12px;
+@media (max-width: 600px) {
+  .filters-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.filter-input :deep(.v-field) {
+  border-radius: 10px;
+}
+
+/* Table Card */
+.table-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.modern-table {
+  border: none !important;
+}
+
+.modern-table :deep(th) {
+  background: var(--color-neutral-50) !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-neutral-500) !important;
+  border-bottom: 1px solid var(--color-surface-border) !important;
+}
+
+.modern-table :deep(td) {
+  padding: 16px !important;
+  border-bottom: 1px solid var(--color-surface-border) !important;
+}
+
+.modern-table :deep(tr:hover td) {
+  background: var(--color-neutral-50) !important;
+}
+
+/* Company Name */
+.company-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.name-text {
+  font-weight: 500;
+  color: var(--color-neutral-800);
+}
+
+/* CNPJ */
+.cnpj-text {
+  font-size: 0.875rem;
+  color: var(--color-neutral-600);
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+/* Users Count */
+.users-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  color: var(--color-neutral-600);
+}
+
+/* Contact Info */
+.contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  font-size: 0.8125rem;
+  color: var(--color-neutral-600);
+}
+
+.no-contact {
+  color: var(--color-neutral-400);
+}
+
+/* Date Cell */
+.date-cell {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-600);
+}
+
+/* Loading State - Skeleton */
+.loading-state {
+  padding: 0;
+}
+
+.skeleton-table {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+}
+
+.table-loading {
+  display: flex;
+  justify-content: center;
+  padding: 48px;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 64px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+}
+
+.empty-title {
+  font-size: 1.25rem;
   font-weight: 600;
-  min-width: 40px;
-  height: 40px;
+  color: var(--color-neutral-700);
+  margin: 16px 0 8px;
 }
 
-.pagination-component :deep(.v-pagination__item--is-active) {
-  background: linear-gradient(135deg, #1976D2, #42A5F5);
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+.empty-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-neutral-500);
+  margin-bottom: 24px;
 }
 
-/* ✨ Responsividade */
+/* Dialog */
+.dialog-card {
+  border-radius: 16px !important;
+}
+
+.dialog-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  padding: 20px 24px;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
-  .pagination-controls {
-    width: 100%;
-    justify-content: center;
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px;
   }
 
-  .pagination-info {
-    width: 100%;
-    text-align: center;
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
   }
-}
 
-/* ✨ Tema Escuro */
-@media (prefers-color-scheme: dark) {
-  .pagination-card {
-    border-color: rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
+  .action-btn {
+    width: 100%;
+  }
+
+  .filters-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

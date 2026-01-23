@@ -1,147 +1,214 @@
 <template>
-  <div>
-    <div class="d-flex align-center mb-6">
-      <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" />
-      <div class="ml-4">
-        <h1 class="text-h4 font-weight-bold">
-          {{ isEditing ? 'Editar' : 'Novo' }} Tipo de Processo
-        </h1>
-        <p class="text-subtitle-1 text-medium-emphasis">
-          Configure o fluxo de trabalho, campos e etapas
-        </p>
+  <div class="process-type-editor">
+    <!-- Modern Page Header -->
+    <div class="page-header">
+      <div class="header-left">
+        <v-btn
+          icon
+          variant="text"
+          color="white"
+          @click="goBack"
+          class="back-btn"
+        >
+          <v-icon>mdi-arrow-left</v-icon>
+        </v-btn>
+        <div class="header-text">
+          <h1 class="page-title">{{ isEditing ? 'Editar' : 'Novo' }} Tipo de Processo</h1>
+          <p class="page-subtitle">Configure o fluxo de trabalho, campos e etapas</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <v-btn
+          variant="outlined"
+          color="white"
+          @click="goBack"
+          class="cancel-btn"
+        >
+          Cancelar
+        </v-btn>
+        <v-btn
+          color="white"
+          variant="flat"
+          :loading="saving"
+          :disabled="!valid || formData.steps.length === 0"
+          @click="save"
+          class="save-btn"
+        >
+          <v-icon start>mdi-check</v-icon>
+          {{ isEditing ? 'Salvar' : 'Criar' }}
+        </v-btn>
       </div>
     </div>
 
-    <v-form ref="form" v-model="valid">
-      <v-tabs v-model="activeTab" class="mb-6">
-        <v-tab value="basic">
-          <v-icon start>mdi-information</v-icon>
-          Informações Básicas
-        </v-tab>
-        <v-tab value="fields">
-          <v-icon start>mdi-form-textbox</v-icon>
-          Campos do Formulário Principal
-          <v-chip v-if="formData.formFields.length > 0" size="small" class="ml-2">
-            {{ formData.formFields.length }}
-          </v-chip>
-        </v-tab>
-        <v-tab value="steps">
-          <v-icon start>mdi-debug-step-over</v-icon>
-          Etapas do Processo
-          <v-chip v-if="formData.steps.length > 0" size="small" class="ml-2">
-            {{ formData.steps.length }}
-          </v-chip>
-        </v-tab>
-        <v-tab value="subprocesses">
-          <v-icon start>mdi-source-branch</v-icon>
-          Sub-Processos
-          <v-chip v-if="formData.allowedChildProcessTypes?.length > 0" size="small" class="ml-2">
-            {{ formData.allowedChildProcessTypes.length }}
-          </v-chip>
-        </v-tab>
-      </v-tabs>
+    <!-- Main Content -->
+    <v-form ref="form" v-model="valid" class="editor-content">
+      <!-- Navigation Tabs -->
+      <div class="tabs-container">
+        <div class="tabs-nav">
+          <button
+            v-for="tab in tabs"
+            :key="tab.value"
+            type="button"
+            class="tab-btn"
+            :class="{ 'tab-btn--active': activeTab === tab.value }"
+            @click="activeTab = tab.value"
+          >
+            <v-icon size="20">{{ tab.icon }}</v-icon>
+            <span class="tab-label">{{ tab.label }}</span>
+            <span v-if="tab.count > 0" class="tab-count">{{ tab.count }}</span>
+          </button>
+        </div>
+      </div>
 
-      <v-window v-model="activeTab">
-        <v-window-item value="basic">
-          <v-card>
-            <v-card-text>
-              <v-row>
-                <v-col cols="12" md="6">
-                  <v-text-field v-model="formData.name" label="Nome do Processo" :rules="nameRules" required />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-switch
-                    v-model="formData.isChildProcessOnly"
-                    color="secondary"
-                    hide-details
-                    class="mt-2"
-                  >
-                    <template v-slot:label>
-                      <div>
-                        <span class="font-weight-medium">Somente Subprocesso</span>
-                        <p class="text-caption text-grey mb-0">
-                          Este tipo só pode ser usado como subprocesso de outro processo
-                        </p>
-                      </div>
-                    </template>
-                  </v-switch>
-                </v-col>
-                <v-col cols="12">
-                  <v-textarea v-model="formData.description" label="Descrição" rows="3" counter="500" />
-                </v-col>
-                <v-col cols="12">
-                  <v-divider class="mb-4" />
-                  <h3 class="text-subtitle-1 font-weight-bold mb-4">
-                    <v-icon start color="primary">mdi-cog</v-icon>
-                    Configurações de Exibição
-                  </h3>
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-switch
-                    v-model="formData.allowSubProcesses"
-                    color="primary"
-                    hide-details
-                    class="mt-0"
-                  >
-                    <template v-slot:label>
-                      <div>
-                        <span class="font-weight-medium">Permitir Subprocessos</span>
-                        <p class="text-caption text-grey mb-0">
-                          Habilita a criação de subprocessos vinculados a este tipo
-                        </p>
-                      </div>
-                    </template>
-                  </v-switch>
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-switch
-                    v-model="formData.allowSubTasks"
-                    color="primary"
-                    hide-details
-                    class="mt-0"
-                  >
-                    <template v-slot:label>
-                      <div>
-                        <span class="font-weight-medium">Permitir Subtarefas</span>
-                        <p class="text-caption text-grey mb-0">
-                          Habilita a criação de subtarefas nas etapas do processo
-                        </p>
-                      </div>
-                    </template>
-                  </v-switch>
-                </v-col>
-              </v-row>
-            </v-card-text>
-          </v-card>
-        </v-window-item>
+      <!-- Tab Content -->
+      <div class="tab-content">
+        <!-- Basic Info Tab -->
+        <div v-if="activeTab === 'basic'" class="tab-panel">
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-icon panel-icon--primary">
+                <v-icon size="20">mdi-information</v-icon>
+              </div>
+              <div>
+                <h3 class="panel-title">Informações Básicas</h3>
+                <p class="panel-subtitle">Nome, descrição e configurações gerais</p>
+              </div>
+            </div>
 
-        <v-window-item value="fields">
-          <v-card>
-            <v-card-title class="d-flex align-center justify-space-between">
-              <span>Campos do Formulário Principal</span>
-              <v-btn color="primary" size="small" @click="addField" prepend-icon="mdi-plus">
+            <div class="panel-body">
+              <div class="form-grid">
+                <div class="form-group form-group--full">
+                  <label class="form-label">Nome do Processo *</label>
+                  <v-text-field
+                    v-model="formData.name"
+                    placeholder="Ex: Solicitação de Férias"
+                    :rules="nameRules"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details="auto"
+                    class="form-input"
+                  />
+                </div>
+
+                <div class="form-group form-group--full">
+                  <label class="form-label">Descrição</label>
+                  <v-textarea
+                    v-model="formData.description"
+                    placeholder="Descreva o propósito deste tipo de processo..."
+                    rows="3"
+                    counter="500"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details="auto"
+                    class="form-input"
+                  />
+                </div>
+              </div>
+
+              <div class="config-section">
+                <h4 class="config-title">
+                  <v-icon size="18" class="mr-2">mdi-cog</v-icon>
+                  Configurações
+                </h4>
+
+                <div class="config-grid">
+                  <div class="config-card" :class="{ 'config-card--active': formData.isChildProcessOnly }">
+                    <div class="config-card-header">
+                      <v-switch
+                        v-model="formData.isChildProcessOnly"
+                        color="secondary"
+                        hide-details
+                        density="compact"
+                      />
+                      <div class="config-card-icon">
+                        <v-icon size="20">mdi-source-branch</v-icon>
+                      </div>
+                    </div>
+                    <h5 class="config-card-title">Somente Subprocesso</h5>
+                    <p class="config-card-desc">Este tipo só pode ser usado como subprocesso de outro processo</p>
+                  </div>
+
+                  <div class="config-card" :class="{ 'config-card--active': formData.allowSubProcesses }">
+                    <div class="config-card-header">
+                      <v-switch
+                        v-model="formData.allowSubProcesses"
+                        color="primary"
+                        hide-details
+                        density="compact"
+                      />
+                      <div class="config-card-icon">
+                        <v-icon size="20">mdi-file-tree</v-icon>
+                      </div>
+                    </div>
+                    <h5 class="config-card-title">Permitir Subprocessos</h5>
+                    <p class="config-card-desc">Habilita a criação de subprocessos vinculados</p>
+                  </div>
+
+                  <div class="config-card" :class="{ 'config-card--active': formData.allowSubTasks }">
+                    <div class="config-card-header">
+                      <v-switch
+                        v-model="formData.allowSubTasks"
+                        color="primary"
+                        hide-details
+                        density="compact"
+                      />
+                      <div class="config-card-icon">
+                        <v-icon size="20">mdi-checkbox-multiple-marked</v-icon>
+                      </div>
+                    </div>
+                    <h5 class="config-card-title">Permitir Subtarefas</h5>
+                    <p class="config-card-desc">Habilita a criação de subtarefas nas etapas</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Fields Tab -->
+        <div v-if="activeTab === 'fields'" class="tab-panel">
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-icon panel-icon--info">
+                <v-icon size="20">mdi-form-textbox</v-icon>
+              </div>
+              <div>
+                <h3 class="panel-title">Campos do Formulário</h3>
+                <p class="panel-subtitle">Campos que serão preenchidos ao iniciar o processo</p>
+              </div>
+              <v-btn
+                color="primary"
+                variant="flat"
+                size="small"
+                @click="addField"
+                class="ml-auto"
+              >
+                <v-icon start size="18">mdi-plus</v-icon>
                 Adicionar Campo
               </v-btn>
-            </v-card-title>
-            <v-divider />
+            </div>
 
-            <v-card-text v-if="formData.formFields.length === 0" class="text-center py-8">
-              <v-icon size="48" color="grey-lighten-1">
-                mdi-form-textbox
-              </v-icon>
-              <p class="text-body-1 text-grey mt-2">
-                Nenhum campo adicionado
-              </p>
-              <p class="text-body-2 text-grey">
-                Adicione campos que serão preenchidos ao iniciar o processo
-              </p>
-            </v-card-text>
+            <div class="panel-body">
+              <!-- Empty State -->
+              <div v-if="formData.formFields.length === 0" class="empty-panel">
+                <div class="empty-panel-icon">
+                  <v-icon size="32">mdi-form-textbox</v-icon>
+                </div>
+                <h4 class="empty-panel-title">Nenhum campo adicionado</h4>
+                <p class="empty-panel-text">Adicione campos que serão preenchidos ao iniciar o processo</p>
+                <v-btn color="primary" variant="flat" @click="addField">
+                  <v-icon start>mdi-plus</v-icon>
+                  Adicionar Primeiro Campo
+                </v-btn>
+              </div>
 
-            <v-list v-else lines="three">
-              <template v-for="(field, index) in formData.formFields" :key="field.id || field.tempId || index">
-                <v-list-item
-                  class="px-4 py-3 draggable-field"
-                  :class="{ 'dragging-over': dragOverFieldIndex === index }"
+              <!-- Fields List -->
+              <div v-else class="items-list">
+                <div
+                  v-for="(field, index) in formData.formFields"
+                  :key="field.id || field.tempId || index"
+                  class="item-row"
+                  :class="{ 'item-row--dragging': dragOverFieldIndex === index }"
                   draggable="true"
                   @dragstart="onFieldDragStart($event, index)"
                   @dragend="onFieldDragEnd"
@@ -149,72 +216,89 @@
                   @dragleave="onFieldDragLeave"
                   @drop="onFieldDrop($event, index)"
                 >
-                  <template #prepend>
-                    <v-icon class="mr-3 drag-handle" color="grey" style="cursor: grab;">mdi-drag-vertical</v-icon>
-                    <v-avatar :color="getFieldTypeColor(field.type)" size="40">
-                      <v-icon :icon="getFieldTypeIcon(field.type)" size="20" />
-                    </v-avatar>
-                  </template>
+                  <div class="item-drag">
+                    <v-icon size="20" color="grey">mdi-drag-vertical</v-icon>
+                  </div>
 
-                  <v-list-item-title class="font-weight-medium">
-                    {{ field.label }}
-                    <v-chip v-if="field.required" size="x-small" color="error" class="ml-2">
-                      Obrigatório
-                    </v-chip>
-                  </v-list-item-title>
+                  <div class="item-icon" :class="`item-icon--${getFieldTypeColor(field.type)}`">
+                    <v-icon size="18">{{ getFieldTypeIcon(field.type) }}</v-icon>
+                  </div>
 
-                  <v-list-item-subtitle>
-                    <div>
-                      <v-icon size="16">mdi-code-tags</v-icon>
-                      Nome: {{ field.name }}
-                      <span class="mx-2">•</span>
-                      <v-icon size="16">mdi-format-list-bulleted-type</v-icon>
-                      Tipo: {{ getFieldTypeText(field.type) }}
+                  <div class="item-content">
+                    <div class="item-header">
+                      <span class="item-name">{{ field.label }}</span>
+                      <span v-if="field.required" class="item-badge item-badge--error">Obrigatório</span>
                     </div>
-                    <div v-if="field.placeholder" class="mt-1">
-                      <v-icon size="16">mdi-form-textbox-hint</v-icon>
-                      {{ field.placeholder }}
+                    <div class="item-meta">
+                      <span class="meta-tag">
+                        <v-icon size="12">mdi-code-tags</v-icon>
+                        {{ field.name }}
+                      </span>
+                      <span class="meta-tag">
+                        <v-icon size="12">mdi-format-list-bulleted-type</v-icon>
+                        {{ getFieldTypeText(field.type) }}
+                      </span>
                     </div>
-                  </v-list-item-subtitle>
+                  </div>
 
-                  <template #append>
-                    <v-btn icon="mdi-pencil" size="small" variant="text" @click="editField(index)" />
-                    <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="removeField(index)" />
-                  </template>
-                </v-list-item>
-                <v-divider v-if="index < formData.formFields.length - 1" />
-              </template>
-            </v-list>
-          </v-card>
-        </v-window-item>
+                  <div class="item-actions">
+                    <v-btn icon size="small" variant="text" @click="editField(index)">
+                      <v-icon size="18">mdi-pencil</v-icon>
+                    </v-btn>
+                    <v-btn icon size="small" variant="text" color="error" @click="removeField(index)">
+                      <v-icon size="18">mdi-delete</v-icon>
+                    </v-btn>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-        <v-window-item value="steps">
-          <v-card>
-            <v-card-title class="d-flex align-center justify-space-between">
-              <span>Etapas do Processo</span>
-              <v-btn color="primary" size="small" @click="addStep" prepend-icon="mdi-plus">
+        <!-- Steps Tab -->
+        <div v-if="activeTab === 'steps'" class="tab-panel">
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-icon panel-icon--warning">
+                <v-icon size="20">mdi-debug-step-over</v-icon>
+              </div>
+              <div>
+                <h3 class="panel-title">Etapas do Processo</h3>
+                <p class="panel-subtitle">Defina o fluxo de trabalho do processo</p>
+              </div>
+              <v-btn
+                color="primary"
+                variant="flat"
+                size="small"
+                @click="addStep"
+                class="ml-auto"
+              >
+                <v-icon start size="18">mdi-plus</v-icon>
                 Adicionar Etapa
               </v-btn>
-            </v-card-title>
-            <v-divider />
+            </div>
 
-            <v-card-text v-if="formData.steps.length === 0" class="text-center py-8">
-              <v-icon size="48" color="grey-lighten-1">
-                mdi-debug-step-over
-              </v-icon>
-              <p class="text-body-1 text-grey mt-2">
-                Nenhuma etapa adicionada
-              </p>
-              <p class="text-body-2 text-grey">
-                Adicione as etapas que compõem o fluxo do processo
-              </p>
-            </v-card-text>
+            <div class="panel-body">
+              <!-- Empty State -->
+              <div v-if="formData.steps.length === 0" class="empty-panel">
+                <div class="empty-panel-icon empty-panel-icon--warning">
+                  <v-icon size="32">mdi-debug-step-over</v-icon>
+                </div>
+                <h4 class="empty-panel-title">Nenhuma etapa adicionada</h4>
+                <p class="empty-panel-text">Adicione as etapas que compõem o fluxo do processo</p>
+                <v-btn color="primary" variant="flat" @click="addStep">
+                  <v-icon start>mdi-plus</v-icon>
+                  Adicionar Primeira Etapa
+                </v-btn>
+              </div>
 
-            <v-list v-else lines="three">
-              <template v-for="(step, index) in formData.steps" :key="step.id || step.tempId || index">
-                <v-list-item
-                  class="px-4 py-3 draggable-step"
-                  :class="{ 'dragging-over': dragOverStepIndex === index }"
+              <!-- Steps List -->
+              <div v-else class="steps-flow">
+                <div
+                  v-for="(step, index) in formData.steps"
+                  :key="step.id || step.tempId || index"
+                  class="step-item"
+                  :class="{ 'step-item--dragging': dragOverStepIndex === index }"
                   draggable="true"
                   @dragstart="onStepDragStart($event, index)"
                   @dragend="onStepDragEnd"
@@ -222,529 +306,429 @@
                   @dragleave="onStepDragLeave"
                   @drop="onStepDrop($event, index)"
                 >
-                  <template #prepend>
-                    <v-icon class="mr-3 drag-handle" color="grey" style="cursor: grab;">mdi-drag-vertical</v-icon>
-                    <v-avatar :color="getStepTypeColor(step.type)" size="40">
-                      <span class="text-h6">{{ index + 1 }}</span>
-                    </v-avatar>
-                  </template>
+                  <div class="step-connector" v-if="index > 0">
+                    <div class="connector-line"></div>
+                    <v-icon size="16" color="grey">mdi-chevron-down</v-icon>
+                  </div>
 
-                  <v-list-item-title class="font-weight-medium">
-                    {{ step.name }}
-                    <v-chip size="x-small" class="ml-2" variant="tonal">
-                      {{ getStepTypeText(step.type) }}
-                    </v-chip>
-                    <v-chip v-if="step.assignedToCreator" size="x-small" color="purple" class="ml-2" variant="tonal">
-                      <v-icon start size="12">mdi-account-plus</v-icon>
-                      Criador
-                    </v-chip>
-                  </v-list-item-title>
+                  <div class="step-card">
+                    <div class="step-drag">
+                      <v-icon size="20" color="grey">mdi-drag-vertical</v-icon>
+                    </div>
 
-                  <v-list-item-subtitle>
-                    <div v-if="!step.assignedToCreator && (step.assignedToSectorId || step.assignedToUserId)">
-                      <v-icon size="16">mdi-account-check</v-icon>
-                      Responsável: {{ getResponsibleName(step) }}
+                    <div class="step-number" :class="`step-number--${getStepTypeColor(step.type)}`">
+                      {{ index + 1 }}
                     </div>
-                    <div v-if="step.assignmentConditions">
-                      <v-icon size="16">mdi-code-braces</v-icon>
-                      Atribuição condicional configurada
-                    </div>
-                    <div v-if="step.slaDays" class="mt-1">
-                      <v-icon size="16">mdi-clock-outline</v-icon>
-                      SLA: {{ step.slaDays }} dia(s)
-                    </div>
-                    <div v-if="step.instructions" class="mt-1">
-                      <v-icon size="16">mdi-text-box</v-icon>
-                      Instruções: {{ step.instructions.substring(0, 50) }}{{ step.instructions.length > 50 ? '...' : '' }}
-                    </div>
-                    <div v-if="step.type === 'INPUT'" class="mt-1">
-                      <v-icon size="16">mdi-form-textbox</v-icon>
-                      {{ getInputFieldsCount(step) }}
-                    </div>
-                    <div v-if="step.reuseData" class="mt-1">
-                      <v-icon size="16">mdi-refresh</v-icon>
-                      Reutiliza dados de {{ getReuseDataCount(step.reuseData) }} campo(s)
-                    </div>
-                    <div class="mt-1">
-                      <v-chip v-if="step.allowAttachment" size="x-small" class="mr-1">
-                        <v-icon start size="12">mdi-paperclip</v-icon>
-                        Anexos{{ step.requireAttachment ? ' (obrigatório)' : '' }}
-                      </v-chip>
-                      <v-chip v-if="step.requiresSignature" size="x-small" class="mr-1">
-                        <v-icon start size="12">mdi-draw-pen</v-icon>
-                        Assinatura
-                      </v-chip>
-                      <v-chip v-if="step.actions?.length > 0" size="x-small">
-                        {{ step.actions.length }} ações
-                      </v-chip>
-                    </div>
-                  </v-list-item-subtitle>
 
-                  <template #append>
-                    <v-btn icon="mdi-pencil" size="small" variant="text" @click="editStep(index)" />
-                    <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="removeStep(index)" />
-                  </template>
-                </v-list-item>
-                <v-divider v-if="index < formData.steps.length - 1" />
-              </template>
-            </v-list>
-          </v-card>
-        </v-window-item>
+                    <div class="step-content">
+                      <div class="step-header">
+                        <span class="step-name">{{ step.name }}</span>
+                        <span class="step-type-badge" :class="`badge--${getStepTypeColor(step.type)}`">
+                          {{ getStepTypeText(step.type) }}
+                        </span>
+                        <span v-if="step.assignedToCreator" class="step-type-badge badge--secondary">
+                          <v-icon size="12">mdi-account-plus</v-icon>
+                          Criador
+                        </span>
+                      </div>
 
-        <v-window-item value="subprocesses">
-          <v-card>
-            <v-card-title class="d-flex align-center justify-space-between">
-              <span>Sub-Processos Permitidos</span>
-              <v-btn color="primary" size="small" @click="openCreateChildTypeDialog" prepend-icon="mdi-plus">
+                      <div class="step-details">
+                        <span v-if="!step.assignedToCreator && (step.assignedToSectorId || step.assignedToUserId)" class="detail-item">
+                          <v-icon size="14">mdi-account-check</v-icon>
+                          {{ getResponsibleName(step) }}
+                        </span>
+                        <span v-if="step.slaDays" class="detail-item">
+                          <v-icon size="14">mdi-clock-outline</v-icon>
+                          SLA: {{ step.slaDays }} dia(s)
+                        </span>
+                      </div>
+
+                      <div class="step-features">
+                        <span v-if="step.allowAttachment" class="feature-chip">
+                          <v-icon size="12">mdi-paperclip</v-icon>
+                          Anexos
+                        </span>
+                        <span v-if="step.requiresSignature" class="feature-chip feature-chip--error">
+                          <v-icon size="12">mdi-draw-pen</v-icon>
+                          Assinatura
+                        </span>
+                        <span v-if="step.actions?.length > 0" class="feature-chip">
+                          {{ step.actions.length }} ações
+                        </span>
+                      </div>
+                    </div>
+
+                    <div class="step-actions">
+                      <v-btn icon size="small" variant="text" @click="editStep(index)">
+                        <v-icon size="18">mdi-pencil</v-icon>
+                      </v-btn>
+                      <v-btn icon size="small" variant="text" color="error" @click="removeStep(index)">
+                        <v-icon size="18">mdi-delete</v-icon>
+                      </v-btn>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subprocesses Tab -->
+        <div v-if="activeTab === 'subprocesses'" class="tab-panel">
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-icon panel-icon--success">
+                <v-icon size="20">mdi-source-branch</v-icon>
+              </div>
+              <div>
+                <h3 class="panel-title">Sub-Processos Permitidos</h3>
+                <p class="panel-subtitle">Configure quais tipos de processo podem ser vinculados</p>
+              </div>
+              <v-btn
+                color="primary"
+                variant="flat"
+                size="small"
+                @click="openCreateChildTypeDialog"
+                class="ml-auto"
+              >
+                <v-icon start size="18">mdi-plus</v-icon>
                 Criar Novo Tipo
               </v-btn>
-            </v-card-title>
-            <v-divider />
+            </div>
 
-            <v-card-text>
-              <v-select
-                v-model="formData.allowedChildProcessTypes"
-                :items="availableProcessTypesForChild"
-                item-title="name"
-                item-value="id"
-                label="Tipos de Sub-Processo Permitidos"
-                multiple
-                chips
-                closable-chips
-                variant="outlined"
-                :loading="loadingProcessTypes"
-                hint="Selecione os tipos de processo que podem ser sub-processos"
-                persistent-hint
-              >
-                <template v-slot:prepend-inner>
-                  <v-icon color="grey">mdi-source-branch</v-icon>
-                </template>
-                <template v-slot:chip="{ props, item }">
-                  <v-chip
-                    v-bind="props"
-                    color="primary"
-                    variant="tonal"
-                    closable
-                  >
-                    <v-icon start size="16">mdi-file-document-outline</v-icon>
-                    {{ item.raw.name }}
-                  </v-chip>
-                </template>
-                <template v-slot:item="{ props, item }">
-                  <v-list-item v-bind="props">
-                    <template v-slot:prepend>
-                      <v-icon color="primary">mdi-file-document-outline</v-icon>
-                    </template>
-                    <v-list-item-subtitle v-if="item.raw.description">
-                      {{ item.raw.description }}
-                    </v-list-item-subtitle>
-                  </v-list-item>
-                </template>
-              </v-select>
+            <div class="panel-body">
+              <div class="subprocess-selector">
+                <v-select
+                  v-model="formData.allowedChildProcessTypes"
+                  :items="availableProcessTypesForChild"
+                  item-title="name"
+                  item-value="id"
+                  label="Selecione os tipos de sub-processo permitidos"
+                  multiple
+                  chips
+                  closable-chips
+                  variant="outlined"
+                  :loading="loadingProcessTypes"
+                  class="form-input"
+                  @update:model-value="saveAllowedChildProcessTypes"
+                >
+                  <template v-slot:prepend-inner>
+                    <v-icon color="grey">mdi-source-branch</v-icon>
+                  </template>
+                  <template v-slot:chip="{ props, item }">
+                    <v-chip
+                      v-bind="props"
+                      color="primary"
+                      variant="tonal"
+                      closable
+                    >
+                      <v-icon start size="14">mdi-file-document-outline</v-icon>
+                      {{ item.raw.name }}
+                    </v-chip>
+                  </template>
+                </v-select>
+              </div>
 
-              <!-- Lista de tipos selecionados -->
-              <div v-if="formData.allowedChildProcessTypes?.length > 0" class="mt-6">
-                <h4 class="text-subtitle-1 font-weight-medium mb-3">
-                  <v-icon start>mdi-check-circle</v-icon>
+              <!-- Selected Types -->
+              <div v-if="formData.allowedChildProcessTypes?.length > 0" class="selected-types">
+                <h4 class="selected-title">
+                  <v-icon start size="18">mdi-check-circle</v-icon>
                   {{ formData.allowedChildProcessTypes.length }} tipo(s) selecionado(s)
                 </h4>
-                <v-list density="compact" class="bg-grey-lighten-5 rounded-lg">
-                  <v-list-item
+                <div class="selected-list">
+                  <div
                     v-for="typeId in formData.allowedChildProcessTypes"
                     :key="typeId"
+                    class="selected-item"
                   >
-                    <template v-slot:prepend>
-                      <v-icon color="success">mdi-check-circle</v-icon>
-                    </template>
-                    <v-list-item-title>{{ getProcessTypeName(typeId) }}</v-list-item-title>
-                    <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close"
-                        size="small"
-                        variant="text"
-                        @click="removeAllowedChildType(typeId)"
-                      />
-                    </template>
-                  </v-list-item>
-                </v-list>
+                    <v-icon color="success" size="18">mdi-check-circle</v-icon>
+                    <span class="selected-name">{{ getProcessTypeName(typeId) }}</span>
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      @click="removeAllowedChildType(typeId)"
+                    >
+                      <v-icon size="16">mdi-close</v-icon>
+                    </v-btn>
+                  </div>
+                </div>
               </div>
 
-              <div v-else class="text-center py-8">
-                <v-icon size="48" color="grey-lighten-1">mdi-source-branch</v-icon>
-                <p class="text-body-1 text-grey mt-2">Nenhum sub-processo configurado</p>
-                <p class="text-body-2 text-grey">
-                  Selecione acima os tipos de processo que podem ser vinculados como sub-processos
-                </p>
+              <!-- Empty State -->
+              <div v-else class="empty-panel empty-panel--small">
+                <v-icon size="32" color="grey">mdi-source-branch</v-icon>
+                <p class="empty-panel-text">Nenhum sub-processo configurado</p>
               </div>
-            </v-card-text>
-          </v-card>
-        </v-window-item>
-      </v-window>
-
-      <div class="d-flex justify-end mt-6 gap-2">
-        <v-btn variant="text" @click="goBack">
-          Cancelar
-        </v-btn>
-        <v-btn color="primary" variant="elevated" :loading="saving" :disabled="!valid || formData.steps.length === 0" @click="save">
-          {{ isEditing ? 'Salvar Alterações' : 'Criar Tipo de Processo' }}
-        </v-btn>
+            </div>
+          </div>
+        </div>
       </div>
     </v-form>
 
-    <!-- Dialog de Campo -->
+    <!-- Field Dialog -->
     <v-dialog v-model="fieldDialog" max-width="800" persistent>
-      <v-card>
-        <v-card-title>
-          {{ editingFieldIndex !== null ? 'Editar' : 'Novo' }} Campo do Formulário
-        </v-card-title>
-        <v-divider />
+      <v-card class="dialog-card">
+        <div class="dialog-header">
+          <div class="dialog-header-icon">
+            <v-icon size="24" color="white">mdi-form-textbox</v-icon>
+          </div>
+          <div class="dialog-header-text">
+            <h3 class="dialog-title">{{ editingFieldIndex !== null ? 'Editar' : 'Novo' }} Campo</h3>
+            <p class="dialog-subtitle">Configure os atributos do campo</p>
+          </div>
+          <v-btn icon variant="text" @click="closeFieldDialog" class="dialog-close">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </div>
 
         <v-form ref="fieldForm" v-model="fieldValid">
-          <v-card-text>
-            <v-row>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="fieldData.name" label="Nome do Campo (identificador)"
-                  :rules="[v => !!v || 'Nome é obrigatório', v => /^[a-zA-Z][a-zA-Z0-9_]*$/.test(v) || 'Use apenas letras, números e underscore']"
-                  hint="Ex: data_nascimento, valor_total" persistent-hint required />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="fieldData.label" label="Rótulo (exibido ao usuário)"
-                  :rules="[v => !!v || 'Rótulo é obrigatório']" required />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-select v-model="fieldData.type" :items="fieldTypes" label="Tipo de Campo"
-                  :rules="[v => !!v || 'Tipo é obrigatório']" required />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="fieldData.placeholder" label="Placeholder" />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="fieldData.defaultValue" label="Valor Padrão" />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-switch v-model="fieldData.required" label="Campo Obrigatório" color="primary" />
-              </v-col>
-              <v-col cols="12">
-                <v-textarea v-model="fieldData.helpText" label="Texto de Ajuda" rows="2" />
-              </v-col>
+          <v-card-text class="dialog-content">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Nome do Campo (identificador) *</label>
+                <v-text-field
+                  v-model="fieldData.name"
+                  placeholder="Ex: data_nascimento"
+                  :rules="[v => !!v || 'O nome do campo é obrigatório', v => /^[a-zA-Z][a-zA-Z0-9_]*$/.test(v) || 'Use apenas letras, números e underscore']"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details="auto"
+                />
+              </div>
 
-              <!-- Opções para Lista Suspensa -->
-              <v-col v-if="fieldData.type === 'DROPDOWN'" cols="12">
-                <v-divider class="my-4" />
-                <div class="d-flex align-center justify-space-between mb-4">
-                  <div>
-                    <h4 class="text-h6 mb-1">Opções da Lista Suspensa</h4>
-                    <p class="text-caption text-medium-emphasis">Configure as opções que aparecerão no campo</p>
-                  </div>
-                  <v-btn
-                    color="primary"
-                    size="small"
-                    prepend-icon="mdi-plus"
-                    variant="elevated"
-                    @click="addDropdownOption"
-                  >
-                    Adicionar Opção
+              <div class="form-group">
+                <label class="form-label">Rótulo (exibido ao usuário) *</label>
+                <v-text-field
+                  v-model="fieldData.label"
+                  placeholder="Ex: Data de Nascimento"
+                  :rules="[v => !!v || 'O rótulo é obrigatório']"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details="auto"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Tipo de Campo *</label>
+                <v-select
+                  v-model="fieldData.type"
+                  :items="fieldTypes"
+                  :rules="[v => !!v || 'O tipo do campo é obrigatório']"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details="auto"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Placeholder</label>
+                <v-text-field
+                  v-model="fieldData.placeholder"
+                  placeholder="Texto de exemplo..."
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Valor Padrão</label>
+                <v-text-field
+                  v-model="fieldData.defaultValue"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details
+                />
+              </div>
+
+              <div class="form-group form-group--switch">
+                <v-switch
+                  v-model="fieldData.required"
+                  label="Campo Obrigatório"
+                  color="primary"
+                  hide-details
+                />
+              </div>
+
+              <div class="form-group form-group--full">
+                <label class="form-label">Texto de Ajuda</label>
+                <v-textarea
+                  v-model="fieldData.helpText"
+                  rows="2"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details
+                />
+              </div>
+
+              <!-- Dropdown Options -->
+              <div v-if="fieldData.type === 'DROPDOWN'" class="form-group form-group--full">
+                <div class="options-header">
+                  <label class="form-label">Opções da Lista Suspensa</label>
+                  <v-btn size="small" variant="tonal" color="primary" @click="addDropdownOption">
+                    <v-icon start size="16">mdi-plus</v-icon>
+                    Adicionar
                   </v-btn>
                 </div>
 
-                <v-alert v-if="!fieldData.options || fieldData.options.length === 0"
-                  type="info"
-                  variant="tonal"
-                  density="compact"
-                  class="mb-3"
-                  icon="mdi-information"
-                >
-                  Clique em "Adicionar Opção" para criar as opções da lista suspensa
+                <v-alert v-if="!fieldData.options?.length" type="info" variant="tonal" density="compact" class="mt-2">
+                  Clique em "Adicionar" para criar as opções
                 </v-alert>
 
-                <div v-if="fieldData.options && fieldData.options.length > 0" class="options-container">
-                  <div
-                    v-for="(option, idx) in fieldData.options"
-                    :key="idx"
-                    class="mb-3 pa-3"
-                  >
-                    <v-row dense align="center">
-                      <v-col cols="12" sm="5">
-                        <v-text-field
-                          v-model="option.label"
-                          label="Texto exibido ao usuário"
-                          density="comfortable"
-                          variant="outlined"
-                          hide-details="auto"
-                          :rules="[v => !!v?.trim() || 'Campo obrigatório']"
-                          prepend-inner-icon="mdi-format-text"
-                        />
-                      </v-col>
-                      <v-col cols="12" sm="5">
-                        <v-text-field
-                          v-model="option.value"
-                          label="Valor interno (identificador)"
-                          density="comfortable"
-                          variant="outlined"
-                          hide-details="auto"
-                          :rules="[v => !!v?.trim() || 'Campo obrigatório']"
-                          prepend-inner-icon="mdi-code-tags"
-                        />
-                      </v-col>
-                      <v-col cols="12" sm="2" class="text-center">
-                        <v-btn
-                          icon="mdi-delete"
-                          size="small"
-                          color="error"
-                          variant="tonal"
-                          @click="removeDropdownOption(idx)"
-                        />
-                      </v-col>
-                    </v-row>
+                <div v-else class="options-list">
+                  <div v-for="(option, idx) in fieldData.options" :key="idx" class="option-row">
+                    <v-text-field
+                      v-model="option.label"
+                      placeholder="Texto exibido"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                    />
+                    <v-text-field
+                      v-model="option.value"
+                      placeholder="Valor interno"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                    />
+                    <v-btn icon size="small" color="error" variant="text" @click="removeDropdownOption(idx)">
+                      <v-icon size="18">mdi-delete</v-icon>
+                    </v-btn>
                   </div>
                 </div>
-              </v-col>
+              </div>
 
-              <!-- Opções para Checkbox -->
-              <v-col v-if="fieldData.type === 'CHECKBOX'" cols="12">
-                <v-divider class="my-4" />
-                <div class="d-flex align-center justify-space-between mb-4">
-                  <div>
-                    <h4 class="text-h6 mb-1">Opções de Checkbox</h4>
-                    <p class="text-caption text-medium-emphasis">Configure múltiplas opções ou deixe vazio para checkbox único</p>
-                  </div>
-                  <v-btn
-                    color="primary"
-                    size="small"
-                    prepend-icon="mdi-plus"
-                    variant="elevated"
-                    @click="addCheckboxOption"
-                  >
-                    Adicionar Opção
+              <!-- Checkbox Options -->
+              <div v-if="fieldData.type === 'CHECKBOX'" class="form-group form-group--full">
+                <div class="options-header">
+                  <label class="form-label">Opções de Checkbox</label>
+                  <v-btn size="small" variant="tonal" color="primary" @click="addCheckboxOption">
+                    <v-icon start size="16">mdi-plus</v-icon>
+                    Adicionar
                   </v-btn>
                 </div>
 
-                <v-alert
-                  type="info"
-                  variant="tonal"
-                  density="compact"
-                  class="mb-3"
-                  icon="mdi-information"
-                >
-                  <strong>Dica:</strong> Sem opções = checkbox único (sim/não). Com opções = múltipla seleção.
+                <v-alert type="info" variant="tonal" density="compact" class="mt-2">
+                  Sem opções = checkbox único. Com opções = múltipla seleção.
                 </v-alert>
 
-                <div v-if="fieldData.options && fieldData.options.length > 0" class="options-container">
-                  <div
-                    v-for="(option, idx) in fieldData.options"
-                    :key="idx"
-                    class="mb-3 pa-3"
-                  >
-                    <v-row dense align="center">
-                      <v-col cols="10">
-                        <v-text-field
-                          v-model="fieldData.options[idx]"
-                          label="Opção"
-                          density="comfortable"
-                          variant="outlined"
-                          hide-details="auto"
-                          :rules="[v => !!v?.trim() || 'Campo obrigatório']"
-                          prepend-inner-icon="mdi-checkbox-marked"
-                        />
-                      </v-col>
-                      <v-col cols="2" class="text-center">
-                        <v-btn
-                          icon="mdi-delete"
-                          size="small"
-                          color="error"
-                          variant="tonal"
-                          @click="removeCheckboxOption(idx)"
-                        />
-                      </v-col>
-                    </v-row>
+                <div v-if="fieldData.options?.length" class="options-list">
+                  <div v-for="(option, idx) in fieldData.options" :key="idx" class="option-row option-row--single">
+                    <v-text-field
+                      v-model="fieldData.options[idx]"
+                      placeholder="Opção"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                    />
+                    <v-btn icon size="small" color="error" variant="text" @click="removeCheckboxOption(idx)">
+                      <v-icon size="18">mdi-delete</v-icon>
+                    </v-btn>
                   </div>
                 </div>
-              </v-col>
+              </div>
 
-              <!-- Configuração de Colunas para Tabela -->
-              <v-col v-if="fieldData.type === 'TABLE'" cols="12">
-                <v-divider class="my-4" />
-                <div class="d-flex align-center justify-space-between mb-4">
-                  <div>
-                    <h4 class="text-h6 mb-1">
-                      <v-icon start color="indigo">mdi-table</v-icon>
-                      Configuração da Tabela
-                    </h4>
-                    <p class="text-caption text-medium-emphasis">
-                      Configure até 5 colunas para a tabela dinâmica
-                    </p>
-                  </div>
+              <!-- Table Columns -->
+              <div v-if="fieldData.type === 'TABLE'" class="form-group form-group--full">
+                <div class="options-header">
+                  <label class="form-label">
+                    <v-icon start size="18">mdi-table</v-icon>
+                    Colunas da Tabela (máx. 5)
+                  </label>
                   <v-btn
-                    color="indigo"
                     size="small"
-                    prepend-icon="mdi-table-column-plus-after"
-                    variant="elevated"
-                    :disabled="fieldData.tableColumns && fieldData.tableColumns.length >= 5"
+                    variant="tonal"
+                    color="primary"
+                    :disabled="fieldData.tableColumns?.length >= 5"
                     @click="addTableColumn"
                   >
-                    Adicionar Coluna
+                    <v-icon start size="16">mdi-plus</v-icon>
+                    Adicionar
                   </v-btn>
                 </div>
 
-                <!-- Indicador de colunas -->
-                <v-chip 
-                  v-if="fieldData.tableColumns && fieldData.tableColumns.length > 0"
-                  size="small" 
-                  color="indigo" 
-                  variant="tonal"
-                  class="mb-3"
-                >
-                  {{ fieldData.tableColumns.length }}/5 colunas configuradas
-                </v-chip>
-
-                <v-alert v-if="!fieldData.tableColumns || fieldData.tableColumns.length === 0"
-                  type="info"
-                  variant="tonal"
-                  density="compact"
-                  class="mb-3"
-                  icon="mdi-information"
-                >
-                  Clique em "Adicionar Coluna" para configurar as colunas da tabela (máximo 5)
+                <v-alert v-if="!fieldData.tableColumns?.length" type="info" variant="tonal" density="compact" class="mt-2">
+                  Configure as colunas da tabela dinâmica
                 </v-alert>
 
-                <div v-if="fieldData.tableColumns && fieldData.tableColumns.length > 0" class="table-columns-container">
-                  <v-card
-                    v-for="(column, idx) in fieldData.tableColumns"
-                    :key="idx"
-                    variant="flat"
-                    class="mb-3 pa-4 column-card"
-                  >
-                    <div class="d-flex align-center mb-3">
-                      <v-avatar color="indigo" size="32" class="mr-3">
-                        <span class="text-body-2 font-weight-bold text-white">{{ idx + 1 }}</span>
-                      </v-avatar>
-                      <span class="text-subtitle-1 font-weight-medium">Coluna {{ idx + 1 }}</span>
-                      <v-spacer />
-                      <v-btn
-                        icon="mdi-arrow-up"
-                        size="small"
-                        variant="text"
-                        :disabled="idx === 0"
-                        @click="moveTableColumn(idx, -1)"
-                        title="Mover para cima"
+                <div v-else class="table-columns-list">
+                  <div v-for="(column, idx) in fieldData.tableColumns" :key="idx" class="table-column-item">
+                    <div class="column-header">
+                      <span class="column-number">{{ idx + 1 }}</span>
+                      <div class="column-actions">
+                        <v-btn icon size="x-small" variant="text" :disabled="idx === 0" @click="moveTableColumn(idx, -1)">
+                          <v-icon size="16">mdi-arrow-up</v-icon>
+                        </v-btn>
+                        <v-btn icon size="x-small" variant="text" :disabled="idx === fieldData.tableColumns.length - 1" @click="moveTableColumn(idx, 1)">
+                          <v-icon size="16">mdi-arrow-down</v-icon>
+                        </v-btn>
+                        <v-btn icon size="x-small" variant="text" color="error" @click="removeTableColumn(idx)">
+                          <v-icon size="16">mdi-delete</v-icon>
+                        </v-btn>
+                      </div>
+                    </div>
+                    <div class="column-fields">
+                      <v-text-field
+                        v-model="column.label"
+                        label="Nome"
+                        variant="outlined"
+                        density="compact"
+                        hide-details
                       />
-                      <v-btn
-                        icon="mdi-arrow-down"
-                        size="small"
-                        variant="text"
-                        :disabled="idx === fieldData.tableColumns.length - 1"
-                        @click="moveTableColumn(idx, 1)"
-                        title="Mover para baixo"
+                      <v-select
+                        v-model="column.type"
+                        :items="tableColumnTypes"
+                        label="Tipo"
+                        variant="outlined"
+                        density="compact"
+                        hide-details
                       />
-                      <v-btn
-                        icon="mdi-delete"
-                        size="small"
-                        color="error"
-                        variant="text"
-                        @click="removeTableColumn(idx)"
-                        title="Remover coluna"
+                      <v-switch
+                        v-model="column.required"
+                        label="Obrig."
+                        density="compact"
+                        hide-details
                       />
                     </div>
-                    <v-row dense>
-                      <v-col cols="12" md="4">
-                        <v-text-field
-                          v-model="column.label"
-                          label="Nome da Coluna *"
-                          placeholder="Ex: Produto, Quantidade..."
-                          density="comfortable"
-                          variant="outlined"
-                          hide-details="auto"
-                          :rules="[v => !!v?.trim() || 'Nome é obrigatório']"
-                          prepend-inner-icon="mdi-format-text"
-                        />
-                      </v-col>
-                      <v-col cols="12" md="4">
-                        <v-select
-                          v-model="column.type"
-                          :items="tableColumnTypes"
-                          label="Tipo *"
-                          density="comfortable"
-                          variant="outlined"
-                          hide-details="auto"
-                          prepend-inner-icon="mdi-format-list-bulleted-type"
-                        />
-                      </v-col>
-                      <v-col cols="12" md="4">
-                        <v-switch
-                          v-model="column.required"
-                          label="Obrigatório"
-                          density="comfortable"
-                          hide-details
-                          color="indigo"
-                          class="mt-1"
-                        />
-                      </v-col>
-                    </v-row>
-                  </v-card>
+                  </div>
                 </div>
 
-                <v-alert 
-                  v-if="fieldData.tableColumns && fieldData.tableColumns.length >= 5"
-                  type="warning"
-                  variant="tonal"
-                  density="compact"
-                  class="mt-3"
-                  icon="mdi-alert"
-                >
-                  Limite máximo de 5 colunas atingido
-                </v-alert>
-
-                <v-divider class="my-4" />
-                <v-row>
-                  <v-col cols="12" sm="6">
-                    <v-text-field
-                      v-model.number="fieldData.minRows"
-                      label="Mínimo de linhas"
-                      type="number"
-                      min="0"
-                      max="50"
-                      density="comfortable"
-                      variant="outlined"
-                      hint="0 = sem mínimo"
-                      persistent-hint
-                      prepend-inner-icon="mdi-table-row"
-                    />
-                  </v-col>
-                  <v-col cols="12" sm="6">
-                    <v-text-field
-                      v-model.number="fieldData.maxRows"
-                      label="Máximo de linhas"
-                      type="number"
-                      min="1"
-                      max="100"
-                      density="comfortable"
-                      variant="outlined"
-                      hint="Deixe vazio para ilimitado"
-                      persistent-hint
-                      prepend-inner-icon="mdi-table-row-plus-after"
-                    />
-                  </v-col>
-                </v-row>
-              </v-col>
-            </v-row>
+                <div class="table-limits">
+                  <v-text-field
+                    v-model.number="fieldData.minRows"
+                    label="Mín. linhas"
+                    type="number"
+                    min="0"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                  />
+                  <v-text-field
+                    v-model.number="fieldData.maxRows"
+                    label="Máx. linhas"
+                    type="number"
+                    min="1"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                  />
+                </div>
+              </div>
+            </div>
           </v-card-text>
 
-          <v-divider />
-
-          <v-card-actions>
-            <v-spacer />
-            <v-btn variant="text" @click="closeFieldDialog">
-              Cancelar
-            </v-btn>
-            <v-btn color="primary" variant="elevated" :disabled="!fieldValid" @click="saveField">
+          <div class="dialog-actions">
+            <v-btn variant="text" @click="closeFieldDialog">Cancelar</v-btn>
+            <v-btn color="primary" variant="flat" :disabled="!fieldValid" @click="saveField">
               {{ editingFieldIndex !== null ? 'Salvar' : 'Adicionar' }}
             </v-btn>
-          </v-card-actions>
+          </div>
         </v-form>
       </v-card>
     </v-dialog>
 
-    <!-- StepDialog Component Integration -->
+    <!-- Step Dialog Component -->
     <StepDialog
       v-model="stepDialog"
       :step-data="editingStepData"
@@ -757,217 +741,151 @@
       @close="handleStepClose"
     />
 
-    <!-- Modal para criar novo tipo de processo como sub-processo -->
-    <v-dialog v-model="createChildTypeDialog" max-width="700" persistent scrollable>
-      <v-card class="create-child-type-dialog">
-        <!-- Header -->
-        <v-card-title class="create-child-type-header d-flex align-center justify-center flex-column py-8">
-          <div class="icon-container mb-4">
-            <v-icon size="64" color="white">mdi-file-document-plus</v-icon>
+    <!-- Create Child Type Dialog -->
+    <v-dialog v-model="createChildTypeDialog" max-width="600" persistent>
+      <v-card class="dialog-card">
+        <div class="dialog-header dialog-header--secondary">
+          <div class="dialog-header-icon">
+            <v-icon size="24" color="white">mdi-file-document-plus</v-icon>
           </div>
-          <span class="text-h5 font-weight-bold text-white text-center">
-            Criar Novo Tipo de Sub-Processo
-          </span>
-          <span class="text-body-2 text-white-50 mt-2 text-center">
-            Este tipo será automaticamente vinculado como sub-processo permitido
-          </span>
-        </v-card-title>
+          <div class="dialog-header-text">
+            <h3 class="dialog-title">Criar Novo Tipo de Sub-Processo</h3>
+            <p class="dialog-subtitle">Será automaticamente vinculado como sub-processo permitido</p>
+          </div>
+          <v-btn icon variant="text" @click="closeCreateChildTypeDialog" class="dialog-close">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </div>
 
-        <v-divider />
+        <v-form ref="childTypeForm" v-model="childTypeFormValid">
+          <v-card-text class="dialog-content">
+            <div class="form-grid">
+              <div class="form-group form-group--full">
+                <label class="form-label">Nome do Tipo de Processo *</label>
+                <v-text-field
+                  v-model="childTypeData.name"
+                  placeholder="Ex: Aditivo de Contrato"
+                  :rules="[v => !!v || 'O nome é obrigatório', v => (v?.length ?? 0) >= 3 || 'O nome deve ter no mínimo 3 caracteres']"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details="auto"
+                />
+              </div>
 
-        <v-card-text class="pa-6">
-          <v-form ref="childTypeForm" v-model="childTypeFormValid">
-            <!-- Nome -->
-            <div class="mb-4">
-              <label class="text-caption font-weight-bold text-grey-darken-2 mb-2 d-block">
-                Nome do Tipo de Processo *
-              </label>
-              <v-text-field
-                v-model="childTypeData.name"
-                variant="outlined"
-                placeholder="Ex: Aditivo de Contrato"
-                :rules="[v => !!v || 'Nome é obrigatório', v => (v?.length ?? 0) >= 3 || 'Mínimo 3 caracteres']"
-                bg-color="grey-lighten-5"
-                density="comfortable"
-              >
-                <template v-slot:prepend-inner>
-                  <v-icon color="grey" size="20">mdi-text</v-icon>
-                </template>
-              </v-text-field>
+              <div class="form-group form-group--full">
+                <label class="form-label">Descrição</label>
+                <v-textarea
+                  v-model="childTypeData.description"
+                  placeholder="Descreva o propósito..."
+                  rows="2"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details
+                />
+              </div>
+
+              <div class="form-group form-group--full">
+                <label class="form-label">Modalidade</label>
+                <v-btn-toggle
+                  v-model="childTypeData.modality"
+                  mandatory
+                  color="primary"
+                  variant="outlined"
+                  class="modality-toggle"
+                >
+                  <v-btn value="MANUAL">
+                    <v-icon start size="18">mdi-hand-pointing-up</v-icon>
+                    Manual
+                  </v-btn>
+                  <v-btn value="RECURRENT">
+                    <v-icon start size="18">mdi-refresh</v-icon>
+                    Recorrente
+                  </v-btn>
+                  <v-btn value="SCHEDULED">
+                    <v-icon start size="18">mdi-calendar-clock</v-icon>
+                    Agendado
+                  </v-btn>
+                </v-btn-toggle>
+              </div>
+
+              <!-- Recurrence Config -->
+              <div v-if="childTypeData.modality === 'RECURRENT'" class="form-group form-group--full">
+                <div class="config-box">
+                  <label class="form-label">Configuração de Recorrência</label>
+                  <div class="inline-fields">
+                    <v-text-field
+                      v-model.number="childTypeData.recurrenceInterval"
+                      type="number"
+                      label="Intervalo"
+                      min="1"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                    />
+                    <v-select
+                      v-model="childTypeData.recurrenceUnit"
+                      :items="recurrenceUnits"
+                      label="Unidade"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Schedule Config -->
+              <div v-if="childTypeData.modality === 'SCHEDULED'" class="form-group form-group--full">
+                <div class="config-box">
+                  <label class="form-label">Configuração de Agendamento</label>
+                  <div class="inline-fields">
+                    <v-text-field
+                      v-model="childTypeData.scheduledDate"
+                      type="date"
+                      label="Data"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                    />
+                    <v-text-field
+                      v-model="childTypeData.scheduledTime"
+                      type="time"
+                      label="Hora"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group form-group--full">
+                <v-checkbox
+                  v-model="childTypeData.createBasicStep"
+                  label="Criar com uma etapa básica de aprovação"
+                  color="primary"
+                  hide-details
+                />
+              </div>
             </div>
+          </v-card-text>
 
-            <!-- Descrição -->
-            <div class="mb-4">
-              <label class="text-caption font-weight-bold text-grey-darken-2 mb-2 d-block">
-                Descrição (opcional)
-              </label>
-              <v-textarea
-                v-model="childTypeData.description"
-                variant="outlined"
-                placeholder="Descreva o propósito deste tipo de processo..."
-                rows="2"
-                bg-color="grey-lighten-5"
-                density="comfortable"
-              >
-                <template v-slot:prepend-inner>
-                  <v-icon color="grey" size="20" class="mt-1">mdi-text-box-outline</v-icon>
-                </template>
-              </v-textarea>
-            </div>
-
-            <!-- Modalidade do Sub-Processo -->
-            <div class="mb-4">
-              <label class="text-caption font-weight-bold text-grey-darken-2 mb-2 d-block">
-                Modalidade *
-              </label>
-              <v-btn-toggle
-                v-model="childTypeData.modality"
-                mandatory
-                color="primary"
-                variant="outlined"
-                class="w-100 modality-toggle"
-              >
-                <v-btn value="MANUAL" class="flex-grow-1">
-                  <v-icon start>mdi-hand-pointing-up</v-icon>
-                  Manual
-                </v-btn>
-                <v-btn value="RECURRENT" class="flex-grow-1">
-                  <v-icon start>mdi-refresh</v-icon>
-                  Recorrente
-                </v-btn>
-                <v-btn value="SCHEDULED" class="flex-grow-1">
-                  <v-icon start>mdi-calendar-clock</v-icon>
-                  Agendado
-                </v-btn>
-              </v-btn-toggle>
-              <p class="text-caption text-grey mt-2">
-                <template v-if="childTypeData.modality === 'MANUAL'">
-                  O sub-processo será criado manualmente pelo usuário quando necessário.
-                </template>
-                <template v-else-if="childTypeData.modality === 'RECURRENT'">
-                  O sub-processo será criado automaticamente em intervalos regulares.
-                </template>
-                <template v-else-if="childTypeData.modality === 'SCHEDULED'">
-                  O sub-processo será criado automaticamente em uma data/hora específica.
-                </template>
-              </p>
-            </div>
-
-            <!-- Configurações de Recorrência -->
-            <div v-if="childTypeData.modality === 'RECURRENT'" class="mb-4 pa-4 bg-blue-lighten-5 rounded-lg">
-              <label class="text-caption font-weight-bold text-grey-darken-2 mb-3 d-block">
-                <v-icon start size="18" color="primary">mdi-refresh</v-icon>
-                Configuração de Recorrência
-              </label>
-
-              <v-row dense>
-                <v-col cols="6">
-                  <v-text-field
-                    v-model.number="childTypeData.recurrenceInterval"
-                    type="number"
-                    label="Intervalo"
-                    variant="outlined"
-                    density="comfortable"
-                    min="1"
-                    bg-color="white"
-                    :rules="[v => v > 0 || 'Intervalo deve ser maior que 0']"
-                  />
-                </v-col>
-                <v-col cols="6">
-                  <v-select
-                    v-model="childTypeData.recurrenceUnit"
-                    :items="recurrenceUnits"
-                    label="Unidade"
-                    variant="outlined"
-                    density="comfortable"
-                    bg-color="white"
-                  />
-                </v-col>
-              </v-row>
-              <p class="text-caption text-grey">
-                Ex: A cada {{ childTypeData.recurrenceInterval || 1 }} {{ getRecurrenceUnitLabel(childTypeData.recurrenceUnit) }}
-              </p>
-            </div>
-
-            <!-- Configurações de Agendamento -->
-            <div v-if="childTypeData.modality === 'SCHEDULED'" class="mb-4 pa-4 bg-orange-lighten-5 rounded-lg">
-              <label class="text-caption font-weight-bold text-grey-darken-2 mb-3 d-block">
-                <v-icon start size="18" color="orange">mdi-calendar-clock</v-icon>
-                Configuração de Agendamento
-              </label>
-
-              <v-row dense>
-                <v-col cols="6">
-                  <v-text-field
-                    v-model="childTypeData.scheduledDate"
-                    type="date"
-                    label="Data"
-                    variant="outlined"
-                    density="comfortable"
-                    bg-color="white"
-                    :rules="[v => !!v || 'Data é obrigatória']"
-                  />
-                </v-col>
-                <v-col cols="6">
-                  <v-text-field
-                    v-model="childTypeData.scheduledTime"
-                    type="time"
-                    label="Hora"
-                    variant="outlined"
-                    density="comfortable"
-                    bg-color="white"
-                  />
-                </v-col>
-              </v-row>
-            </div>
-
-            <!-- Opção de criar com etapa básica -->
-            <v-checkbox
-              v-model="childTypeData.createBasicStep"
-              label="Criar com uma etapa básica de aprovação"
+          <div class="dialog-actions">
+            <v-btn variant="text" @click="closeCreateChildTypeDialog" :disabled="savingChildType">
+              Cancelar
+            </v-btn>
+            <v-btn
               color="primary"
-              density="comfortable"
-              hide-details
-              class="mb-2"
-            />
-            <p class="text-caption text-grey mb-4 ml-8">
-              Cria automaticamente uma etapa de aprovação inicial. Você pode editar o tipo completo depois.
-            </p>
-
-            <v-alert type="info" variant="tonal" density="compact" class="mb-0" icon="mdi-information">
-              Após criar, você poderá editar este tipo de processo para adicionar campos e etapas.
-            </v-alert>
-          </v-form>
-        </v-card-text>
-
-        <v-divider />
-
-        <!-- Ações -->
-        <v-card-actions class="pa-4 d-flex justify-space-between">
-          <v-btn
-            variant="text"
-            color="grey-darken-1"
-            size="large"
-            @click="closeCreateChildTypeDialog"
-            :disabled="savingChildType"
-          >
-            <v-icon start>mdi-close</v-icon>
-            Cancelar
-          </v-btn>
-
-          <v-btn
-            color="primary"
-            variant="elevated"
-            size="large"
-            :loading="savingChildType"
-            :disabled="!childTypeFormValid || savingChildType"
-            @click="createChildType"
-            class="px-6"
-          >
-            <v-icon start>mdi-plus</v-icon>
-            Criar e Vincular
-          </v-btn>
-        </v-card-actions>
+              variant="flat"
+              :loading="savingChildType"
+              :disabled="!childTypeFormValid"
+              @click="createChildType"
+            >
+              <v-icon start>mdi-plus</v-icon>
+              Criar e Vincular
+            </v-btn>
+          </div>
+        </v-form>
       </v-card>
     </v-dialog>
   </div>
@@ -993,6 +911,13 @@ const valid = ref(false)
 const fieldValid = ref(false)
 const saving = ref(false)
 const activeTab = ref('basic')
+
+// DEBUG: Log quando activeTab mudar
+watch(activeTab, (newVal, oldVal) => {
+  console.log('🔄 activeTab changed:', oldVal, '→', newVal)
+  console.trace('Stack trace para identificar origem:')
+})
+
 const fieldDialog = ref(false)
 const stepDialog = ref(false)
 const editingFieldIndex = ref(null)
@@ -1019,6 +944,14 @@ const formData = ref({
   formFields: [],
   allowedChildProcessTypes: []
 })
+
+// Tabs configuration
+const tabs = computed(() => [
+  { value: 'basic', label: 'Informações', icon: 'mdi-information', count: 0 },
+  { value: 'fields', label: 'Campos', icon: 'mdi-form-textbox', count: formData.value.formFields.length },
+  { value: 'steps', label: 'Etapas', icon: 'mdi-debug-step-over', count: formData.value.steps.length },
+  { value: 'subprocesses', label: 'Sub-Processos', icon: 'mdi-source-branch', count: formData.value.allowedChildProcessTypes?.length || 0 }
+])
 
 // Estado para carregar tipos de processo disponíveis
 const loadingProcessTypes = ref(false)
@@ -1048,79 +981,63 @@ const recurrenceUnits = [
   { title: 'Anos', value: 'YEARS' }
 ]
 
-function getRecurrenceUnitLabel(unit) {
-  const labels = {
-    'DAYS': 'dia(s)',
-    'WEEKS': 'semana(s)',
-    'MONTHS': 'mês(es)',
-    'YEARS': 'ano(s)'
-  }
-  return labels[unit] || unit
-}
-
 const fieldData = ref({
-  name: '', 
-  label: '', 
-  type: 'TEXT', 
-  placeholder: '', 
-  required: false, 
-  defaultValue: '', 
-  helpText: '', 
-  options: [], 
-  validations: {}
+  name: '',
+  label: '',
+  type: 'TEXT',
+  placeholder: '',
+  required: false,
+  defaultValue: '',
+  helpText: '',
+  options: [],
+  validations: {},
+  tableColumns: [],
+  minRows: 0,
+  maxRows: null
 })
 
 const isEditing = computed(() => !!route.params.id && route.params.id !== 'new')
 const sectors = computed(() => sectorStore.sectors || [])
 const users = computed(() => userStore.users || [])
 
-// Tipos de processo disponíveis para serem sub-processos (excluindo o próprio tipo em edição)
+// Tipos de processo disponíveis para serem sub-processos
 const availableProcessTypesForChild = computed(() => {
   return allProcessTypes.value.filter(pt => {
-    // Não mostrar o próprio tipo de processo
     if (isEditing.value && pt.id === formData.value.id) return false
-    // Apenas tipos ativos
     if (!pt.isActive) return false
-    // Apenas tipos que são "Somente Subprocesso"
     if (pt.isChildProcessOnly !== true) return false
     return true
   })
 })
 
 const nameRules = [
-  v => !!v || 'Nome é obrigatório',
-  v => (v?.length ?? 0) >= 3 || 'Nome deve ter no mínimo 3 caracteres'
+  v => !!v || 'O nome é obrigatório',
+  v => (v?.length ?? 0) >= 3 || 'O nome deve ter no mínimo 3 caracteres'
 ]
 
-// Variável para controlar se deve ignorar o próximo watch (evita salvar durante carregamento)
+// Flag para ignorar a primeira mudança do watcher (carga inicial)
 const ignoreNextAllowedChildProcessTypesChange = ref(true)
+// Guarda o último valor salvo para evitar saves desnecessários
+const lastSavedChildProcessTypes = ref('')
 
-// Watcher para salvar automaticamente quando mudar sub-processos permitidos (apenas em modo edição)
-watch(() => formData.value.allowedChildProcessTypes, async (newValue, oldValue) => {
-  // Ignorar durante carregamento inicial
-  if (ignoreNextAllowedChildProcessTypesChange.value) {
-    ignoreNextAllowedChildProcessTypesChange.value = false
-    return
-  }
-
-  // Só salvar automaticamente se estiver editando um tipo existente
+// Função para salvar sub-processos manualmente (chamada pelo botão ou blur)
+async function saveAllowedChildProcessTypes() {
   if (!isEditing.value || !formData.value.id) return
 
-  // Verificar se realmente mudou (comparar arrays)
-  const oldIds = (oldValue || []).sort().join(',')
-  const newIds = (newValue || []).sort().join(',')
-  if (oldIds === newIds) return
+  const currentIds = (formData.value.allowedChildProcessTypes || []).sort().join(',')
+  if (currentIds === lastSavedChildProcessTypes.value) return
 
   try {
     await processTypeStore.updateProcessType(formData.value.id, {
-      allowedChildProcessTypes: newValue || []
+      allowedChildProcessTypes: formData.value.allowedChildProcessTypes || []
     })
-    window.showSnackbar?.('Sub-processos permitidos atualizados!', 'success')
+    lastSavedChildProcessTypes.value = currentIds
+    window.showSnackbar?.('Sub-processos atualizados!', 'success')
   } catch (err) {
     console.error('Erro ao atualizar sub-processos:', err)
-    window.showSnackbar?.('Erro ao atualizar sub-processos', 'error')
+    window.showSnackbar?.('Erro ao atualizar', 'error')
   }
-}, { deep: true })
+}
 
 const fieldTypes = [
   { title: 'Texto', value: 'TEXT' },
@@ -1135,11 +1052,17 @@ const fieldTypes = [
   { title: 'Moeda', value: 'CURRENCY' },
   { title: 'Arquivo', value: 'FILE' },
   { title: 'Tabela', value: 'TABLE' }
-  // CHECKBOX removido - usar DROPDOWN para múltiplas opções
+]
+
+const tableColumnTypes = [
+  { title: 'Texto', value: 'TEXT' },
+  { title: 'Número', value: 'NUMBER' },
+  { title: 'Dinheiro', value: 'CURRENCY' },
+  { title: 'Data', value: 'DATE' }
 ]
 
 function getFieldTypeColor(type) {
-  const colors = { TEXT: 'blue', NUMBER: 'green', DATE: 'orange', EMAIL: 'purple', DROPDOWN: 'teal', FILE: 'red', TABLE: 'indigo' }
+  const colors = { TEXT: 'blue', NUMBER: 'green', DATE: 'orange', EMAIL: 'purple', DROPDOWN: 'teal', FILE: 'red', TABLE: 'indigo', CURRENCY: 'green', TEXTAREA: 'blue', CPF: 'purple', CNPJ: 'purple', PHONE: 'blue' }
   return colors[type] || 'grey'
 }
 
@@ -1173,10 +1096,10 @@ function getStepTypeColor(type) {
 
 function getStepTypeText(type) {
   const stepTypes = [
-    { title: 'Entrada de Dados', value: 'INPUT' }, 
-    { title: 'Aprovação', value: 'APPROVAL' }, 
-    { title: 'Upload de Arquivo', value: 'UPLOAD' }, 
-    { title: 'Revisão', value: 'REVIEW' }, 
+    { title: 'Entrada de Dados', value: 'INPUT' },
+    { title: 'Aprovação', value: 'APPROVAL' },
+    { title: 'Upload de Arquivo', value: 'UPLOAD' },
+    { title: 'Revisão', value: 'REVIEW' },
     { title: 'Assinatura', value: 'SIGNATURE' }
   ]
   const step = stepTypes.find(s => s.value === type)
@@ -1197,24 +1120,6 @@ function getResponsibleName(step) {
   return 'Não definido'
 }
 
-function getInputFieldsCount(step) {
-  try {
-    const conditions = typeof step.conditions === 'string'
-      ? JSON.parse(step.conditions)
-      : step.conditions
-    const count = conditions?.fields?.length || 0
-    return count > 0 ? `${count} campo(s) dinâmico(s)` : 'Nenhum campo dinâmico'
-  } catch {
-    return '0 campos dinâmicos'
-  }
-}
-
-function getReuseDataCount(reuseData) {
-  if (!reuseData || !Array.isArray(reuseData)) return 0
-  return reuseData.length
-}
-
-// Funções para sub-processos
 function getProcessTypeName(typeId) {
   const pt = allProcessTypes.value.find(p => p.id === typeId)
   return pt?.name || 'Tipo não encontrado'
@@ -1224,10 +1129,10 @@ function removeAllowedChildType(typeId) {
   const index = formData.value.allowedChildProcessTypes.indexOf(typeId)
   if (index > -1) {
     formData.value.allowedChildProcessTypes.splice(index, 1)
+    saveAllowedChildProcessTypes()
   }
 }
 
-// Funções para criar novo tipo de sub-processo
 function openCreateChildTypeDialog() {
   childTypeData.value = {
     name: '',
@@ -1245,16 +1150,6 @@ function openCreateChildTypeDialog() {
 
 function closeCreateChildTypeDialog() {
   createChildTypeDialog.value = false
-  childTypeData.value = {
-    name: '',
-    description: '',
-    modality: 'MANUAL',
-    recurrenceInterval: 1,
-    recurrenceUnit: 'DAYS',
-    scheduledDate: '',
-    scheduledTime: '',
-    createBasicStep: true
-  }
 }
 
 async function createChildType() {
@@ -1262,7 +1157,6 @@ async function createChildType() {
 
   savingChildType.value = true
   try {
-    // Preparar payload para criar o novo tipo
     const payload = {
       name: childTypeData.value.name,
       description: childTypeData.value.description || '',
@@ -1271,7 +1165,6 @@ async function createChildType() {
       steps: []
     }
 
-    // Se optou por criar etapa básica, adicionar uma etapa de aprovação
     if (childTypeData.value.createBasicStep) {
       payload.steps = [
         {
@@ -1290,34 +1183,27 @@ async function createChildType() {
       ]
     }
 
-    // Criar o novo tipo de processo
     const newType = await processTypeStore.createProcessType(payload)
 
     if (newType && newType.id) {
-      // Adicionar o novo tipo à lista de sub-processos permitidos
       if (!formData.value.allowedChildProcessTypes) {
         formData.value.allowedChildProcessTypes = []
       }
       formData.value.allowedChildProcessTypes.push(newType.id)
 
-      // Se estamos editando um tipo existente, salvar a vinculação imediatamente
       if (isEditing.value && formData.value.id) {
         await processTypeStore.updateProcessType(formData.value.id, {
           allowedChildProcessTypes: formData.value.allowedChildProcessTypes
         })
       }
 
-      // Recarregar a lista de tipos para incluir o novo
       await loadAllProcessTypes()
-
-      window.showSnackbar?.(`Tipo "${newType.name}" criado e vinculado com sucesso!`, 'success')
+      window.showSnackbar?.(`Tipo "${newType.name}" criado!`, 'success')
       closeCreateChildTypeDialog()
-    } else {
-      throw new Error('Falha ao criar tipo de processo')
     }
   } catch (err) {
-    console.error('Erro ao criar tipo de sub-processo:', err)
-    window.showSnackbar?.(err.response?.data?.message || 'Erro ao criar tipo de processo', 'error')
+    console.error('Erro ao criar tipo:', err)
+    window.showSnackbar?.(err.response?.data?.message || 'Erro ao criar tipo', 'error')
   } finally {
     savingChildType.value = false
   }
@@ -1329,13 +1215,13 @@ async function loadAllProcessTypes() {
     await processTypeStore.fetchProcessTypes()
     allProcessTypes.value = processTypeStore.processTypes || []
   } catch (err) {
-    console.error('Erro ao carregar tipos de processo:', err)
+    console.error('Erro ao carregar tipos:', err)
   } finally {
     loadingProcessTypes.value = false
   }
 }
 
-// Field management functions
+// Field management
 function addField() {
   resetFieldData()
   fieldDialog.value = true
@@ -1344,7 +1230,7 @@ function addField() {
 function editField(index) {
   const field = formData.value.formFields[index]
   editingFieldIndex.value = index
-  fieldData.value = { 
+  fieldData.value = {
     ...field,
     tableColumns: field.tableColumns || [],
     minRows: field.minRows || 0,
@@ -1359,15 +1245,15 @@ function removeField(index) {
 
 function resetFieldData() {
   editingFieldIndex.value = null
-  fieldData.value = { 
-    name: '', 
-    label: '', 
-    type: 'TEXT', 
-    placeholder: '', 
-    required: false, 
-    defaultValue: '', 
-    helpText: '', 
-    options: [], 
+  fieldData.value = {
+    name: '',
+    label: '',
+    type: 'TEXT',
+    placeholder: '',
+    required: false,
+    defaultValue: '',
+    helpText: '',
+    options: [],
     validations: {},
     tableColumns: [],
     minRows: 0,
@@ -1380,11 +1266,8 @@ function closeFieldDialog() {
   resetFieldData()
 }
 
-// Dropdown options management
 function addDropdownOption() {
-  if (!fieldData.value.options) {
-    fieldData.value.options = []
-  }
+  if (!fieldData.value.options) fieldData.value.options = []
   fieldData.value.options.push({ label: '', value: '' })
 }
 
@@ -1392,11 +1275,8 @@ function removeDropdownOption(index) {
   fieldData.value.options.splice(index, 1)
 }
 
-// Checkbox options management
 function addCheckboxOption() {
-  if (!fieldData.value.options) {
-    fieldData.value.options = []
-  }
+  if (!fieldData.value.options) fieldData.value.options = []
   fieldData.value.options.push('')
 }
 
@@ -1404,27 +1284,12 @@ function removeCheckboxOption(index) {
   fieldData.value.options.splice(index, 1)
 }
 
-// Tipos de coluna para tabela (apenas 4 tipos: Texto, Número, Dinheiro, Data)
-const tableColumnTypes = [
-  { title: 'Texto', value: 'TEXT' },
-  { title: 'Número', value: 'NUMBER' },
-  { title: 'Dinheiro', value: 'CURRENCY' },
-  { title: 'Data', value: 'DATE' }
-]
-
-// Table columns management (máximo 5 colunas)
 function addTableColumn() {
-  if (!fieldData.value.tableColumns) {
-    fieldData.value.tableColumns = []
-  }
-  
-  // Limitar a 5 colunas
+  if (!fieldData.value.tableColumns) fieldData.value.tableColumns = []
   if (fieldData.value.tableColumns.length >= 5) {
-    window.showSnackbar?.('Máximo de 5 colunas permitidas', 'warning')
+    window.showSnackbar?.('Máximo de 5 colunas', 'warning')
     return
   }
-  
-  // Gerar nome único baseado no índice
   const columnIndex = fieldData.value.tableColumns.length + 1
   fieldData.value.tableColumns.push({
     name: `coluna_${columnIndex}`,
@@ -1441,7 +1306,6 @@ function removeTableColumn(index) {
 function moveTableColumn(index, direction) {
   const newIndex = index + direction
   if (newIndex < 0 || newIndex >= fieldData.value.tableColumns.length) return
-  
   const columns = [...fieldData.value.tableColumns]
   const [removed] = columns.splice(index, 1)
   columns.splice(newIndex, 0, removed)
@@ -1450,72 +1314,46 @@ function moveTableColumn(index, direction) {
 
 function saveField() {
   if (!fieldValid.value) {
-    window.showSnackbar?.('Por favor, corrija os erros no campo', 'error')
+    window.showSnackbar?.('Corrija os erros', 'error')
     return
   }
 
-  // Validar opções para DROPDOWN
   if (fieldData.value.type === 'DROPDOWN') {
-    if (!fieldData.value.options || fieldData.value.options.length === 0) {
-      window.showSnackbar?.('Adicione pelo menos uma opção para a lista suspensa', 'error')
+    if (!fieldData.value.options?.length) {
+      window.showSnackbar?.('Adicione opções', 'error')
       return
     }
-
-    // Validar se todas as opções têm label e value
-    const hasEmptyOptions = fieldData.value.options.some(opt => !opt.label?.trim() || !opt.value?.trim())
-    if (hasEmptyOptions) {
-      window.showSnackbar?.('Todas as opções devem ter texto exibido e valor interno preenchidos', 'error')
+    const hasEmpty = fieldData.value.options.some(opt => !opt.label?.trim() || !opt.value?.trim())
+    if (hasEmpty) {
+      window.showSnackbar?.('Preencha todas as opções', 'error')
       return
     }
   }
 
-  // Validar colunas para TABLE
   if (fieldData.value.type === 'TABLE') {
-    if (!fieldData.value.tableColumns || fieldData.value.tableColumns.length === 0) {
-      window.showSnackbar?.('Adicione pelo menos uma coluna para a tabela', 'error')
+    if (!fieldData.value.tableColumns?.length) {
+      window.showSnackbar?.('Adicione colunas', 'error')
       return
     }
-
-    // Validar se todas as colunas têm label (nome visível)
     const hasEmptyLabels = fieldData.value.tableColumns.some(col => !col.label?.trim())
     if (hasEmptyLabels) {
-      window.showSnackbar?.('Todas as colunas devem ter um nome preenchido', 'error')
+      window.showSnackbar?.('Preencha o nome das colunas', 'error')
       return
     }
-
-    // Gerar names automáticos baseados no label (para uso interno)
     fieldData.value.tableColumns.forEach((col, idx) => {
       if (!col.name || col.name.startsWith('coluna_')) {
-        // Converter label para snake_case
         col.name = col.label.trim()
           .toLowerCase()
           .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+          .replace(/[\u0300-\u036f]/g, '')
           .replace(/[^a-z0-9]+/g, '_')
           .replace(/^_|_$/g, '')
           || `coluna_${idx + 1}`
       }
     })
-
-    // Validar nomes únicos
-    const names = fieldData.value.tableColumns.map(col => col.name.trim().toLowerCase())
-    if (new Set(names).size !== names.length) {
-      // Se houver duplicatas, adicionar sufixo numérico
-      const usedNames = new Set()
-      fieldData.value.tableColumns.forEach(col => {
-        let baseName = col.name
-        let counter = 1
-        while (usedNames.has(col.name)) {
-          col.name = `${baseName}_${counter}`
-          counter++
-        }
-        usedNames.add(col.name)
-      })
-    }
   }
 
   const isEditingField = editingFieldIndex.value !== null
-
   const field = {
     name: fieldData.value.name.trim(),
     label: fieldData.value.label.trim(),
@@ -1532,10 +1370,7 @@ function saveField() {
     minRows: fieldData.value.minRows || 0,
     maxRows: fieldData.value.maxRows || null
   }
-  
-  console.log('💾 Saving field to formData:', field)
-  console.log('💾 tableColumns being saved:', field.tableColumns)
-  
+
   if (isEditingField) {
     formData.value.formFields[editingFieldIndex.value] = field
   } else {
@@ -1546,7 +1381,7 @@ function saveField() {
   closeFieldDialog()
 }
 
-// Step management functions using StepDialog
+// Step management
 function addStep() {
   editingStepIndex.value = null
   editingStepData.value = null
@@ -1566,26 +1401,17 @@ function removeStep(index) {
 
 function handleStepSave(stepData) {
   const isEditingStep = editingStepIndex.value !== null
-  
-  // Ensure step has the required structure for the backend
+
   const processedStep = {
     ...stepData,
     tempId: isEditingStep ? formData.value.steps[editingStepIndex.value].tempId : Date.now() + Math.random(),
     order: isEditingStep ? formData.value.steps[editingStepIndex.value].order : (formData.value.steps.length + 1),
     actions: Array.isArray(stepData.actions) ? [...stepData.actions] : [],
     allowedFileTypes: Array.isArray(stepData.allowedFileTypes) ? [...stepData.allowedFileTypes] : [],
-    flowConditions: Array.isArray(stepData.flowConditions)
-      ? stepData.flowConditions.map(condition => ({ ...condition }))
-      : [],
-    reuseData: Array.isArray(stepData.reuseData)
-      ? stepData.reuseData.map(item => ({ ...item }))
-      : [],
-    signatureRequirements: Array.isArray(stepData.signatureRequirements)
-      ? stepData.signatureRequirements.map(req => ({ ...req }))
-      : [],
-    reviewSettings: stepData.reviewSettings
-      ? { ...stepData.reviewSettings }
-      : null
+    flowConditions: Array.isArray(stepData.flowConditions) ? stepData.flowConditions.map(c => ({ ...c })) : [],
+    reuseData: Array.isArray(stepData.reuseData) ? stepData.reuseData.map(i => ({ ...i })) : [],
+    signatureRequirements: Array.isArray(stepData.signatureRequirements) ? stepData.signatureRequirements.map(r => ({ ...r })) : [],
+    reviewSettings: stepData.reviewSettings ? { ...stepData.reviewSettings } : null
   }
 
   if (isEditingStep) {
@@ -1622,46 +1448,32 @@ async function save() {
         minRows: f.type === 'TABLE' ? (f.minRows || 0) : undefined,
         maxRows: f.type === 'TABLE' ? (f.maxRows || null) : undefined
       })),
-      steps: formData.value.steps.map((s, idx) => {
-        const stepPayload = { ...s }
-        
-        // Ensure all new fields are included in the payload
-        return {
-          ...stepPayload,
-          order: stepPayload.order ?? (idx + 1),
-          slaDays: stepPayload.slaDays || null,
-          assignedToCreator: Boolean(stepPayload.assignedToCreator),
-          assignmentConditions: stepPayload.assignmentConditions || null,
-          actions: Array.isArray(stepPayload.actions) ? [...stepPayload.actions] : [],
-          allowedFileTypes: Array.isArray(stepPayload.allowedFileTypes) ? [...stepPayload.allowedFileTypes] : [],
-          flowConditions: Array.isArray(stepPayload.flowConditions)
-            ? stepPayload.flowConditions.map(condition => ({ ...condition }))
-            : [],
-          reuseData: Array.isArray(stepPayload.reuseData)
-            ? stepPayload.reuseData.map(item => ({ ...item }))
-            : [],
-          signatureRequirements: Array.isArray(stepPayload.signatureRequirements)
-            ? stepPayload.signatureRequirements.map(req => ({ ...req }))
-            : [],
-          reviewSettings: stepPayload.reviewSettings
-            ? { ...stepPayload.reviewSettings }
-            : null
-        }
-      })
+      steps: formData.value.steps.map((s, idx) => ({
+        ...s,
+        order: s.order ?? (idx + 1),
+        slaDays: s.slaDays || null,
+        assignedToCreator: Boolean(s.assignedToCreator),
+        assignmentConditions: s.assignmentConditions || null,
+        actions: Array.isArray(s.actions) ? [...s.actions] : [],
+        allowedFileTypes: Array.isArray(s.allowedFileTypes) ? [...s.allowedFileTypes] : [],
+        flowConditions: Array.isArray(s.flowConditions) ? s.flowConditions.map(c => ({ ...c })) : [],
+        reuseData: Array.isArray(s.reuseData) ? s.reuseData.map(i => ({ ...i })) : [],
+        signatureRequirements: Array.isArray(s.signatureRequirements) ? s.signatureRequirements.map(r => ({ ...r })) : [],
+        reviewSettings: s.reviewSettings ? { ...s.reviewSettings } : null
+      }))
     }
-
 
     if (isEditing.value) {
       await processTypeStore.updateProcessType(formData.value.id, payload)
-      window.showSnackbar?.('Tipo de processo atualizado com sucesso!', 'success')
+      window.showSnackbar?.('Tipo de processo atualizado!', 'success')
     } else {
       if (!payload.companyId) {
-        window.showSnackbar?.('Erro: ID da empresa não encontrado.', 'error')
+        window.showSnackbar?.('Erro: ID da empresa não encontrado', 'error')
         saving.value = false
         return
       }
       await processTypeStore.createProcessType(payload)
-      window.showSnackbar?.('Tipo de processo criado com sucesso!', 'success')
+      window.showSnackbar?.('Tipo de processo criado!', 'success')
     }
     router.push({ name: 'TiposDeProcesso' })
   } catch (e) {
@@ -1676,11 +1488,10 @@ function goBack() {
   router.back()
 }
 
-// Drag and drop functions for fields
+// Drag and drop for fields
 function onFieldDragStart(event, index) {
   draggedFieldIndex.value = index
   event.dataTransfer.effectAllowed = 'move'
-  event.dataTransfer.setData('text/html', event.target)
   event.target.style.opacity = '0.4'
 }
 
@@ -1691,46 +1502,29 @@ function onFieldDragEnd(event) {
 
 function onFieldDragOver(event, index) {
   event.preventDefault()
-  event.dataTransfer.dropEffect = 'move'
   dragOverFieldIndex.value = index
 }
 
-function onFieldDragLeave() {
-  // Opcional: pode remover o highlight
-}
+function onFieldDragLeave() {}
 
 function onFieldDrop(event, dropIndex) {
   event.preventDefault()
   const dragIndex = draggedFieldIndex.value
-
   if (dragIndex !== null && dragIndex !== dropIndex) {
     const fields = [...formData.value.formFields]
-    const draggedItem = fields[dragIndex]
-
-    // Remove o item da posição original
-    fields.splice(dragIndex, 1)
-
-    // Insere na nova posição
+    const [draggedItem] = fields.splice(dragIndex, 1)
     fields.splice(dropIndex, 0, draggedItem)
-
-    // Atualiza as ordens
-    formData.value.formFields = fields.map((field, idx) => ({
-      ...field,
-      order: idx + 1
-    }))
-
-    window.showSnackbar?.('Ordem dos campos atualizada', 'success')
+    formData.value.formFields = fields.map((field, idx) => ({ ...field, order: idx + 1 }))
+    window.showSnackbar?.('Ordem atualizada', 'success')
   }
-
   draggedFieldIndex.value = null
   dragOverFieldIndex.value = null
 }
 
-// Drag and drop functions for steps
+// Drag and drop for steps
 function onStepDragStart(event, index) {
   draggedStepIndex.value = index
   event.dataTransfer.effectAllowed = 'move'
-  event.dataTransfer.setData('text/html', event.target)
   event.target.style.opacity = '0.4'
 }
 
@@ -1741,59 +1535,44 @@ function onStepDragEnd(event) {
 
 function onStepDragOver(event, index) {
   event.preventDefault()
-  event.dataTransfer.dropEffect = 'move'
   dragOverStepIndex.value = index
 }
 
-function onStepDragLeave() {
-  // Opcional: pode remover o highlight
-}
+function onStepDragLeave() {}
 
 function onStepDrop(event, dropIndex) {
   event.preventDefault()
   const dragIndex = draggedStepIndex.value
-
   if (dragIndex !== null && dragIndex !== dropIndex) {
     const steps = [...formData.value.steps]
-    const draggedItem = steps[dragIndex]
-
-    // Remove o item da posição original
-    steps.splice(dragIndex, 1)
-
-    // Insere na nova posição
+    const [draggedItem] = steps.splice(dragIndex, 1)
     steps.splice(dropIndex, 0, draggedItem)
-
-    // Atualiza as ordens
-    formData.value.steps = steps.map((step, idx) => ({
-      ...step,
-      order: idx + 1
-    }))
-
-    window.showSnackbar?.('Ordem das etapas atualizada', 'success')
+    formData.value.steps = steps.map((step, idx) => ({ ...step, order: idx + 1 }))
+    window.showSnackbar?.('Ordem atualizada', 'success')
   }
-
   draggedStepIndex.value = null
   dragOverStepIndex.value = null
 }
 
 onMounted(async () => {
+  console.log('🚀 ProcessTypeEditor onMounted - activeTab:', activeTab.value)
   try {
-    // Ignorar mudanças no watcher durante o carregamento inicial
     ignoreNextAllowedChildProcessTypesChange.value = true
 
+    console.log('📥 Carregando dados iniciais...')
     await Promise.all([
       sectorStore.fetchSectors?.(),
       userStore.fetchUsers?.(),
       loadAllProcessTypes()
     ])
+    console.log('✅ Dados iniciais carregados - activeTab:', activeTab.value)
 
     if (isEditing.value) {
+      console.log('📝 Modo edição - carregando tipo de processo...')
       await processTypeStore.fetchProcessType(route.params.id)
       const current = processTypeStore.currentProcessType
-      console.log('📥 Loaded process type:', current)
-      console.log('📥 FormFields loaded:', current?.formFields)
-      console.log('📥 TABLE fields loaded:', current?.formFields?.filter(f => f.type === 'TABLE'))
       if (current) {
+        const childTypes = Array.isArray(current.allowedChildProcessTypes) ? [...current.allowedChildProcessTypes] : []
         formData.value = {
           id: current.id,
           name: current.name || '',
@@ -1803,109 +1582,853 @@ onMounted(async () => {
           allowSubTasks: current.allowSubTasks ?? true,
           steps: Array.isArray(current.steps) ? [...current.steps] : [],
           formFields: Array.isArray(current.formFields) ? [...current.formFields] : [],
-          allowedChildProcessTypes: Array.isArray(current.allowedChildProcessTypes) ? [...current.allowedChildProcessTypes] : []
+          allowedChildProcessTypes: childTypes
         }
+        // Inicializa o valor salvo para evitar saves desnecessários
+        lastSavedChildProcessTypes.value = childTypes.sort().join(',')
+        console.log('✅ FormData carregado - activeTab:', activeTab.value)
       }
     }
-
-    // Aguardar próximo tick para garantir que o watcher processou a mudança inicial
-    setTimeout(() => {
-      ignoreNextAllowedChildProcessTypesChange.value = false
-    }, 100)
   } catch (e) {
-    console.error(e)
+    console.error('❌ Erro no onMounted:', e)
     window.showSnackbar?.('Erro ao carregar dados', 'error')
   }
+  console.log('🏁 onMounted finalizado - activeTab:', activeTab.value)
 })
 </script>
 
 <style scoped>
-.draggable-field,
-.draggable-step {
-  transition: all 0.3s ease;
-  cursor: move;
+.process-type-editor {
+  min-height: 100vh;
+  background: var(--color-neutral-50);
 }
 
-.draggable-field:hover,
-.draggable-step:hover {
-  background-color: rgba(0, 0, 0, 0.02);
+/* Page Header */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 32px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
-.dragging-over {
-  border-top: 3px solid #1976d2 !important;
-  background-color: rgba(25, 118, 210, 0.08) !important;
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
-.drag-handle {
-  cursor: grab !important;
+.back-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
 }
 
-.drag-handle:active {
-  cursor: grabbing !important;
+.header-text {
+  display: flex;
+  flex-direction: column;
 }
 
-/* Animação de arrastar */
-.draggable-field[draggable="true"],
-.draggable-step[draggable="true"] {
-  cursor: grab;
+.page-title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: white !important;
+  margin: 0;
+  letter-spacing: -0.01em;
 }
 
-.draggable-field[draggable="true"]:active,
-.draggable-step[draggable="true"]:active {
-  cursor: grabbing;
+.page-subtitle {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
+  margin-top: 2px;
 }
 
-/* Estilos para o modal de criar tipo de sub-processo */
-.create-child-type-dialog {
-  border-radius: 16px !important;
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.cancel-btn {
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  text-transform: none;
+}
+
+.save-btn {
+  text-transform: none;
+  color: var(--color-primary-600) !important;
+}
+
+/* Editor Content */
+.editor-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Tabs Container */
+.tabs-container {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 12px;
+  padding: 8px;
+  margin-bottom: 24px;
+}
+
+.tabs-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-neutral-600);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-800);
+}
+
+.tab-btn--active {
+  background: var(--color-primary-50);
+  color: var(--color-primary-600);
+}
+
+.tab-label {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .tab-label {
+    display: inline;
+  }
+}
+
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--color-neutral-200);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.tab-btn--active .tab-count {
+  background: var(--color-primary-200);
+  color: var(--color-primary-700);
+}
+
+/* Panel Card */
+.panel-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
   overflow: hidden;
 }
 
-.create-child-type-header {
-  background: linear-gradient(135deg, #1976d2, #1565c0);
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: var(--color-neutral-50);
+  border-bottom: 1px solid var(--color-surface-border);
+}
+
+.panel-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.panel-icon--primary { background: var(--color-primary-100); color: var(--color-primary-600); }
+.panel-icon--info { background: var(--color-info-100); color: var(--color-info-600); }
+.panel-icon--warning { background: var(--color-warning-100); color: var(--color-warning-600); }
+.panel-icon--success { background: var(--color-success-100); color: var(--color-success-600); }
+
+.panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+  margin: 0;
+}
+
+.panel-subtitle {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-500);
+  margin: 0;
+}
+
+.panel-body {
+  padding: 24px;
+}
+
+/* Form Grid */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.form-group--full {
+  grid-column: 1 / -1;
+}
+
+.form-group--switch {
+  display: flex;
+  align-items: center;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+  margin-bottom: 8px;
+}
+
+.form-input :deep(.v-field) {
+  border-radius: 10px;
+}
+
+/* Config Section */
+.config-section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-surface-border);
+}
+
+.config-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.config-card {
+  padding: 16px;
+  background: var(--color-neutral-50);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.config-card--active {
+  background: var(--color-primary-50);
+  border-color: var(--color-primary-200);
+}
+
+.config-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.config-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--color-neutral-200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-neutral-600);
+}
+
+.config-card--active .config-card-icon {
+  background: var(--color-primary-200);
+  color: var(--color-primary-700);
+}
+
+.config-card-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+  margin: 0 0 4px 0;
+}
+
+.config-card-desc {
+  font-size: 0.75rem;
+  color: var(--color-neutral-500);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Empty Panel */
+.empty-panel {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.empty-panel--small {
+  padding: 32px 24px;
+}
+
+.empty-panel-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--color-neutral-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  color: var(--color-neutral-400);
+}
+
+.empty-panel-icon--warning {
+  background: var(--color-warning-100);
+  color: var(--color-warning-600);
+}
+
+.empty-panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+  margin: 0 0 4px;
+}
+
+.empty-panel-text {
+  font-size: 0.875rem;
+  color: var(--color-neutral-500);
+  margin: 0 0 20px;
+}
+
+/* Items List */
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--color-neutral-50);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 10px;
+  cursor: grab;
+  transition: all 0.2s ease;
+}
+
+.item-row:hover {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.item-row--dragging {
+  border-color: var(--color-primary-400);
+  background: var(--color-primary-50);
+}
+
+.item-drag {
+  cursor: grab;
+}
+
+.item-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.item-icon--blue { background: var(--color-info-100); color: var(--color-info-600); }
+.item-icon--green { background: var(--color-success-100); color: var(--color-success-600); }
+.item-icon--orange { background: var(--color-warning-100); color: var(--color-warning-600); }
+.item-icon--purple { background: #f3e8ff; color: #7c3aed; }
+.item-icon--teal { background: #f0fdfa; color: #0d9488; }
+.item-icon--red { background: var(--color-error-100); color: var(--color-error-600); }
+.item-icon--indigo { background: #eff6ff; color: #2563eb; }
+.item-icon--grey { background: var(--color-neutral-200); color: var(--color-neutral-600); }
+
+.item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.item-name {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-neutral-800);
+}
+
+.item-badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.item-badge--error {
+  background: var(--color-error-100);
+  color: var(--color-error-700);
+}
+
+.item-meta {
+  display: flex;
+  gap: 12px;
+}
+
+.meta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--color-neutral-500);
+}
+
+.item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* Steps Flow */
+.steps-flow {
+  display: flex;
+  flex-direction: column;
+}
+
+.step-item {
   position: relative;
 }
 
-.create-child-type-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+.step-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  color: var(--color-neutral-400);
 }
 
-.create-child-type-header .icon-container {
-  width: 100px;
-  height: 100px;
+.connector-line {
+  width: 2px;
+  height: 16px;
+  background: var(--color-neutral-300);
+}
+
+.step-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.step-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.step-item--dragging .step-card {
+  border-color: var(--color-primary-400);
+  background: var(--color-primary-50);
+}
+
+.step-drag {
+  cursor: grab;
+  padding-top: 4px;
+}
+
+.step-number {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+
+.step-number--blue { background: var(--color-info-500); }
+.step-number--orange { background: var(--color-warning-500); }
+.step-number--purple { background: #7c3aed; }
+.step-number--teal { background: #0d9488; }
+.step-number--red { background: var(--color-error-500); }
+.step-number--grey { background: var(--color-neutral-500); }
+
+.step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.step-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+}
+
+.step-type-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge--blue { background: var(--color-info-100); color: var(--color-info-700); }
+.badge--orange { background: var(--color-warning-100); color: var(--color-warning-700); }
+.badge--purple { background: #f3e8ff; color: #7c3aed; }
+.badge--teal { background: #f0fdfa; color: #0d9488; }
+.badge--red { background: var(--color-error-100); color: var(--color-error-700); }
+.badge--secondary { background: var(--color-secondary-100); color: var(--color-secondary-700); }
+
+.step-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.detail-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8125rem;
+  color: var(--color-neutral-600);
+}
+
+.step-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.feature-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 3px 8px;
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-600);
+  border-radius: 4px;
+}
+
+.feature-chip--error {
+  background: var(--color-error-50);
+  color: var(--color-error-600);
+}
+
+.step-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* Subprocess Selector */
+.subprocess-selector {
+  margin-bottom: 24px;
+}
+
+.selected-types {
+  margin-top: 24px;
+}
+
+.selected-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+  margin: 0 0 12px 0;
+  display: flex;
+  align-items: center;
+}
+
+.selected-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.selected-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--color-success-50);
+  border-radius: 10px;
+}
+
+.selected-name {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--color-neutral-800);
+}
+
+/* Dialog Styles */
+.dialog-card {
+  border-radius: 16px !important;
+  overflow: hidden;
+  border: none !important;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2) !important;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  color: white !important;
+}
+
+.dialog-header--secondary {
+  background: linear-gradient(135deg, var(--color-secondary-500), var(--color-secondary-600));
+}
+
+.dialog-header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.create-child-type-header .text-white-50 {
-  color: rgba(255, 255, 255, 0.7) !important;
+.dialog-header-text {
+  flex: 1;
+  color: white !important;
 }
 
-/* Estilos para o toggle de modalidade */
+.dialog-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+  color: white !important;
+}
+
+.dialog-subtitle {
+  font-size: 0.8125rem;
+  opacity: 0.85;
+  margin: 0;
+  color: white !important;
+}
+
+.dialog-close {
+  color: white !important;
+}
+
+.dialog-content {
+  padding: 24px !important;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  background: var(--color-neutral-50);
+  border-top: 1px solid var(--color-surface-border);
+}
+
+.dialog-actions :deep(.v-btn) {
+  text-transform: none;
+}
+
+/* Options */
+.options-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.option-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.option-row--single {
+  grid-template-columns: 1fr auto;
+}
+
+/* Table Columns */
+.table-columns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.table-column-item {
+  padding: 12px;
+  background: var(--color-neutral-50);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 10px;
+}
+
+.column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.column-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-primary-500);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.column-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.column-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.table-limits {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* Config Box */
+.config-box {
+  padding: 16px;
+  background: var(--color-neutral-50);
+  border-radius: 10px;
+}
+
+.inline-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* Modality Toggle */
 .modality-toggle {
-  border-radius: 8px !important;
-  overflow: hidden;
+  width: 100%;
+  border-radius: 10px !important;
 }
 
 .modality-toggle .v-btn {
+  flex: 1;
   text-transform: none !important;
-  font-weight: 500 !important;
-  letter-spacing: normal !important;
 }
 
-/* Estilo para cards de coluna da tabela */
-.column-card {
-  background: #f8f9fa !important;
-  border: 1px solid #e5e7eb !important;
-  border-radius: 12px !important;
+/* Responsive */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px 20px;
+  }
+
+  .header-left {
+    width: 100%;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .header-actions .v-btn {
+    flex: 1;
+  }
+
+  .editor-content {
+    padding: 16px;
+  }
+
+  .tabs-nav {
+    overflow-x: auto;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .panel-header .v-btn {
+    width: 100%;
+  }
 }
 </style>

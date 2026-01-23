@@ -1,11 +1,16 @@
 <template>
-  <div>
-    <!-- Header -->
-    <div class="mb-6">
-      <h1 class="text-h4 font-weight-bold">Meu Perfil</h1>
-      <p class="text-subtitle-1 text-medium-emphasis">
-        Gerencie suas informações pessoais e configurações
-      </p>
+  <div class="profile-page">
+    <!-- Modern Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <div class="header-icon">
+          <v-icon size="28" color="white">mdi-account-cog</v-icon>
+        </div>
+        <div class="header-text">
+          <h1 class="page-title">Meu Perfil</h1>
+          <p class="page-subtitle">Gerencie suas informações e preferências</p>
+        </div>
+      </div>
     </div>
 
     <v-row>
@@ -391,28 +396,28 @@ const profileChanged = computed(() => {
 
 // Regras de validação
 const nameRules = [
-  v => !!v || 'Nome é obrigatório',
-  v => v.length >= 3 || 'Nome deve ter no mínimo 3 caracteres'
+  v => !!v || 'O nome é obrigatório',
+  v => v.length >= 3 || 'O nome deve ter no mínimo 3 caracteres'
 ]
 
 const emailRules = [
-  v => !!v || 'E-mail é obrigatório',
-  v => /.+@.+\..+/.test(v) || 'E-mail deve ser válido'
+  v => !!v || 'O e-mail é obrigatório',
+  v => /.+@.+\..+/.test(v) || 'O e-mail deve ser válido'
 ]
 
 const currentPasswordRules = [
-  v => !!v || 'Senha atual é obrigatória'
+  v => !!v || 'A senha atual é obrigatória'
 ]
 
 const newPasswordRules = [
-  v => !!v || 'Nova senha é obrigatória',
-  v => v.length >= 6 || 'Nova senha deve ter no mínimo 6 caracteres',
-  v => /(?=.*[a-zA-Z])(?=.*\d)/.test(v) || 'Nova senha deve conter pelo menos uma letra e um número'
+  v => !!v || 'A nova senha é obrigatória',
+  v => v.length >= 6 || 'A nova senha deve ter no mínimo 6 caracteres',
+  v => /(?=.*[a-zA-Z])(?=.*\d)/.test(v) || 'A nova senha deve conter pelo menos uma letra e um número'
 ]
 
 const confirmPasswordRules = [
-  v => !!v || 'Confirmação é obrigatória',
-  v => v === passwordData.value.newPassword || 'Senhas não coincidem'
+  v => !!v || 'A confirmação é obrigatória',
+  v => v === passwordData.value.newPassword || 'As senhas não coincidem'
 ]
 
 // Watch para atualizar dados quando usuário mudar
@@ -572,7 +577,82 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.profile-page {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Modern Page Header with Gradient */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white !important;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
+}
+
 .bg-primary-lighten-5 {
   background-color: rgba(var(--v-theme-primary), 0.05);
+}
+
+/* Modern Cards */
+.v-card {
+  border-radius: 16px !important;
+  border: 1px solid var(--color-surface-border);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
 }
 </style>

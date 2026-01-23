@@ -137,6 +137,35 @@
           </v-card-text>
         </v-card>
 
+        <!-- Card de Cancelamento (se o processo foi cancelado) -->
+        <v-card v-if="cancellationInfo" class="mb-4 cancellation-card">
+          <v-card-title class="d-flex align-center text-error">
+            <v-icon class="mr-2" color="error">mdi-cancel</v-icon>
+            Processo Cancelado
+          </v-card-title>
+          <v-divider />
+          <v-card-text>
+            <div v-if="cancellationInfo.reason" class="cancellation-reason mb-3">
+              <p class="text-caption text-medium-emphasis mb-1">Motivo do Cancelamento</p>
+              <p class="text-body-2">{{ cancellationInfo.reason }}</p>
+            </div>
+            <div class="cancellation-details">
+              <div class="d-flex align-center mb-2">
+                <v-icon size="18" class="mr-2" color="grey">mdi-account</v-icon>
+                <span class="text-body-2">
+                  <strong>Cancelado por:</strong> {{ cancellationInfo.byUserName || cancellationInfo.byUserEmail || 'Usuário' }}
+                </span>
+              </div>
+              <div class="d-flex align-center">
+                <v-icon size="18" class="mr-2" color="grey">mdi-calendar</v-icon>
+                <span class="text-body-2">
+                  <strong>Data:</strong> {{ formatDate(cancellationInfo.at) }}
+                </span>
+              </div>
+            </div>
+          </v-card-text>
+        </v-card>
+
         <!-- Card de Processo Pai (se for sub-processo) -->
         <v-card v-if="parentProcessInfo" class="mb-4">
           <v-card-title class="d-flex align-center">
@@ -481,32 +510,22 @@
     />
 
     <!-- Botão Flutuante para Abrir Documentos -->
-    <v-btn
+    <button
       v-if="totalDocuments > 0"
       class="documents-fab"
-      color="primary"
-      size="x-large"
-      icon
-      elevation="8"
       @click="documentsDrawer = true"
+      title="Ver documentos"
     >
-      <v-badge
-        :content="totalDocuments"
-        color="error"
-        overlap
-        offset-x="-2"
-        offset-y="-2"
-      >
-        <v-icon size="28">mdi-file-document-multiple</v-icon>
-      </v-badge>
-    </v-btn>
+      <v-icon size="22">mdi-folder-open-outline</v-icon>
+      <span class="fab-count">{{ totalDocuments }}</span>
+    </button>
 
     <!-- Drawer Lateral de Documentos -->
     <v-navigation-drawer
       v-model="documentsDrawer"
       location="right"
       temporary
-      width="520"
+      width="400"
       class="documents-drawer"
     >
       <DocumentViewer v-if="process" :process="process" :drawer="true" @refresh="refreshProcess" />
@@ -541,9 +560,14 @@
     />
   </div>
 
-  <div v-else-if="loading" class="text-center py-12">
-    <v-progress-circular indeterminate color="primary" size="64" />
-    <p class="text-body-2 text-grey mt-4">Carregando processo...</p>
+  <div v-else-if="loading" class="loading-container" aria-label="Carregando detalhes do processo">
+    <div class="loading-grid">
+      <v-skeleton-loader type="card" class="skeleton-header" />
+      <div class="loading-columns">
+        <v-skeleton-loader type="article, list-item@4" class="skeleton-sidebar" />
+        <v-skeleton-loader type="card@3" class="skeleton-main" />
+      </div>
+    </div>
   </div>
 
   <div v-else class="text-center py-12">
@@ -689,6 +713,16 @@ const canCancelProcess = computed(() => {
   return process.value.status !== 'COMPLETED' &&
          process.value.status !== 'CANCELLED' &&
          process.value.status !== 'REJECTED'
+})
+
+// Computed para obter informações de cancelamento
+const cancellationInfo = computed(() => {
+  if (!process.value || process.value.status !== 'CANCELLED') return null
+  const metadata = process.value.metadata
+  if (metadata && typeof metadata === 'object' && metadata.cancellation) {
+    return metadata.cancellation
+  }
+  return null
 })
 
 const formattedFormData = computed(() => {
@@ -1382,6 +1416,23 @@ onMounted(async () => {
   gap: 8px;
 }
 
+/* Card de Cancelamento */
+.cancellation-card {
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  background: linear-gradient(135deg, rgba(244, 67, 54, 0.04) 0%, rgba(244, 67, 54, 0.02) 100%);
+}
+
+.cancellation-reason {
+  padding: 12px 16px;
+  background: rgba(244, 67, 54, 0.08);
+  border-radius: 8px;
+  border-left: 3px solid #f44336;
+}
+
+.cancellation-details {
+  padding-top: 8px;
+}
+
 .max-width{
   max-width: 610px;
 }
@@ -1734,38 +1785,103 @@ onMounted(async () => {
   background: rgba(25, 118, 210, 0.5);
 }
 
-/* Botão Flutuante de Documentos */
+/* Botão Flutuante de Documentos - Design Clean */
 .documents-fab {
   position: fixed !important;
-  bottom: 32px;
-  right: 32px;
+  bottom: 24px;
+  right: 24px;
   z-index: 999;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--color-neutral-800, #1e293b);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
 }
 
 .documents-fab:hover {
-  transform: scale(1.1) translateY(-4px);
-  box-shadow: 0 12px 32px rgba(25, 118, 210, 0.4) !important;
+  background: var(--color-neutral-900, #0f172a);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .documents-fab:active {
-  transform: scale(0.95);
+  transform: translateY(0);
+}
+
+.fab-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--color-primary-500, #3b82f6);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 /* Drawer de Documentos */
 .documents-drawer {
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.15) !important;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08) !important;
+  border-left: 1px solid var(--color-neutral-200, #e2e8f0) !important;
 }
 
 @media (max-width: 768px) {
   .documents-fab {
-    bottom: 24px;
-    right: 24px;
+    bottom: 16px;
+    right: 16px;
+    padding: 8px 14px;
   }
 
   .documents-drawer {
     width: 100% !important;
     max-width: 100vw !important;
+  }
+}
+
+/* Loading State - Skeleton */
+.loading-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.loading-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.skeleton-header {
+  border-radius: 16px;
+  height: 120px;
+}
+
+.loading-columns {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 24px;
+}
+
+.skeleton-sidebar {
+  border-radius: 16px;
+}
+
+.skeleton-main {
+  border-radius: 16px;
+}
+
+@media (max-width: 960px) {
+  .loading-columns {
+    grid-template-columns: 1fr;
   }
 }
 </style>

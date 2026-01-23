@@ -1,279 +1,159 @@
 <template>
   <div :class="drawer ? 'drawer-viewer' : 'card-viewer'">
-    <!-- Modo Drawer -->
-    <div v-if="drawer" class="drawer-content">
-      <!-- Header do Drawer -->
-      <div class="drawer-header">
-        <div class="d-flex align-center mb-4">
-          <v-icon color="primary" size="32" class="mr-3">mdi-file-document-multiple</v-icon>
-          <div class="flex-grow-1">
-            <h2 class="text-h5 font-weight-bold">Documentos</h2>
-            <p class="text-body-2 text-medium-emphasis">
-              {{ totalDocuments }} documento(s) • {{ signedDocuments }} assinado(s)
-            </p>
+    <!-- Modo Drawer - Design Profissional Clean -->
+    <div v-if="drawer" class="docs-drawer">
+      <!-- Header Compacto -->
+      <header class="docs-header">
+        <div class="docs-header-top">
+          <div class="docs-title-group">
+            <div class="docs-icon">
+              <v-icon size="20">mdi-folder-open</v-icon>
+            </div>
+            <div>
+              <h2 class="docs-title">Documentos</h2>
+              <p class="docs-subtitle">{{ totalDocuments }} arquivo{{ totalDocuments !== 1 ? 's' : '' }}</p>
+            </div>
           </div>
-
-          <v-btn
-            icon
-            variant="text"
-            :loading="refreshing"
+          <button
+            class="docs-refresh-btn"
+            :class="{ 'refreshing': refreshing }"
             @click="refreshDocuments"
-            class="ml-2"
+            title="Atualizar"
           >
-            <v-icon>mdi-refresh</v-icon>
-            <v-tooltip activator="parent" location="bottom">
-              Atualizar documentos
-            </v-tooltip>
-          </v-btn>
+            <v-icon size="18">mdi-refresh</v-icon>
+          </button>
         </div>
 
-        <!-- Busca -->
-        <v-text-field
-          v-model="searchQuery"
-          density="comfortable"
-          hide-details
-          placeholder="Buscar documentos..."
-          prepend-inner-icon="mdi-magnify"
-          variant="outlined"
-          clearable
-          class="mb-4"
-        />
+        <!-- Busca Minimalista -->
+        <div class="docs-search">
+          <v-icon size="18" class="search-icon">mdi-magnify</v-icon>
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Buscar..."
+            class="search-input"
+          />
+          <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">
+            <v-icon size="16">mdi-close</v-icon>
+          </button>
+        </div>
 
         <!-- Filtros Compactos -->
-        <v-chip-group v-model="selectedFilter" mandatory class="mb-4">
-          <v-chip value="all" size="small" variant="tonal">
-            Todos ({{ totalDocuments }})
-          </v-chip>
-          <v-chip value="signed" size="small" variant="tonal" color="success">
-            Assinados ({{ signedDocuments }})
-          </v-chip>
-          <v-chip value="pdf" size="small" variant="tonal" color="error">
-            PDFs ({{ pdfDocuments }})
-          </v-chip>
-        </v-chip-group>
+        <div class="docs-filters">
+          <button
+            v-for="filter in filters"
+            :key="filter.value"
+            class="filter-btn"
+            :class="{ 'active': selectedFilter === filter.value }"
+            @click="selectedFilter = filter.value"
+          >
+            <span class="filter-label">{{ filter.label }}</span>
+            <span class="filter-count">{{ filter.count }}</span>
+          </button>
+        </div>
+      </header>
 
-        <v-divider class="mb-4" />
-      </div>
-
-      <!-- Lista de Documentos (sempre em list mode no drawer) -->
-      <div class="drawer-documents">
-        <div v-if="filteredDocuments.length === 0" class="empty-state-drawer">
-          <v-icon size="64" color="grey-lighten-2">mdi-file-document-outline</v-icon>
-          <p class="text-body-1 mt-3 text-grey">Nenhum documento encontrado</p>
+      <!-- Lista de Documentos -->
+      <div class="docs-list">
+        <!-- Empty State -->
+        <div v-if="filteredDocuments.length === 0" class="docs-empty">
+          <div class="empty-icon">
+            <v-icon size="32">mdi-file-search-outline</v-icon>
+          </div>
+          <p class="empty-text">Nenhum documento encontrado</p>
+          <p class="empty-hint" v-if="searchQuery">Tente ajustar sua busca</p>
         </div>
 
-        <v-list v-else class="documents-list-drawer">
-          <v-card
-            v-for="doc in filteredDocuments"
-            :key="doc.id"
-            class="document-item-drawer-card mb-3"
-            elevation="0"
-          >
-            <div class="d-flex align-start pa-3">
-              <v-avatar :color="getFileColor(doc.mimeType)" size="48" class="mr-3 flex-shrink-0">
-                <v-icon color="white" size="28">{{ getFileIcon(doc.mimeType) }}</v-icon>
-              </v-avatar>
+        <!-- Document Items -->
+        <div
+          v-for="doc in filteredDocuments"
+          :key="doc.id"
+          class="doc-item"
+          :class="{
+            'doc-signed': doc.isSigned,
+            'doc-needs-action': doc.canSign
+          }"
+        >
+          <!-- Status Indicator -->
+          <div class="doc-status-bar" :class="getStatusClass(doc)"></div>
 
-              <div class="flex-grow-1" style="min-width: 0;">
-                <!-- DESTAQUE: Nome da Etapa com tipo -->
-                <div class="mb-3">
-                  <div class="d-flex align-center gap-2 mb-1">
-                    <v-icon :color="getStepColor(doc.stepType)" size="20">
-                      {{ getStepIcon(doc.stepType) }}
-                    </v-icon>
-                    <span class="text-caption text-grey text-uppercase">
-                      {{ getStepTypeText(doc.stepType) }}
-                    </span>
-                  </div>
-                  <div class="text-subtitle-1 font-weight-bold" :style="{ color: `rgb(var(--v-theme-${getStepColor(doc.stepType)}))` }">
-                    {{ doc.stepName }}
-                  </div>
-                  <!-- ✅ Mostrar nome do campo quando for arquivo do formulário -->
-                  <div v-if="doc.isFormField && doc.formFieldName" class="text-caption text-medium-emphasis mt-1">
-                    <v-icon size="14" class="mr-1">mdi-form-textbox</v-icon>
-                    Campo: {{ doc.formFieldName }}
-                  </div>
+          <div class="doc-content">
+            <!-- Main Row -->
+            <div class="doc-main">
+              <!-- File Icon -->
+              <div class="doc-icon" :class="`icon-${getFileTypeClass(doc.mimeType)}`">
+                <v-icon size="20">{{ getFileIcon(doc.mimeType) }}</v-icon>
+              </div>
+
+              <!-- Info -->
+              <div class="doc-info">
+                <span class="doc-name" :title="doc.originalName">{{ doc.originalName }}</span>
+                <div class="doc-meta">
+                  <span class="doc-step">{{ doc.stepName }}</span>
+                  <span class="doc-separator">•</span>
+                  <span class="doc-size">{{ formatFileSize(doc.size) }}</span>
                 </div>
+              </div>
 
-                <!-- Nome do PDF -->
-                <div class="text-body-2 font-weight-medium mb-3 document-filename">
-                  <v-icon size="18" :color="getFileColor(doc.mimeType)" class="mr-1">
-                    {{ getFileIcon(doc.mimeType) }}
-                  </v-icon>
-                  {{ doc.originalName }}
-                </div>
-
-                <!-- Detalhes -->
-                <div class="d-flex align-center gap-2 flex-wrap mb-2">
-                  <span class="text-caption text-grey ml-2">{{ formatFileSize(doc.size) }}</span>
-                </div>
-
-                <!-- Status de Assinatura - Design Profissional -->
-                <div v-if="doc.canSign || doc.waitingForSigner || (doc.pendingSigners && doc.pendingSigners.length > 0)" class="signature-status-section mt-3">
-                  <v-divider class="mb-3" />
-
-                  <!-- Ação Principal: Assinar (se pode assinar AGORA) -->
-                  <div v-if="doc.canSign" class="signature-action-primary mb-3">
-                    <v-alert
-                      type="warning"
-                      variant="tonal"
-                      border="start"
-                      density="compact"
-                      class="signature-alert"
-                    >
-                      <div class="d-flex align-center justify-space-between">
-                        <div class="d-flex align-center">
-                          <v-icon size="20" class="mr-2">mdi-draw-pen</v-icon>
-                          <div>
-                            <div class="text-body-2 font-weight-bold">Sua assinatura é necessária</div>
-                            <div class="text-caption">Clique no botão ao lado para assinar este documento</div>
-                          </div>
-                        </div>
-                        <v-btn
-                          color="warning"
-                          variant="elevated"
-                          size="default"
-                          @click.stop="openSignDialog(doc)"
-                          class="sign-button-primary ml-3"
-                        >
-                          <v-icon start size="20">mdi-pen</v-icon>
-                          Assinar Agora
-                        </v-btn>
-                      </div>
-                    </v-alert>
-                  </div>
-
-                  <!-- Aguardando outro assinante (assinatura sequencial - não é sua vez) -->
-                  <div v-else-if="doc.waitingForSigner" class="signature-waiting-info mb-3">
-                    <v-alert
-                      type="info"
-                      variant="tonal"
-                      border="start"
-                      density="compact"
-                      class="signature-alert"
-                    >
-                      <div class="d-flex align-center">
-                        <v-icon size="20" class="mr-2">mdi-timer-sand</v-icon>
-                        <div>
-                          <div class="text-body-2 font-weight-bold">Aguardando assinatura anterior</div>
-                          <div class="text-caption">
-                            <v-icon size="14" class="mr-1">mdi-account-clock</v-icon>
-                            {{ doc.waitingForSigner }} precisa assinar primeiro
-                          </div>
-                        </div>
-                      </div>
-                    </v-alert>
-                  </div>
-
-                  <!-- Outros Pendentes -->
-                  <div v-if="doc.pendingSigners && doc.pendingSigners.length > 0" class="signature-pending-info">
-                    <div class="d-flex align-center justify-space-between mb-2">
-                      <div class="d-flex align-center">
-                        <v-icon size="16" color="grey-darken-1" class="mr-1">mdi-account-clock</v-icon>
-                        <span class="text-caption font-weight-medium text-grey-darken-1">
-                          Aguardando mais {{ doc.pendingSigners.length }} assinatura(s)
-                        </span>
-                      </div>
-                      <v-chip
-                        size="x-small"
-                        variant="tonal"
-                        color="grey"
-                        prepend-icon="mdi-clock-outline"
-                      >
-                        Pendente
-                      </v-chip>
-                    </div>
-
-                    <!-- Lista de pendentes colapsável -->
-                    <v-expansion-panels variant="accordion" class="pending-list-panel">
-                      <v-expansion-panel elevation="0" class="pending-panel">
-                        <v-expansion-panel-title
-                          class="pa-2 text-caption"
-                          expand-icon="mdi-chevron-down"
-                          collapse-icon="mdi-chevron-up"
-                        >
-                          <v-icon size="14" class="mr-1">mdi-account-multiple</v-icon>
-                          Ver quem ainda precisa assinar
-                        </v-expansion-panel-title>
-                        <v-expansion-panel-text class="pa-2 pt-0">
-                          <v-list density="compact" class="pending-signers-list">
-                            <v-list-item
-                              v-for="signer in doc.pendingSigners"
-                              :key="signer.id"
-                              class="px-2"
-                              density="compact"
-                            >
-                              <template v-slot:prepend>
-                                <v-avatar size="24" :color="getAvatarColor(signer.name)">
-                                  <span class="text-caption font-weight-bold text-white">
-                                    {{ getSignerInitials(signer.name) }}
-                                  </span>
-                                </v-avatar>
-                              </template>
-                              <v-list-item-title class="text-caption">
-                                {{ signer.name }}
-                              </v-list-item-title>
-                              <v-list-item-subtitle class="text-caption">
-                                {{ signer.email }}
-                              </v-list-item-subtitle>
-                            </v-list-item>
-                          </v-list>
-                        </v-expansion-panel-text>
-                      </v-expansion-panel>
-                    </v-expansion-panels>
-                  </div>
-                </div>
-
-                <!-- Status: Completamente Assinado -->
-                <div v-else-if="doc.isSigned" class="signature-status-completed mt-3">
-                  <v-divider class="mb-3" />
-                  <v-alert
-                    type="success"
-                    variant="tonal"
-                    border="start"
-                    density="compact"
-                  >
-                    <div class="d-flex align-center">
-                      <v-icon size="20" class="mr-2">mdi-check-decagram</v-icon>
-                      <div>
-                        <div class="text-body-2 font-weight-bold">Documento assinado</div>
-                        <div class="text-caption">
-                          {{ doc.signatureCount }} assinatura(s) completa(s)
-                        </div>
-                      </div>
-                    </div>
-                  </v-alert>
-                </div>
+              <!-- Quick Actions (visible on hover) -->
+              <div class="doc-actions">
+                <button class="action-btn" @click.stop="downloadDocument(doc)" title="Baixar">
+                  <v-icon size="18">mdi-download-outline</v-icon>
+                </button>
+                <button class="action-btn action-primary" @click.stop="openDocument(doc)" title="Visualizar">
+                  <v-icon size="18">mdi-eye-outline</v-icon>
+                </button>
               </div>
             </div>
 
-            <!-- Botões de ação -->
-            <v-divider />
-            <div class="d-flex justify-end gap-2 pa-2">
-              <v-btn
-                size="small"
-                variant="text"
-                @click.stop="downloadDocument(doc)"
-              >
-                <v-icon start size="18">mdi-download</v-icon>
-                Baixar
-              </v-btn>
-              <v-btn
-                size="small"
-                variant="tonal"
-                color="primary"
-                @click.stop="openDocument(doc)"
-              >
-                <v-icon start size="18">mdi-eye</v-icon>
-                Visualizar
-              </v-btn>
+            <!-- Signature Status (if applicable) -->
+            <div v-if="doc.isSigned || doc.canSign || doc.waitingForSigner || (doc.pendingSigners && doc.pendingSigners.length > 0)" class="doc-signature">
+              <!-- Assinado -->
+              <div v-if="doc.isSigned && !doc.canSign && !doc.pendingSigners?.length" class="sig-status sig-complete">
+                <v-icon size="14">mdi-check-circle</v-icon>
+                <span>{{ doc.signatureCount }} assinatura{{ doc.signatureCount !== 1 ? 's' : '' }}</span>
+              </div>
+
+              <!-- Precisa assinar -->
+              <div v-else-if="doc.canSign" class="sig-status sig-action">
+                <div class="sig-action-content">
+                  <v-icon size="14">mdi-pen</v-icon>
+                  <span>Sua assinatura necessária</span>
+                </div>
+                <button class="sig-btn" @click.stop="openSignDialog(doc)">
+                  Assinar
+                </button>
+              </div>
+
+              <!-- Aguardando outro -->
+              <div v-else-if="doc.waitingForSigner" class="sig-status sig-waiting">
+                <v-icon size="14">mdi-clock-outline</v-icon>
+                <span>Aguardando {{ doc.waitingForSigner }}</span>
+              </div>
+
+              <!-- Pendentes -->
+              <div v-else-if="doc.pendingSigners && doc.pendingSigners.length > 0" class="sig-status sig-pending">
+                <v-icon size="14">mdi-account-clock-outline</v-icon>
+                <span>{{ doc.pendingSigners.length }} pendente{{ doc.pendingSigners.length !== 1 ? 's' : '' }}</span>
+                <button class="sig-expand-btn" @click.stop="togglePendingSigners(doc.id)">
+                  <v-icon size="14">{{ expandedSigners[doc.id] ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+                </button>
+              </div>
+
+              <!-- Lista de Pendentes Expandida -->
+              <div v-if="expandedSigners[doc.id] && doc.pendingSigners?.length" class="sig-pending-list">
+                <div v-for="signer in doc.pendingSigners" :key="signer.id" class="signer-item">
+                  <div class="signer-avatar">{{ getSignerInitials(signer.name) }}</div>
+                  <span class="signer-name">{{ signer.name }}</span>
+                </div>
+              </div>
             </div>
-          </v-card>
-        </v-list>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Modo Card (completo) -->
+    <!-- Modo Card (completo) - mantido para outras páginas -->
     <v-card v-else class="document-viewer-card" elevation="4">
       <v-card-title class="document-viewer-header">
         <div class="d-flex align-center">
@@ -526,7 +406,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import dayjs from 'dayjs'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -549,16 +429,24 @@ const props = defineProps({
 // Estado
 const viewMode = ref('list')
 const searchQuery = ref('')
-const companyUsers = ref([]) // Lista de usuários da empresa para resolver IDs
+const companyUsers = ref([])
 const selectedFilter = ref('all')
 const previewDialog = ref(false)
 const selectedDocument = ref(null)
 const refreshing = ref(false)
 const signDialog = ref(false)
 const documentToSign = ref(null)
+const expandedSigners = ref({})
 
 // Emits
 const emit = defineEmits(['refresh'])
+
+// Filtros computados
+const filters = computed(() => [
+  { value: 'all', label: 'Todos', count: totalDocuments.value },
+  { value: 'signed', label: 'Assinados', count: signedDocuments.value },
+  { value: 'pdf', label: 'PDFs', count: pdfDocuments.value }
+])
 
 // Carregar usuários da empresa para resolver IDs de assinantes
 async function loadCompanyUsers() {
@@ -605,15 +493,12 @@ const allDocuments = computed(() => {
 
   // Coletar todos os usuários conhecidos do processo para resolver IDs
   const knownUsers = new Map()
-  // Usuários carregados da API da empresa
   companyUsers.value.forEach(user => {
     knownUsers.set(user.id, user)
   })
-  // Criador do processo
   if (props.process.createdBy) {
     knownUsers.set(props.process.createdBy.id, props.process.createdBy)
   }
-  // Executores de etapas e sub-tarefas
   props.process.stepExecutions?.forEach(exec => {
     if (exec.executor) {
       knownUsers.set(exec.executor.id, exec.executor)
@@ -623,7 +508,6 @@ const allDocuments = computed(() => {
         knownUsers.set(st.executor.id, st.executor)
       }
     })
-    // Usuários de requisitos de assinatura
     exec.step?.signatureRequirements?.forEach(req => {
       if (req.user) {
         knownUsers.set(req.user.id, req.user)
@@ -636,14 +520,12 @@ const allDocuments = computed(() => {
     if (execution.subTasks && execution.subTasks.length > 0) {
       execution.subTasks.forEach(subTask => {
         if (subTask.attachmentPath && subTask.attachmentName) {
-          // Processar assinantes da sub-tarefa
           let subTaskSignerIds = []
           let pendingSigners = []
           let canSign = false
           let signatures = []
           let signedByUserIds = []
 
-          // Parsear assinaturas existentes
           if (subTask.signatures) {
             try {
               signatures = typeof subTask.signatures === 'string'
@@ -661,7 +543,6 @@ const allDocuments = computed(() => {
                 ? JSON.parse(subTask.signers)
                 : subTask.signers
 
-              // Resolver IDs em objetos com name/email - apenas quem ainda não assinou
               pendingSigners = subTaskSignerIds
                 .filter(signerId => !signedByUserIds.includes(signerId))
                 .map(signerId => {
@@ -680,7 +561,6 @@ const allDocuments = computed(() => {
                   }
                 })
 
-              // Verificar se o usuário atual é um dos assinantes E ainda não assinou
               canSign = subTaskSignerIds.includes(currentUserId) && !signedByUserIds.includes(currentUserId)
             } catch (e) {
               console.error('Erro ao parsear signers da sub-tarefa:', e)
@@ -697,7 +577,7 @@ const allDocuments = computed(() => {
             mimeType: subTask.attachmentMimeType || getMimeTypeFromName(subTask.attachmentName),
             size: subTask.attachmentSize || 0,
             isSigned: isSigned,
-            stepName: `Sub-etapa: ${subTask.subTaskTemplate?.name || 'Sem nome'}`,
+            stepName: subTask.subTaskTemplate?.name || 'Sub-etapa',
             stepType: 'SUBTASK',
             stepOrder: (execution.step?.order || 0) + 0.5,
             executionId: execution.id,
@@ -711,7 +591,6 @@ const allDocuments = computed(() => {
             isStepFormField: false,
             formFieldName: null,
             isSubTaskAttachment: true,
-            // Dados adicionais de assinatura da sub-tarefa
             requireSignature: subTask.requireSignature || false,
             signatureType: subTask.signatureType || 'SEQUENTIAL',
             signerIds: subTaskSignerIds,
@@ -723,7 +602,6 @@ const allDocuments = computed(() => {
 
     if (execution.attachments && execution.attachments.length > 0) {
       execution.attachments.forEach(attachment => {
-        // ✅ Verificar se é um arquivo de campo do formulário (criação ou etapa)
         let isFormField = false
         let isStepFormField = false
         let formFieldName = null
@@ -732,8 +610,6 @@ const allDocuments = computed(() => {
             const sigData = typeof attachment.signatureData === 'string'
               ? JSON.parse(attachment.signatureData)
               : attachment.signatureData
-            // isFormField = campo FILE do formulário de criação do processo
-            // isStepFormField = campo FILE do formulário da etapa
             if (sigData?.isFormField) {
               isFormField = true
               formFieldName = sigData.fieldName || null
@@ -745,54 +621,33 @@ const allDocuments = computed(() => {
             // Se não conseguir parsear, continua normalmente
           }
         }
-        // Buscar requisitos de assinatura pendentes para este anexo
         const pendingSigners = []
         let canSign = false
         let userRequirement = null
-        let waitingForSigner = null // Nome do assinante que o usuário está aguardando (sequencial)
+        let waitingForSigner = null
 
-        // Buscar requisitos de assinatura da etapa
-        // NOTA: Todo anexo PDF pode ser assinado se houver requisitos configurados
-        // O backend retorna step (mapeado de stepVersion), então devemos procurar em step primeiro
         const allSignatureRequirements = execution.step?.signatureRequirements || execution.stepVersion?.signatureRequirements || []
         const currentUserSectorId = authStore.activeSectorId
 
-        // Coletar IDs de TODOS os anexos DESTE PROCESSO para filtrar requisitos
-        // IMPORTANTE: SignatureRequirements são vinculados ao StepVersion (template), então podem
-        // incluir requisitos de arquivos de OUTROS processos do mesmo tipo
         const processAttachmentIds = new Set()
         props.process.stepExecutions?.forEach(exec => {
           exec.attachments?.forEach(att => processAttachmentIds.add(att.id))
         })
 
-        // Filtrar requisitos para este anexo
-        // IMPORTANTE: Só incluir requisitos que:
-        // 1. São especificamente para este arquivo (attachmentId === attachment.id)
-        // 2. OU são globais (attachmentId = null) E NÃO são arquivos de formulário
-        // 3. NUNCA incluir requisitos de arquivos de OUTROS processos
         const signatureRequirements = allSignatureRequirements.filter(req => {
-          // Se o requisito tem um attachmentId, verificar se é deste processo
           if (req.attachmentId) {
-            // Só incluir se é o arquivo atual E pertence a este processo
             return req.attachmentId === attachment.id && processAttachmentIds.has(req.attachmentId)
           }
-
-          // Se é um requisito global (attachmentId = null)
-          // Arquivos de formulário NÃO herdam requisitos globais
           if (isFormField) {
             return false
           }
-
-          // Para anexos normais de etapa: incluir requisitos globais
           return true
         })
 
         if (signatureRequirements.length > 0) {
-          // Ordenar requisitos por ordem
           const sortedRequirements = [...signatureRequirements].sort((a, b) => a.order - b.order)
 
           sortedRequirements.forEach(req => {
-            // Verificar se já foi assinado neste anexo para este requisito
             const signatureRecord = attachment.signatureRecords?.find(
               record => record.requirementId === req.id
             )
@@ -800,16 +655,13 @@ const allDocuments = computed(() => {
             const hasSignature = signatureRecord && signatureRecord.status === 'COMPLETED'
 
             if (!hasSignature) {
-              // Verificar se o usuário atual pode assinar
               const isUserResponsible = req.userId === currentUserId
               const isSectorResponsible = req.sectorId && req.sectorId === currentUserSectorId
 
               if (isUserResponsible || isSectorResponsible) {
-                // Verificar se é assinatura sequencial e se é a vez do usuário
                 let canSignNow = true
 
                 if (req.type === 'SEQUENTIAL') {
-                  // Verificar se todos os anteriores já assinaram
                   const previousRequirements = sortedRequirements.filter(r => r.order < req.order)
                   const allPreviousSigned = previousRequirements.every(prevReq => {
                     const prevRecord = attachment.signatureRecords?.find(
@@ -820,7 +672,6 @@ const allDocuments = computed(() => {
 
                   if (!allPreviousSigned) {
                     canSignNow = false
-                    // Encontrar quem está na frente na fila
                     const waitingFor = previousRequirements.find(prevReq => {
                       const prevRecord = attachment.signatureRecords?.find(
                         record => record.requirementId === prevReq.id && record.status === 'COMPLETED'
@@ -839,7 +690,6 @@ const allDocuments = computed(() => {
                   userRequirement = req
                 }
               } else {
-                // Adicionar à lista de pendentes (apenas outros usuários/setores, não o atual)
                 if (req.user) {
                   pendingSigners.push({
                     id: req.userId,
@@ -860,18 +710,15 @@ const allDocuments = computed(() => {
           })
         }
 
-        // ✅ Definir nome e tipo da etapa baseado na origem do arquivo
-        let docStepName = execution.step?.name || 'Etapa sem nome'
+        let docStepName = execution.step?.name || 'Etapa'
         let docStepType = execution.step?.type || 'INPUT'
         let docStepOrder = execution.step?.order || 0
 
         if (isFormField) {
-          // Arquivo do formulário de CRIAÇÃO do processo
-          docStepName = 'Criação do Processo'
+          docStepName = 'Formulário Inicial'
           docStepType = 'FORM_FIELD'
-          docStepOrder = -1 // Aparece primeiro
+          docStepOrder = -1
         } else if (isStepFormField) {
-          // Arquivo do formulário da ETAPA - mantém o nome da etapa
           docStepType = 'STEP_FORM_FIELD'
         }
 
@@ -885,16 +732,15 @@ const allDocuments = computed(() => {
           pendingSigners,
           canSign,
           userRequirement,
-          waitingForSigner, // Nome de quem o usuário está aguardando (sequencial)
-          isFormField: isFormField || isStepFormField, // Ambos são campos de formulário
-          isStepFormField, // Flag específico para campo de etapa
+          waitingForSigner,
+          isFormField: isFormField || isStepFormField,
+          isStepFormField,
           formFieldName
         })
       })
     }
   })
 
-  // Ordenar por ordem da etapa
   return docs.sort((a, b) => a.stepOrder - b.stepOrder)
 })
 
@@ -902,7 +748,6 @@ const allDocuments = computed(() => {
 const filteredDocuments = computed(() => {
   let docs = allDocuments.value
 
-  // Filtrar por tipo
   if (selectedFilter.value === 'signed') {
     docs = docs.filter(d => d.isSigned)
   } else if (selectedFilter.value === 'unsigned') {
@@ -911,7 +756,6 @@ const filteredDocuments = computed(() => {
     docs = docs.filter(d => d.mimeType === 'application/pdf')
   }
 
-  // Filtrar por busca
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     docs = docs.filter(d =>
@@ -950,6 +794,15 @@ function getFileColor(mimeType) {
   return 'grey'
 }
 
+function getFileTypeClass(mimeType) {
+  if (!mimeType) return 'default'
+  if (mimeType.includes('pdf')) return 'pdf'
+  if (mimeType.includes('image')) return 'image'
+  if (mimeType.includes('word')) return 'word'
+  if (mimeType.includes('excel')) return 'excel'
+  return 'default'
+}
+
 function getStepColor(stepType) {
   const colors = {
     INPUT: 'blue',
@@ -959,7 +812,7 @@ function getStepColor(stepType) {
     SIGNATURE: 'red',
     FORM_FIELD: 'indigo',
     STEP_FORM_FIELD: 'cyan',
-    SUBTASK: 'secondary' // Cor para anexos de sub-etapas
+    SUBTASK: 'secondary'
   }
   return colors[stepType] || 'grey'
 }
@@ -973,29 +826,22 @@ function getStepIcon(stepType) {
     SIGNATURE: 'mdi-draw-pen',
     FORM_FIELD: 'mdi-file-document-edit',
     STEP_FORM_FIELD: 'mdi-form-textbox',
-    SUBTASK: 'mdi-subdirectory-arrow-right' // Ícone para anexos de sub-etapas
+    SUBTASK: 'mdi-subdirectory-arrow-right'
   }
   return icons[stepType] || 'mdi-help-circle'
 }
 
-function getStepTypeText(stepType) {
-  const types = {
-    INPUT: 'Preenchimento',
-    APPROVAL: 'Aprovação',
-    UPLOAD: 'Upload de Arquivos',
-    REVIEW: 'Revisão',
-    SIGNATURE: 'Assinatura',
-    FORM_FIELD: 'Dados do Processo',
-    STEP_FORM_FIELD: 'Campo da Etapa',
-    SUBTASK: 'Sub-etapa' // Texto para anexos de sub-etapas
-  }
-  return types[stepType] || stepType
+function getStatusClass(doc) {
+  if (doc.canSign) return 'status-action'
+  if (doc.isSigned) return 'status-signed'
+  if (doc.waitingForSigner || doc.pendingSigners?.length) return 'status-pending'
+  return 'status-neutral'
 }
 
 function formatFileSize(bytes) {
-  if (!bytes || bytes === 0) return '0 Bytes'
+  if (!bytes || bytes === 0) return '0 B'
   const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }
@@ -1011,7 +857,6 @@ function openDocument(doc) {
 
 async function downloadDocument(doc) {
   try {
-    // Usar endpoint diferente para anexos de sub-tarefas
     const endpoint = doc.isSubTaskAttachment
       ? `/sub-tasks/attachment/${doc.subTaskId}/download`
       : `/processes/attachment/${doc.id}/download`
@@ -1044,7 +889,7 @@ async function refreshDocuments() {
   refreshing.value = true
   try {
     emit('refresh')
-    await new Promise(resolve => setTimeout(resolve, 500)) // Pequeno delay para feedback visual
+    await new Promise(resolve => setTimeout(resolve, 500))
     window.showSnackbar?.('Documentos atualizados', 'success')
   } catch (error) {
     console.error('Error refreshing documents:', error)
@@ -1074,11 +919,13 @@ function openSignDialog(doc) {
 async function handleSigned() {
   signDialog.value = false
   documentToSign.value = null
-  // Atualizar a lista de documentos
   await refreshDocuments()
 }
 
-// Funções auxiliares para avatares dos signatários
+function togglePendingSigners(docId) {
+  expandedSigners.value[docId] = !expandedSigners.value[docId]
+}
+
 function getSignerInitials(name) {
   if (!name) return '??'
   const parts = name.trim().split(' ').filter(p => p.length > 0)
@@ -1086,160 +933,551 @@ function getSignerInitials(name) {
   if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
-
-function getAvatarColor(name) {
-  if (!name) return 'grey'
-  const colors = [
-    'blue', 'indigo', 'purple', 'pink', 'red',
-    'orange', 'amber', 'lime', 'green', 'teal',
-    'cyan', 'blue-grey', 'deep-purple', 'deep-orange'
-  ]
-  let hash = 0
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  const index = Math.abs(hash) % colors.length
-  return colors[index]
-}
 </script>
 
 <style scoped>
-/* Modo Drawer */
-.drawer-content {
+/* =============================================================================
+   DOCUMENT VIEWER - DRAWER MODE (Clean Professional Design)
+   Inspired by: Linear, Notion, Monday.com, Asana
+   ============================================================================= */
+
+.docs-drawer {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: white;
+  background: var(--color-surface, #fff);
 }
 
-.drawer-header {
-  padding: 24px;
+/* Header */
+.docs-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--color-neutral-200, #e2e8f0);
   flex-shrink: 0;
 }
 
-.drawer-documents {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 16px 24px;
+.docs-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
 
-.empty-state-drawer {
+.docs-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.docs-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--color-primary-50, #eff6ff);
+  border-radius: 8px;
+  color: var(--color-primary-600, #2563eb);
+}
+
+.docs-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-neutral-900, #0f172a);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.docs-subtitle {
+  font-size: 0.75rem;
+  color: var(--color-neutral-500, #64748b);
+  margin: 2px 0 0 0;
+}
+
+.docs-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--color-neutral-400, #94a3b8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.docs-refresh-btn:hover {
+  background: var(--color-neutral-100, #f1f5f9);
+  color: var(--color-neutral-600, #475569);
+}
+
+.docs-refresh-btn.refreshing {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Search */
+.docs-search {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-neutral-400, #94a3b8);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 32px 0 36px;
+  border: 1px solid var(--color-neutral-200, #e2e8f0);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  color: var(--color-neutral-800, #1e293b);
+  background: var(--color-neutral-50, #f8fafc);
+  transition: all 0.15s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--color-primary-400, #60a5fa);
+  background: #fff;
+  box-shadow: 0 0 0 3px var(--color-primary-100, #dbeafe);
+}
+
+.search-input::placeholder {
+  color: var(--color-neutral-400, #94a3b8);
+}
+
+.search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: var(--color-neutral-200, #e2e8f0);
+  border-radius: 4px;
+  color: var(--color-neutral-500, #64748b);
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  background: var(--color-neutral-300, #cbd5e1);
+}
+
+/* Filters */
+.docs-filters {
+  display: flex;
+  gap: 6px;
+}
+
+.filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-neutral-200, #e2e8f0);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.75rem;
+  color: var(--color-neutral-600, #475569);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-btn:hover {
+  background: var(--color-neutral-50, #f8fafc);
+  border-color: var(--color-neutral-300, #cbd5e1);
+}
+
+.filter-btn.active {
+  background: var(--color-primary-50, #eff6ff);
+  border-color: var(--color-primary-200, #bfdbfe);
+  color: var(--color-primary-700, #1d4ed8);
+}
+
+.filter-label {
+  font-weight: 500;
+}
+
+.filter-count {
+  font-weight: 600;
+  font-size: 0.6875rem;
+  padding: 1px 5px;
+  background: var(--color-neutral-100, #f1f5f9);
+  border-radius: 4px;
+}
+
+.filter-btn.active .filter-count {
+  background: var(--color-primary-100, #dbeafe);
+}
+
+/* Document List */
+.docs-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* Custom Scrollbar */
+.docs-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.docs-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.docs-list::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-300, #cbd5e1);
+  border-radius: 3px;
+}
+
+.docs-list::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neutral-400, #94a3b8);
+}
+
+/* Empty State */
+.docs-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
+  padding: 48px 24px;
   text-align: center;
 }
 
-.documents-list-drawer {
-  background: transparent;
-  padding: 0;
-}
-
-.document-item-drawer-card {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
-  transition: all 0.2s ease;
-  background: white;
-  overflow: hidden;
-}
-
-.document-item-drawer-card:hover {
-  border-color: rgb(var(--v-theme-primary));
-  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.12);
-}
-
-.document-filename {
-  word-break: break-word;
-  line-height: 1.5;
+.empty-icon {
   display: flex;
   align-items: center;
-}
-
-/* Status de Assinatura - Design Profissional */
-.signature-status-section {
-  margin-top: 12px;
-}
-
-.signature-action-primary {
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  background: var(--color-neutral-100, #f1f5f9);
+  border-radius: 12px;
+  color: var(--color-neutral-400, #94a3b8);
   margin-bottom: 12px;
 }
 
-.signature-alert :deep(.v-alert__content) {
-  width: 100%;
+.empty-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-neutral-600, #475569);
+  margin: 0;
 }
 
-.sign-button-primary {
-  animation: pulse-glow 2s infinite;
-  box-shadow: 0 4px 16px rgba(255, 152, 0, 0.3) !important;
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
-  flex-shrink: 0;
+.empty-hint {
+  font-size: 0.75rem;
+  color: var(--color-neutral-400, #94a3b8);
+  margin: 4px 0 0 0;
 }
 
-@keyframes pulse-glow {
-  0%, 100% {
-    box-shadow: 0 4px 16px rgba(255, 152, 0, 0.3);
-    transform: scale(1);
-  }
-  50% {
-    box-shadow: 0 6px 24px rgba(255, 152, 0, 0.5);
-    transform: scale(1.02);
-  }
+/* Document Item */
+.doc-item {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--color-neutral-200, #e2e8f0);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  transition: all 0.15s ease;
 }
 
-.signature-pending-info {
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: 8px;
+.doc-item:hover {
+  border-color: var(--color-neutral-300, #cbd5e1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
-.pending-list-panel {
+.doc-item:hover .doc-actions {
+  opacity: 1;
+}
+
+.doc-item.doc-needs-action {
+  border-color: var(--color-warning-300, #fcd34d);
+  background: linear-gradient(to right, var(--color-warning-50, #fffbeb), #fff);
+}
+
+/* Status Bar */
+.doc-status-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.doc-status-bar.status-signed {
+  background: var(--color-success-500, #10b981);
+}
+
+.doc-status-bar.status-action {
+  background: var(--color-warning-500, #f59e0b);
+}
+
+.doc-status-bar.status-pending {
+  background: var(--color-neutral-300, #cbd5e1);
+}
+
+.doc-status-bar.status-neutral {
   background: transparent;
 }
 
-.pending-panel {
-  background: rgba(255, 255, 255, 0.6) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
+/* Document Content */
+.doc-content {
+  padding: 12px 12px 12px 16px;
+}
+
+.doc-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
   overflow: hidden;
 }
 
-.pending-signers-list {
+/* Document Icon */
+.doc-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.doc-icon.icon-pdf {
+  background: var(--color-error-50, #fef2f2);
+  color: var(--color-error-500, #ef4444);
+}
+
+.doc-icon.icon-image {
+  background: var(--color-info-50, #ecfeff);
+  color: var(--color-info-500, #06b6d4);
+}
+
+.doc-icon.icon-word {
+  background: var(--color-primary-50, #eff6ff);
+  color: var(--color-primary-500, #3b82f6);
+}
+
+.doc-icon.icon-excel {
+  background: var(--color-success-50, #ecfdf5);
+  color: var(--color-success-500, #10b981);
+}
+
+.doc-icon.icon-default {
+  background: var(--color-neutral-100, #f1f5f9);
+  color: var(--color-neutral-500, #64748b);
+}
+
+/* Document Info */
+.doc-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.doc-name {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-neutral-800, #1e293b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+  line-height: 1.3;
+  max-width: 100%;
+}
+
+.doc-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 0.6875rem;
+  color: var(--color-neutral-500, #64748b);
+}
+
+.doc-step {
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-separator {
+  opacity: 0.5;
+}
+
+/* Quick Actions */
+.doc-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: var(--color-neutral-100, #f1f5f9);
+  border-radius: 6px;
+  color: var(--color-neutral-500, #64748b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+  background: var(--color-neutral-200, #e2e8f0);
+  color: var(--color-neutral-700, #334155);
+}
+
+.action-btn.action-primary {
+  background: var(--color-primary-100, #dbeafe);
+  color: var(--color-primary-600, #2563eb);
+}
+
+.action-btn.action-primary:hover {
+  background: var(--color-primary-200, #bfdbfe);
+}
+
+/* Signature Status */
+.doc-signature {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-neutral-100, #f1f5f9);
+}
+
+.sig-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+}
+
+.sig-status.sig-complete {
+  color: var(--color-success-600, #059669);
+}
+
+.sig-status.sig-action {
+  justify-content: space-between;
+}
+
+.sig-action-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-warning-700, #b45309);
+  font-weight: 500;
+}
+
+.sig-btn {
+  padding: 5px 12px;
+  border: none;
+  background: var(--color-warning-500, #f59e0b);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sig-btn:hover {
+  background: var(--color-warning-600, #d97706);
+  transform: translateY(-1px);
+}
+
+.sig-status.sig-waiting {
+  color: var(--color-info-600, #0891b2);
+}
+
+.sig-status.sig-pending {
+  color: var(--color-neutral-500, #64748b);
+}
+
+.sig-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  border: none;
   background: transparent;
-  padding: 0;
+  color: var(--color-neutral-400, #94a3b8);
+  border-radius: 4px;
+  cursor: pointer;
 }
 
-.pending-signers-list .v-list-item {
-  min-height: 40px;
-  padding: 4px 8px;
+.sig-expand-btn:hover {
+  background: var(--color-neutral-100, #f1f5f9);
 }
 
-.signature-status-completed :deep(.v-alert__content) {
-  width: 100%;
+/* Pending Signers List */
+.sig-pending-list {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--color-neutral-50, #f8fafc);
+  border-radius: 6px;
 }
 
-/* Scrollbar do Drawer */
-.drawer-documents::-webkit-scrollbar {
-  width: 6px;
+.signer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
 }
 
-.drawer-documents::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.03);
+.signer-item:not(:last-child) {
+  border-bottom: 1px solid var(--color-neutral-100, #f1f5f9);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
 }
 
-.drawer-documents::-webkit-scrollbar-thumb {
-  background: rgba(25, 118, 210, 0.3);
-  border-radius: 3px;
+.signer-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--color-primary-100, #dbeafe);
+  color: var(--color-primary-700, #1d4ed8);
+  font-size: 0.625rem;
+  font-weight: 600;
+  border-radius: 50%;
 }
 
-.drawer-documents::-webkit-scrollbar-thumb:hover {
-  background: rgba(25, 118, 210, 0.5);
+.signer-name {
+  font-size: 0.75rem;
+  color: var(--color-neutral-700, #334155);
 }
 
-/* Modo Card */
+/* =============================================================================
+   CARD MODE (mantido para compatibilidade)
+   ============================================================================= */
+
 .document-viewer-card {
   border-radius: 16px;
   border: 1px solid rgba(0, 0, 0, 0.06);
@@ -1265,7 +1503,6 @@ function getAvatarColor(name) {
   overflow-y: auto;
 }
 
-/* Empty State */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -1275,7 +1512,6 @@ function getAvatarColor(name) {
   text-align: center;
 }
 
-/* Grid View */
 .documents-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -1337,7 +1573,6 @@ function getAvatarColor(name) {
   border: 1px solid rgba(76, 175, 80, 0.1);
 }
 
-/* List View */
 .documents-list {
   background: transparent;
 }
@@ -1357,7 +1592,6 @@ function getAvatarColor(name) {
   transform: translateX(4px);
 }
 
-/* Scrollbar */
 .documents-container::-webkit-scrollbar {
   width: 8px;
 }

@@ -1,19 +1,29 @@
 <template>
   <div class="create-process-container">
-    <div class="header-section mb-6">
-      <div class="d-flex align-center">
-        <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" class="mr-3" />
-        <div class="flex-grow-1">
-          <h1 class="text-h4 font-weight-bold mb-2">
-            <v-icon size="32" class="mr-2" color="primary">
-              {{ selectedProcessType ? 'mdi-rocket-launch' : 'mdi-file-document-plus' }}
-            </v-icon>
-            {{ selectedProcessType ? 'Iniciar Processo' : 'Criar Novo Processo' }}
+    <!-- Modern Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <v-btn
+          icon
+          variant="text"
+          @click="goBack"
+          class="back-btn"
+        >
+          <v-icon color="white">mdi-arrow-left</v-icon>
+        </v-btn>
+        <div class="header-icon">
+          <v-icon size="28" color="white">
+            {{ selectedProcessType ? 'mdi-rocket-launch' : 'mdi-file-document-plus' }}
+          </v-icon>
+        </div>
+        <div class="header-text">
+          <h1 class="page-title">
+            {{ selectedProcessType ? 'Iniciar Processo' : 'Novo Processo' }}
           </h1>
-          <p class="text-subtitle-1 text-medium-emphasis">
-            {{ selectedProcessType 
-              ? 'Preencha as informações necessárias para iniciar o processo' 
-              : 'Selecione o tipo de processo e preencha as informações necessárias'
+          <p class="page-subtitle">
+            {{ selectedProcessType
+              ? 'Preencha os dados para iniciar o processo'
+              : 'Selecione o tipo e preencha as informações'
             }}
           </p>
         </div>
@@ -137,7 +147,7 @@
               <v-text-field
                 v-model="processData.title"
                 label="Título do Processo *"
-                :rules="[v => !!v || 'Título é obrigatório', v => (v && v.length >= 3) || 'Mínimo 3 caracteres']"
+                :rules="[v => !!v || 'O título é obrigatório', v => (v && v.length >= 3) || 'O título deve ter no mínimo 3 caracteres']"
                 variant="outlined"
                 prepend-inner-icon="mdi-format-title"
                 hint="Dê um nome descritivo para identificar facilmente este processo"
@@ -1107,10 +1117,108 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* Estilos mantidos iguais + novos para upload */
+/* Container principal */
 .create-process-container {
   max-width: 1200px;
   margin: 0 auto;
+}
+
+/* ===========================================
+   CAMPOS DE FORMULÁRIO MODERNOS
+   =========================================== */
+
+/* Form content com melhor espaçamento */
+.form-content {
+  background: #fff;
+}
+
+/* Seção do formulário */
+.form-section {
+  margin-bottom: 32px;
+}
+
+.form-section h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+  border-left: 3px solid var(--color-primary-500);
+  padding-left: 16px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+}
+
+/* Campos de checkbox personalizados */
+.checkbox-field-wrapper {
+  background: var(--color-neutral-50);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-neutral-200);
+}
+
+/* Campo de tabela dinâmica */
+.table-field-container {
+  background: var(--color-neutral-50);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-neutral-200);
+}
+
+/* Modern Page Header with Gradient */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.back-btn {
+  background: rgba(255, 255, 255, 0.15) !important;
+  margin-right: 8px;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+}
+
+.header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white !important;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
 }
 
 /* Cards de seleção de tipo de processo */
@@ -1133,15 +1241,6 @@ onMounted(async () => {
   transform: none;
 }
 
-.header-section {
-  background: linear-gradient(135deg, rgba(25, 118, 210, 0.1), rgba(66, 165, 245, 0.05));
-  border-radius: 16px;
-  padding: 24px;
-  border: 1px solid rgba(25, 118, 210, 0.1);
-  margin-bottom: 32px;
-  backdrop-filter: blur(10px);
-}
-
 .form-card {
   border-radius: 16px;
   overflow: hidden;
@@ -1150,11 +1249,6 @@ onMounted(async () => {
 .selected-process-header {
   background: linear-gradient(135deg, rgba(25, 118, 210, 0.05), rgba(66, 165, 245, 0.02));
   border-bottom: 1px solid rgba(25, 118, 210, 0.1);
-}
-
-.form-section h4 {
-  border-left: 4px solid rgb(var(--v-theme-primary));
-  padding-left: 16px;
 }
 
 /* ========================================
@@ -1327,8 +1421,23 @@ onMounted(async () => {
 
 /* Responsividade */
 @media (max-width: 768px) {
-  .header-section {
-    padding: 16px;
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .back-btn {
+    position: absolute;
+    top: 16px;
+    left: 16px;
   }
 
   .selected-process-header .d-flex {

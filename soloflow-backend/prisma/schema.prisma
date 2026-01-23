@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -33,7 +33,8 @@ model User {
   email                 String                 @unique
   password              String
   isActive              Boolean                @default(true)
-  cpf                   String?
+  cpf                   String?                // CPF criptografado para LGPD
+  cpfHash               String?                // Hash do CPF para busca
   phone                 String?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
@@ -49,6 +50,9 @@ model User {
   // Sub-tarefas
   subTaskTemplates      SubTaskTemplate[]      @relation("SubTaskTemplateUser")
   subTaskExecutions     SubTask[]              @relation("SubTaskExecutor")
+  // LGPD
+  consents              UserConsent[]          @relation("UserConsents")
+  deletionRequests      DataDeletionRequest[]  @relation("DataDeletionRequests")
 
   @@map("users")
 }
@@ -714,4 +718,90 @@ model SubTask {
   updatedAt         DateTime        @updatedAt
 
   @@map("sub_tasks")
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// LGPD - CONFORMIDADE COM A LEI GERAL DE PROTEÇÃO DE DADOS
+// ════════════════════════════════════════════════════════════════════════════════
+
+// Tipo de consentimento
+enum ConsentType {
+  PRIVACY_POLICY      // Política de Privacidade
+  TERMS_OF_USE        // Termos de Uso
+  DATA_PROCESSING     // Processamento de Dados
+  MARKETING           // Comunicações de Marketing
+  COOKIES             // Uso de Cookies
+}
+
+// Registro de consentimento do usuário (Art. 7 e 8 da LGPD)
+model UserConsent {
+  id              String      @id @default(uuid())
+
+  userId          String
+  user            User        @relation("UserConsents", fields: [userId], references: [id], onDelete: Cascade)
+
+  consentType     ConsentType
+  accepted        Boolean     @default(false)
+  version         String      // Versão do documento aceito (ex: "1.0", "2.0")
+
+  // Dados de rastreabilidade
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  ipAddress       String?
+  userAgent       String?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([userId, consentType])
+  @@index([userId])
+  @@index([consentType])
+  @@map("user_consents")
+}
+
+// Política de retenção de dados (Art. 16 da LGPD)
+model DataRetentionPolicy {
+  id              String    @id @default(uuid())
+
+  entityType      String    // USER, PROCESS, AUDITLOG, ATTACHMENT, etc.
+  retentionDays   Int       // Número de dias para retenção
+  description     String?   // Descrição da política
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([entityType])
+  @@map("data_retention_policies")
+}
+
+// Solicitações de exclusão de dados (Art. 18 da LGPD - Direito ao Esquecimento)
+model DataDeletionRequest {
+  id              String    @id @default(uuid())
+
+  userId          String
+  user            User      @relation("DataDeletionRequests", fields: [userId], references: [id])
+
+  reason          String?   // Motivo da solicitação
+  status          String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, REJECTED
+
+  requestedAt     DateTime  @default(now())
+  processedAt     DateTime?
+  processedBy     String?   // ID do admin que processou
+
+  // Dados de rastreabilidade
+  ipAddress       String?
+  userAgent       String?
+
+  // Resultado
+  deletedData     Json?     // Resumo dos dados excluídos
+  rejectionReason String?   // Motivo de rejeição, se aplicável
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@map("data_deletion_requests")
 }

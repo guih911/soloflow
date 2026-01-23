@@ -1,6 +1,20 @@
 import { memoryStorage } from 'multer';
 import { BadRequestException } from '@nestjs/common';
 
+/**
+ * Corrige o encoding do nome do arquivo.
+ * O Multer interpreta o filename como Latin1, mas os navegadores enviam em UTF-8.
+ * Esta função converte corretamente para UTF-8.
+ */
+export function fixFilenameEncoding(filename: string): string {
+  try {
+    // Converte de Latin1 para UTF-8
+    return Buffer.from(filename, 'latin1').toString('utf8');
+  } catch {
+    return filename;
+  }
+}
+
 // Tipos de arquivo permitidos
 export const ALLOWED_MIME_TYPES = [
   'image/jpeg',

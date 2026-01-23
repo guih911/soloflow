@@ -17,6 +17,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ChildProcessesModule } from './modules/child-processes/child-processes.module';
 import { SubTasksModule } from './modules/sub-tasks/sub-tasks.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { LgpdModule } from './modules/lgpd/lgpd.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { StorageModule } from './modules/storage/storage.module';
     PrismaModule,
     StorageModule,
     CacheModule,
+    LgpdModule, // Módulo LGPD - Conformidade com Lei de Proteção de Dados
     AuthModule,
     UsersModule,
     CompaniesModule,

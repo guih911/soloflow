@@ -5,14 +5,15 @@
     max-width="700"
     persistent
     scrollable
+    aria-labelledby="child-process-dialog-title"
   >
-    <v-card class="child-process-dialog">
+    <v-card class="child-process-dialog" role="dialog" aria-modal="true">
       <!-- Header -->
       <v-card-title class="child-process-dialog-header d-flex align-center justify-center flex-column py-8">
-        <div class="icon-container mb-4">
+        <div class="icon-container mb-4" aria-hidden="true">
           <v-icon size="64" color="white">mdi-source-branch-plus</v-icon>
         </div>
-        <span class="text-h5 font-weight-bold text-white text-center">
+        <span id="child-process-dialog-title" class="text-h5 font-weight-bold text-white text-center">
           Criar Sub-Processo
         </span>
         <span class="text-body-2 text-white-50 mt-2 text-center">
@@ -28,7 +29,7 @@
         <v-form ref="formRef" v-model="formValid" @submit.prevent="handleCreate">
           <!-- Tipo de Processo -->
           <div class="mb-4">
-            <label class="text-caption font-weight-bold text-grey-darken-2 mb-2 d-block">
+            <label class="text-caption font-weight-bold text-grey-darken-2 mb-2 d-block" id="process-type-label">
               Tipo de Sub-Processo *
             </label>
             <v-select
@@ -44,6 +45,8 @@
               density="comfortable"
               prepend-inner-icon="mdi-file-tree"
               @update:model-value="onProcessTypeChange"
+              aria-required="true"
+              aria-labelledby="process-type-label"
             />
           </div>
 

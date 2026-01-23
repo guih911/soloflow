@@ -1,28 +1,29 @@
 <template>
   <div class="processes-container">
-    <!-- ✨ Header Elegante -->
-    <div class="header-section mb-8">
-      <div class="d-flex align-center justify-space-between">
-        <div class="header-content">
-          <h1 class="text-h3 font-weight-bold mb-2 text-primary">
-       
-            Iniciar Novo Processo
-          </h1>
-          <p class="text-h6 text-medium-emphasis">
-            Escolha um dos tipos de processo disponíveis para começar o seu processo
-          </p>
+    <!-- Modern Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <div class="header-icon">
+          <v-icon size="28" color="white">mdi-rocket-launch</v-icon>
         </div>
-
-        <div class="header-actions">
-          <v-btn variant="text" @click="refreshData" :loading="refreshing">
-            <v-icon start>mdi-refresh</v-icon>
-            Atualizar
-          </v-btn>
+        <div class="header-text">
+          <h1 class="page-title">Iniciar Novo Processo</h1>
+          <p class="page-subtitle">Selecione um tipo de processo para começar</p>
         </div>
       </div>
+      <v-btn
+        variant="flat"
+        color="white"
+        @click="refreshData"
+        :loading="refreshing"
+        class="action-btn"
+      >
+        <v-icon start>mdi-refresh</v-icon>
+        Atualizar
+      </v-btn>
     </div>
 
-    <!-- ✨ Filtro de Busca Simplificado -->
+    <!-- Filtro de Busca Simplificado -->
     <v-card class="filter-card mb-6" elevation="2">
       <v-card-text class="py-4">
         <v-row align="center">
@@ -34,21 +35,25 @@
       </v-card-text>
     </v-card>
 
-    <!-- ✨ Grid de Cards Profissionais -->
-    <div v-if="!loading" class="process-grid">
+    <!-- Grid de Cards de Processos -->
+    <div v-if="!loading" class="process-grid" role="list" aria-label="Tipos de processo disponíveis">
       <div class="cards-container">
         <div v-for="processType in paginatedProcessTypes" :key="processType.id" class="card-wrapper">
           <v-hover v-slot="{ isHovering, props }">
-            <v-card 
-              v-bind="props" 
+            <v-card
+              v-bind="props"
               :elevation="0"
-              class="process-card professional-card h-100 d-flex flex-column position-relative" 
+              class="process-card professional-card h-100 d-flex flex-column position-relative"
               :class="{
                 'card-hover': isHovering,
                 'card-disabled': !canCreateProcess(processType),
                 'card-featured': isFeaturedProcess(processType)
-              }" 
+              }"
+              role="listitem"
+              :aria-label="`Processo ${processType.name} com ${processType.steps?.length || 0} etapas`"
+              tabindex="0"
               @click="startProcessCreation(processType)"
+              @keydown.enter="startProcessCreation(processType)"
             >
               <!-- ✨ Header do Card Redesenhado -->
               <div class="card-header">
@@ -154,14 +159,14 @@
         </div>
 
         <h2 class="text-h5 font-weight-bold mb-3">
-          {{ search ? 'Nenhum processo encontrado' : 'Nenhum processo disponível' }}
+          {{ search ? 'Nenhum processo encontrado' : 'Nenhum tipo de processo disponível' }}
         </h2>
 
         <p class="text-body-1 text-medium-emphasis mb-6 mx-auto" style="max-width: 400px;">
           {{
             search
               ? `Não encontramos processos que correspondam à busca "${search}". Tente usar termos diferentes.`
-              : 'Ainda não há tipos de processo configurados. Entre em contato com um administrador para criar workflows.'
+              : 'Ainda não há tipos de processo configurados. Entre em contato com um administrador para criar os fluxos de trabalho.'
           }}
         </p>
 
@@ -179,18 +184,15 @@
       </div>
     </v-card>
 
-    <!-- ✨ Loading State Melhorado -->
-    <div v-if="loading" class="loading-container">
-      <div class="text-center py-12">
-        <div class="loading-animation mb-4">
-          <v-progress-circular indeterminate color="primary" size="48" width="4" />
-        </div>
-        <h3 class="text-h6 mb-2 font-weight-medium">
-          Carregando processos
-        </h3>
-        <p class="text-body-2 text-medium-emphasis">
-          Preparando os workflows disponíveis...
-        </p>
+    <!-- Loading State - Skeleton -->
+    <div v-if="loading" class="loading-container" aria-label="Carregando tipos de processo">
+      <div class="skeleton-grid">
+        <v-skeleton-loader
+          v-for="n in 6"
+          :key="n"
+          type="card"
+          class="skeleton-card"
+        />
       </div>
     </div>
   </div>
@@ -378,24 +380,59 @@ onMounted(async () => {
   min-height: 320px;
 }
 
-/* ✨ Header Section */
-.header-section {
-  background: linear-gradient(135deg, rgba(25, 118, 210, 0.06), rgba(66, 165, 245, 0.02));
-  border-radius: 24px;
-  padding: 32px;
-  border: 1px solid rgba(25, 118, 210, 0.08);
-  margin-bottom: 32px;
-  backdrop-filter: blur(20px);
+/* Modern Page Header with Gradient */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
 }
 
-.header-content h1 {
-  background: linear-gradient(135deg, #1976D2, #42A5F5);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  font-size: 2.25rem;
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  font-size: 1.5rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  color: white !important;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
+}
+
+.action-btn {
+  text-transform: none;
+  font-weight: 500;
+  border-radius: 10px;
+  color: var(--color-primary-600) !important;
 }
 
 /* ✨ Filter Card */
@@ -610,17 +647,25 @@ onMounted(async () => {
   justify-content: center;
 }
 
-/* ✨ Loading State */
+/* Loading State - Skeleton */
 .loading-container {
   min-height: 400px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-.loading-animation {
-  display: flex;
-  justify-content: center;
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 24px;
+  width: 100%;
+}
+
+.skeleton-card {
+  border-radius: 20px;
+  min-height: 320px;
+}
+
+.skeleton-card :deep(.v-skeleton-loader__bone) {
+  border-radius: 20px;
 }
 
 /* ✨ Responsividade */

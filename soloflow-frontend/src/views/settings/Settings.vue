@@ -500,21 +500,21 @@ const autoLogoutOptions = [
 
 // Regras de validação
 const nameRules = [
-  v => !!v || 'Nome é obrigatório',
-  v => v.length >= 3 || 'Nome deve ter no mínimo 3 caracteres'
+  v => !!v || 'O nome é obrigatório',
+  v => v.length >= 3 || 'O nome deve ter no mínimo 3 caracteres'
 ]
 
 const cnpjRules = [
-  v => !!v || 'CNPJ é obrigatório',
-  v => /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'CNPJ inválido'
+  v => !!v || 'O CNPJ é obrigatório',
+  v => /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'O CNPJ informado é inválido'
 ]
 
 const emailRules = [
-  v => !v || /.+@.+\..+/.test(v) || 'E-mail deve ser válido'
+  v => !v || /.+@.+\..+/.test(v) || 'O e-mail deve ser válido'
 ]
 
 const phoneRules = [
-  v => !v || /^\(\d{2}\) \d{4,5}-\d{4}$/.test(v) || 'Telefone inválido'
+  v => !v || /^\(\d{2}\) \d{4,5}-\d{4}$/.test(v) || 'O telefone informado é inválido'
 ]
 
 // Métodos

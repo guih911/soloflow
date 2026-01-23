@@ -14,17 +14,19 @@
       </v-btn>
     </div>
 
-    <!-- Loading -->
-    <div v-if="loading" class="text-center py-4">
-      <v-progress-circular indeterminate size="24" color="primary" />
+    <!-- Loading - Skeleton -->
+    <div v-if="loading" class="loading-state" aria-label="Carregando sub-etapas">
+      <v-skeleton-loader type="list-item-two-line@3" class="skeleton-subtasks" />
     </div>
 
     <!-- Lista de sub-etapas -->
-    <div v-else-if="subTasks.length > 0" class="sub-steps-list">
+    <div v-else-if="subTasks.length > 0" class="sub-steps-list" role="list" aria-label="Lista de sub-etapas">
       <div
         v-for="(subTask, index) in subTasks"
         :key="subTask.id"
         class="sub-step-item"
+        role="listitem"
+        :aria-label="`Sub-etapa ${subTask.subTaskTemplate?.name || subTask.name || 'Sub-etapa'} - ${getStatusLabel(subTask.status)}`"
       >
         <!-- Conector visual -->
         <div class="sub-step-indicator">
@@ -55,7 +57,9 @@
           class="sub-step-card flex-grow-1 cursor-pointer"
           :class="getSubStepCardClass(subTask)"
           :elevation="subTask.status === 'IN_PROGRESS' ? 4 : 1"
+          tabindex="0"
           @click="openExecuteDialog(subTask)"
+          @keydown.enter="openExecuteDialog(subTask)"
         >
           <div class="sub-step-header" :class="getSubStepHeaderClass(subTask)">
             <div class="d-flex align-center justify-space-between">
@@ -177,7 +181,7 @@
             label="Nome da sub-etapa"
             variant="outlined"
             density="comfortable"
-            :rules="[v => !!v || 'Nome é obrigatório']"
+            :rules="[v => !!v || 'O nome da sub-etapa é obrigatório']"
           />
           <v-textarea
             v-model="newSubTask.description"
@@ -809,6 +813,28 @@ onMounted(() => {
 
 .cursor-pointer {
   cursor: pointer;
+}
+
+/* Loading Skeleton */
+.loading-state {
+  padding: 8px 0;
+}
+
+.skeleton-subtasks {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Focus States */
+.sub-step-card:focus {
+  outline: 2px solid var(--color-primary-300);
+  outline-offset: 2px;
+}
+
+.sub-step-card:focus-visible {
+  outline: 2px solid var(--color-primary-400);
+  outline-offset: 2px;
 }
 
 .gap-2 {

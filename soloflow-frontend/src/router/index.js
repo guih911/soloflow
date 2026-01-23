@@ -17,6 +17,7 @@ import Companies from '@/views/companies/Companies.vue'
 
 // Views - Users
 import Users from '@/views/users/Users.vue'
+import UserEditor from '@/views/users/UserEditor.vue'
 
 // Views - Sectors
 import Sectors from '@/views/sectors/Sectors.vue'
@@ -25,6 +26,7 @@ import Sectors from '@/views/sectors/Sectors.vue'
 import ProcessTypes from '@/views/processes/ProcessTypes.vue'
 import ProcessTypeEditor from '@/views/processes/ProcessTypeEditor.vue'
 import Profiles from '@/views/profiles/Profiles.vue'
+import ProfileEditor from '@/views/profiles/ProfileEditor.vue'
 
 // Views - Processes
 import Processes from '@/views/processes/Processes.vue'
@@ -156,6 +158,27 @@ const routes = [
         component: Users,
         meta: { requiresPermission: { resource: 'users', action: 'manage' } },
       },
+      {
+        path: '/usuarios/novo',
+        name: 'UsuarioNovo',
+        component: UserEditor,
+        meta: {
+          requiresPermission: { resource: 'users', action: 'manage' },
+          title: 'Novo Usuário',
+          description: 'Criar novo usuário no sistema'
+        },
+      },
+      {
+        path: '/usuarios/:id/editar',
+        name: 'UsuarioEditar',
+        component: UserEditor,
+        meta: {
+          requiresPermission: { resource: 'users', action: 'manage' },
+          title: 'Editar Usuário',
+          description: 'Editar usuário existente'
+        },
+        props: true,
+      },
 
       // SETORES
       {
@@ -192,6 +215,27 @@ const routes = [
         name: 'Perfis',
         component: Profiles,
         meta: { requiresPermission: { resource: 'profiles', action: 'manage' } },
+      },
+      {
+        path: '/perfis/novo',
+        name: 'PerfilNovo',
+        component: ProfileEditor,
+        meta: {
+          requiresPermission: { resource: 'profiles', action: 'manage' },
+          title: 'Novo Perfil',
+          description: 'Criar novo perfil de acesso'
+        },
+      },
+      {
+        path: '/perfis/:id/editar',
+        name: 'PerfilEditar',
+        component: ProfileEditor,
+        meta: {
+          requiresPermission: { resource: 'profiles', action: 'manage' },
+          title: 'Editar Perfil',
+          description: 'Editar perfil de acesso'
+        },
+        props: true,
       },
 
       // PROCESSOS

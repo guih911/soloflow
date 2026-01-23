@@ -1,33 +1,38 @@
 <template>
   <v-dialog :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" max-width="900"
-    persistent>
-    <v-card class="step-dialog-card">
-      <v-card-title class="d-flex align-center py-4 px-6 bg-primary">
-        <v-icon class="mr-3" color="white">mdi-debug-step-over</v-icon>
-        <span class="text-white font-weight-medium">{{ editingIndex !== null ? 'Editar' : 'Nova' }} Etapa</span>
+    persistent aria-labelledby="step-dialog-title">
+    <v-card class="step-dialog-card" role="dialog" aria-modal="true">
+      <v-card-title class="dialog-header">
+        <div class="header-icon" aria-hidden="true">
+          <v-icon size="24" color="white">mdi-debug-step-over</v-icon>
+        </div>
+        <div class="header-text">
+          <span id="step-dialog-title" class="header-title">{{ editingIndex !== null ? 'Editar' : 'Nova' }} Etapa</span>
+          <span class="header-subtitle">Configure os detalhes da etapa do processo</span>
+        </div>
       </v-card-title>
 
       <v-form ref="stepForm" v-model="stepValid">
         <v-card-text class="pa-6">
-          <v-tabs v-model="tab" class="mb-6" color="primary" slider-color="primary">
-            <v-tab value="basic">
-              <v-icon start size="18">mdi-information</v-icon>
+          <v-tabs v-model="tab" class="mb-6" color="primary" slider-color="primary" aria-label="Configurações da etapa">
+            <v-tab value="basic" aria-label="Informações básicas">
+              <v-icon start size="18" aria-hidden="true">mdi-information</v-icon>
               Informações Básicas
             </v-tab>
-            <v-tab value="instructions">
-              <v-icon start size="18">mdi-text-box</v-icon>
+            <v-tab value="instructions" aria-label="Instruções e prazo">
+              <v-icon start size="18" aria-hidden="true">mdi-text-box</v-icon>
               Instruções e Prazo
             </v-tab>
-            <v-tab value="attachment">
-              <v-icon start size="18">mdi-paperclip</v-icon>
+            <v-tab value="attachment" aria-label="Configurar anexos">
+              <v-icon start size="18" aria-hidden="true">mdi-paperclip</v-icon>
               Anexos
             </v-tab>
-            <v-tab v-if="localStepData.type === 'REVIEW'" value="review-config">
-              <v-icon start size="18">mdi-file-search</v-icon>
+            <v-tab v-if="localStepData.type === 'REVIEW'" value="review-config" aria-label="Configurar revisão de anexos">
+              <v-icon start size="18" aria-hidden="true">mdi-file-search</v-icon>
               Revisão de Anexos
             </v-tab>
-            <v-tab v-if="localStepData.type === 'INPUT'" value="input-config">
-              <v-icon start size="18">mdi-form-textbox</v-icon>
+            <v-tab v-if="localStepData.type === 'INPUT'" value="input-config" aria-label="Configurar formulário da etapa">
+              <v-icon start size="18" aria-hidden="true">mdi-form-textbox</v-icon>
               Formulário da Etapa
             </v-tab>
           </v-tabs>
@@ -37,7 +42,7 @@
               <v-row>
                 <v-col cols="12" md="6">
                   <v-text-field v-model="localStepData.name" label="Nome da Etapa"
-                    :rules="[v => !!v || 'Nome é obrigatório']" required />
+                    :rules="[v => !!v || 'O nome da etapa é obrigatório']" required aria-required="true" />
                 </v-col>
                 <v-col cols="12" md="6">
                   <v-select v-model="localStepData.type" :items="[
@@ -45,8 +50,8 @@
                     { title: 'Aprovação', value: 'APPROVAL' },
                     { title: 'Upload de Arquivo', value: 'UPLOAD' },
                     { title: 'Revisão', value: 'REVIEW' }
-                  ]" item-title="title" item-value="value" label="Tipo de Etapa" :rules="[v => !!v || 'Tipo é obrigatório']"
-                    required />
+                  ]" item-title="title" item-value="value" label="Tipo de Etapa" :rules="[v => !!v || 'O tipo da etapa é obrigatório']"
+                    required aria-required="true" />
                 </v-col>
                 <v-col cols="12">
                   <v-textarea v-model="localStepData.description" label="Descrição" rows="2" />
@@ -390,13 +395,13 @@
                     Estes campos são independentes do formulário principal do processo.
                   </p>
 
-                  <v-card variant="flat" class="mb-4 card-soft-border">
-                    <v-card-title class="text-subtitle-1 d-flex align-center justify-space-between">
-                      <span>
-                        <v-icon start color="primary">mdi-form-textbox</v-icon>
+                  <v-card variant="flat" class="mb-4 card-fields-header">
+                    <v-card-title class="fields-card-title d-flex align-center justify-space-between">
+                      <span class="fields-title-text">
+                        <v-icon start color="white">mdi-form-textbox</v-icon>
                         Campos da Etapa ({{ inputConfig.fields.length }})
                       </span>
-                      <v-btn color="primary" size="small" @click="addInputField" prepend-icon="mdi-plus">
+                      <v-btn color="white" variant="outlined" size="small" @click="addInputField" prepend-icon="mdi-plus">
                         Adicionar Campo
                       </v-btn>
                     </v-card-title>
@@ -475,7 +480,7 @@
                   v-model="fieldData.name" 
                   label="Nome do Campo" 
                   :rules="[
-                    v => !!v || 'Nome é obrigatório',
+                    v => !!v || 'O nome do campo é obrigatório',
                     v => /^[a-zA-Z][a-zA-Z0-9_]*$/.test(v) || 'Use apenas letras, números e _'
                   ]"
                   hint="Ex: valor_total, data_vencimento"
@@ -487,7 +492,7 @@
                 <v-text-field 
                   v-model="fieldData.label" 
                   label="Rótulo" 
-                  :rules="[v => !!v || 'Rótulo é obrigatório']"
+                  :rules="[v => !!v || 'O rótulo é obrigatório']"
                   required 
                 />
               </v-col>
@@ -496,7 +501,7 @@
                   v-model="fieldData.type" 
                   :items="fieldTypes" 
                   label="Tipo do Campo"
-                  :rules="[v => !!v || 'Tipo é obrigatório']"
+                  :rules="[v => !!v || 'O tipo do campo é obrigatório']"
                   required 
                 />
               </v-col>
@@ -557,7 +562,7 @@
                           density="comfortable"
                           variant="outlined"
                           hide-details="auto"
-                          :rules="[v => !!v?.trim() || 'Campo obrigatório']"
+                          :rules="[v => !!v?.trim() || 'Este campo é obrigatório']"
                           prepend-inner-icon="mdi-format-text"
                         />
                       </v-col>
@@ -568,7 +573,7 @@
                           density="comfortable"
                           variant="outlined"
                           hide-details="auto"
-                          :rules="[v => !!v?.trim() || 'Campo obrigatório']"
+                          :rules="[v => !!v?.trim() || 'Este campo é obrigatório']"
                           prepend-inner-icon="mdi-code-tags"
                         />
                       </v-col>
@@ -933,9 +938,9 @@ const fileTypes = [
 
 const slaRules = computed(() => {
   return [
-    v => !!v || 'Prazo é obrigatório',
-    v => !v || (v >= 1 && v <= 365) || 'Prazo deve estar entre 1 e 365 dias',
-    v => !v || Number.isInteger(Number(v)) || 'Prazo deve ser um número inteiro'
+    v => !!v || 'O prazo é obrigatório',
+    v => !v || (v >= 1 && v <= 365) || 'O prazo deve estar entre 1 e 365 dias',
+    v => !v || Number.isInteger(Number(v)) || 'O prazo deve ser um número inteiro'
   ]
 })
 
@@ -1481,31 +1486,62 @@ function customUserFilter(itemText, queryText, item) {
 
 <style scoped>
 .step-dialog-card {
-  border-radius: 12px;
+  border-radius: 20px !important;
   overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.step-dialog-card :deep(.v-card-title) {
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  padding: 20px 24px;
 }
 
 .card-soft-border {
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  border-radius: 8px;
+  border: 1px solid var(--color-neutral-200) !important;
+  border-radius: 12px !important;
+  background: var(--color-neutral-50);
+}
+
+/* Card com header colorido para Campos da Etapa */
+.card-fields-header {
+  border: 1px solid var(--color-neutral-200) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.fields-card-title {
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600)) !important;
+  padding: 16px 20px !important;
+}
+
+.fields-title-text {
+  color: white !important;
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
 }
 
 .step-dialog-card :deep(.v-field) {
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .step-dialog-card :deep(.v-field--variant-outlined .v-field__outline__start),
 .step-dialog-card :deep(.v-field--variant-outlined .v-field__outline__end),
 .step-dialog-card :deep(.v-field--variant-outlined .v-field__outline__notch::before),
 .step-dialog-card :deep(.v-field--variant-outlined .v-field__outline__notch::after) {
-  border-color: rgba(0, 0, 0, 0.12);
+  border-color: var(--color-neutral-200);
 }
 
 .step-dialog-card :deep(.v-field--focused .v-field__outline__start),
 .step-dialog-card :deep(.v-field--focused .v-field__outline__end),
 .step-dialog-card :deep(.v-field--focused .v-field__outline__notch::before),
 .step-dialog-card :deep(.v-field--focused .v-field__outline__notch::after) {
-  border-color: rgb(var(--v-theme-primary));
+  border-color: var(--color-primary-500);
+}
+
+.step-dialog-card :deep(.v-field--focused) {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
 .v-expansion-panel-title {
@@ -1514,16 +1550,221 @@ function customUserFilter(itemText, queryText, item) {
 
 .v-card-title {
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 :deep(.v-tabs) {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--color-neutral-50);
+  border-bottom: 1px solid var(--color-neutral-200);
+  padding: 0 8px;
+  overflow: visible !important;
 }
 
 :deep(.v-tab) {
   text-transform: none;
   font-weight: 500;
   letter-spacing: normal;
+  border-radius: 8px 8px 0 0;
+  min-width: auto;
+  padding: 0 16px;
+  margin: 0 2px;
+}
+
+:deep(.v-tab--selected) {
+  background: white;
+  border: 1px solid var(--color-neutral-200);
+  border-bottom-color: white;
+  margin-bottom: -1px;
+}
+
+:deep(.v-card-actions) {
+  padding: 16px 24px;
+  background: var(--color-neutral-50);
+  border-top: 1px solid var(--color-neutral-200);
+}
+
+:deep(.v-btn) {
+  text-transform: none;
+  font-weight: 500;
+  border-radius: 10px;
+}
+
+:deep(.v-switch) {
+  margin: 8px 0;
+}
+
+:deep(.v-alert) {
+  border-radius: 12px;
+}
+
+:deep(.v-chip) {
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+:deep(.v-list-item) {
+  border-radius: 10px;
+  margin: 4px 0;
+}
+
+:deep(.v-list-item:hover) {
+  background: var(--color-neutral-100);
+}
+
+/* Animações suaves */
+:deep(.v-window__container) {
+  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:deep(.v-window-item) {
+  transition: opacity 0.2s ease;
+}
+
+/* Fix para labels não serem cortadas */
+.step-dialog-card :deep(.v-card-text) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-row) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-col) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-window) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-window__container) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-window-item) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-field) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-field__field) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-field__outline) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-text-field),
+.step-dialog-card :deep(.v-select),
+.step-dialog-card :deep(.v-autocomplete),
+.step-dialog-card :deep(.v-textarea) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-input) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-input__control) {
+  overflow: visible !important;
+}
+
+/* Garantir espaço para labels flutuantes */
+.step-dialog-card :deep(.v-text-field .v-field__input),
+.step-dialog-card :deep(.v-select .v-field__input),
+.step-dialog-card :deep(.v-autocomplete .v-field__input) {
+  padding-top: 16px !important;
+}
+
+.step-dialog-card :deep(.v-field--variant-outlined) {
+  --v-field-padding-top: 12px;
+}
+
+/* Garantir espaço no topo do conteúdo para labels */
+.step-dialog-card :deep(.v-card-text) {
+  padding-top: 28px !important;
+}
+
+/* Labels flutuantes precisam de espaço */
+.step-dialog-card :deep(.v-field__outline__notch) {
+  overflow: visible !important;
+}
+
+.step-dialog-card :deep(.v-label) {
+  overflow: visible !important;
+  white-space: nowrap;
+}
+
+/* Garantir que o primeiro row tenha espaço superior */
+.step-dialog-card :deep(.v-window-item > .v-row:first-child) {
+  margin-top: 4px !important;
+}
+
+/* Dialog Header */
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600)) !important;
+  padding: 24px !important;
+}
+
+.header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.header-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: white;
+}
+
+.header-subtitle {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Field Dialog Styles */
+:deep(.v-dialog--nested .v-card) {
+  border-radius: 16px !important;
+}
+
+:deep(.v-dialog--nested .v-card-title) {
+  font-size: 1.125rem;
+  font-weight: 600;
+  padding: 20px 24px;
+  background: var(--color-neutral-50);
+  border-bottom: 1px solid var(--color-neutral-200);
+}
+
+.options-container {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.options-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.options-container::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-300);
+  border-radius: 3px;
 }
 </style>

@@ -1,177 +1,165 @@
 <template>
-  <div>
-    <!-- Header -->
-    <div class="d-flex align-center justify-space-between mb-6">
-      <div>
-        <h1 class="text-h4 font-weight-bold">Setores</h1>
-        <p class="text-subtitle-1 text-medium-emphasis">
-          Gerencie os setores e departamentos da empresa
-        </p>
+  <div class="sectors-page">
+    <!-- Modern Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <div class="header-icon">
+          <v-icon size="28" color="white">mdi-sitemap</v-icon>
+        </div>
+        <div class="header-text">
+          <h1 class="page-title">Setores</h1>
+          <p class="page-subtitle">Organize a estrutura departamental da empresa</p>
+        </div>
       </div>
       <v-btn
-        color="primary"
+        variant="flat"
+        color="white"
         @click="openDialog()"
         prepend-icon="mdi-plus"
+        class="action-btn"
       >
         Novo Setor
       </v-btn>
     </div>
 
-    <!-- Filtros -->
-    <v-card class="mb-6">
-      <v-card-text>
-        <v-row>
-          <v-col cols="12" md="6">
-            <v-text-field
-              v-model="search"
-              label="Buscar setor"
-              prepend-inner-icon="mdi-magnify"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-select
-              v-model="filterActive"
-              :items="activeOptions"
-              label="Status"
-              clearable
-              hide-details
-            />
-          </v-col>
-        </v-row>
-      </v-card-text>
-    </v-card>
+    <!-- Filters -->
+    <div class="filters-card">
+      <div class="filters-grid">
+        <v-text-field
+          v-model="search"
+          placeholder="Buscar setores..."
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          class="filter-input"
+        />
+        <v-select
+          v-model="filterActive"
+          :items="activeOptions"
+          placeholder="Status"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          class="filter-input"
+        />
+      </div>
+    </div>
 
-    <!-- Lista de Setores -->
-    <v-row>
-      <v-col
-        v-for="sector in paginatedSectors"
-        :key="sector.id"
-        cols="12"
-        md="6"
-        lg="4"
+    <!-- Loading State - Skeleton -->
+    <div v-if="loading && sectors.length === 0" class="loading-state" aria-label="Carregando setores">
+      <v-skeleton-loader type="table-heading, table-row@5" class="skeleton-table" />
+    </div>
+
+    <!-- Sectors Table -->
+    <div v-if="!loading || sectors.length > 0" class="table-card">
+      <v-data-table
+        :headers="headers"
+        :items="filteredSectors"
+        :loading="loading"
+        item-key="id"
+        :items-per-page="10"
+        density="comfortable"
+        :no-data-text="search ? 'Nenhum setor encontrado com os filtros.' : 'Nenhum setor cadastrado.'"
+        class="modern-table"
       >
-        <v-hover v-slot="{ isHovering, props }">
-          <v-card
-            v-bind="props"
-            :elevation="isHovering ? 8 : 2"
-            class="h-100 d-flex flex-column"
+        <!-- Name -->
+        <template #item.name="{ item }">
+          <div class="sector-name">
+            <v-icon color="primary" size="20" class="mr-2">mdi-office-building</v-icon>
+            <div>
+              <span class="name-text">{{ item.name }}</span>
+              <p v-if="item.description" class="description-text">{{ item.description }}</p>
+            </div>
+          </div>
+        </template>
+
+        <!-- Status -->
+        <template #item.isActive="{ value }">
+          <v-chip
+            size="small"
+            :color="value ? 'success' : 'error'"
+            variant="flat"
           >
-            <v-card-title class="d-flex align-center">
-              <v-icon
-                :color="sector.isActive ? 'primary' : 'grey'"
-                class="mr-2"
-              >
-                mdi-office-building
-              </v-icon>
-              {{ sector.name }}
-              <v-spacer />
-              <v-chip
-                v-if="!sector.isActive"
-                size="small"
-                color="error"
-                variant="tonal"
-              >
-                Inativo
-              </v-chip>
-            </v-card-title>
+            <v-icon start size="14">{{ value ? 'mdi-check-circle' : 'mdi-cancel' }}</v-icon>
+            {{ value ? 'Ativo' : 'Inativo' }}
+          </v-chip>
+        </template>
 
-            <v-card-subtitle v-if="sector.description">
-              {{ sector.description }}
-            </v-card-subtitle>
+        <!-- Users Count -->
+        <template #item.usersCount="{ value }">
+          <div class="users-count">
+            <v-icon size="16" class="mr-1">mdi-account-group</v-icon>
+            <span>{{ value }} usuários</span>
+          </div>
+        </template>
 
-            <v-card-text class="flex-grow-1">
-              <div class="d-flex align-center mb-2">
-                <v-icon size="20" class="mr-2">mdi-account-group</v-icon>
-                <span class="text-body-2">
-                  {{ sector._count?.users || 0 }} usuários
-                </span>
-              </div>
-              <div class="d-flex align-center">
-                <v-icon size="20" class="mr-2">mdi-calendar</v-icon>
-                <span class="text-body-2">
-                  Criado em {{ formatDate(sector.createdAt) }}
-                </span>
-              </div>
-            </v-card-text>
+        <!-- Created At -->
+        <template #item.createdAt="{ value }">
+          <span class="date-cell">{{ formatDate(value) }}</span>
+        </template>
 
-            <v-divider />
+        <!-- Actions -->
+        <template #item.actions="{ item }">
+          <div class="actions-cell">
+            <v-btn
+              size="small"
+              variant="tonal"
+              color="primary"
+              @click="openDialog(item)"
+            >
+              <v-icon start size="16">mdi-pencil</v-icon>
+              Editar
+            </v-btn>
+            <v-btn
+              v-if="canDelete(item)"
+              size="small"
+              variant="text"
+              color="error"
+              icon="mdi-delete"
+              @click="confirmDelete(item)"
+            />
+          </div>
+        </template>
 
-            <v-card-actions>
-              <v-btn
-                variant="text"
-                size="small"
-                @click="openDialog(sector)"
-              >
-                <v-icon start>mdi-pencil</v-icon>
-                Editar
-              </v-btn>
-              <v-spacer />
-              <v-btn
-                v-if="canDelete(sector)"
-                variant="text"
-                size="small"
-                color="error"
-                @click="confirmDelete(sector)"
-              >
-                <v-icon>mdi-delete</v-icon>
-              </v-btn>
-            </v-card-actions>
-          </v-card>
-        </v-hover>
-      </v-col>
-    </v-row>
+        <!-- Loading -->
+        <template #loading>
+          <div class="table-loading">
+            <v-progress-circular indeterminate color="primary" size="40" />
+          </div>
+        </template>
+      </v-data-table>
+    </div>
 
-    <!-- ✨ Paginação -->
-    <PaginationControls
-      v-model:current-page="currentPage"
-      v-model:items-per-page="itemsPerPage"
-      :total-items="filteredSectors.length"
-      item-label="setores"
-    />
-
-    <!-- Estado vazio -->
-    <v-card
-      v-if="!loading && filteredSectors.length === 0"
-      class="text-center py-12"
+    <!-- Empty State -->
+    <div
+      v-if="!loading && sectors.length === 0"
+      class="empty-state"
     >
       <v-icon size="64" color="grey-lighten-1">
         mdi-office-building-outline
       </v-icon>
-      <p class="text-h6 mt-4 text-grey">
-        Nenhum setor encontrado
+      <p class="empty-title">Nenhum setor cadastrado ainda</p>
+      <p class="empty-subtitle">
+        Crie um novo setor para organizar os usuários da empresa
       </p>
-      <p class="text-body-2 text-grey mb-4">
-        {{ search ? 'Tente ajustar os filtros' : 'Comece criando um novo setor' }}
-      </p>
-      <v-btn
-        v-if="!search"
-        color="primary"
-        @click="openDialog()"
-      >
+      <v-btn color="primary" @click="openDialog()" size="large">
         <v-icon start>mdi-plus</v-icon>
-        Criar Primeiro Setor
+        Criar o Primeiro Setor
       </v-btn>
-    </v-card>
-
-    <!-- Loading -->
-    <div v-if="loading" class="text-center py-12">
-      <v-progress-circular
-        indeterminate
-        color="primary"
-        size="64"
-      />
     </div>
 
     <!-- Dialog de Criação/Edição -->
     <v-dialog
       v-model="dialog"
-      max-width="600"
+      max-width="500"
       persistent
+      aria-labelledby="sector-dialog-title"
     >
-      <v-card>
-        <v-card-title>
+      <v-card class="dialog-card" role="dialog" aria-modal="true">
+        <v-card-title id="sector-dialog-title" class="dialog-title">
           {{ editingItem?.id ? 'Editar Setor' : 'Novo Setor' }}
         </v-card-title>
 
@@ -182,13 +170,15 @@
           v-model="valid"
           @submit.prevent="save"
         >
-          <v-card-text>
+          <v-card-text class="pa-6">
             <v-text-field
               v-model="formData.name"
               label="Nome do Setor"
               :rules="nameRules"
+              variant="outlined"
               required
               class="mb-4"
+              aria-required="true"
             />
 
             <v-textarea
@@ -197,6 +187,8 @@
               rows="3"
               counter="200"
               :rules="descriptionRules"
+              variant="outlined"
+              aria-label="Descrição do setor"
             />
 
             <v-switch
@@ -204,12 +196,13 @@
               v-model="formData.isActive"
               label="Setor Ativo"
               color="primary"
+              class="mt-2"
             />
           </v-card-text>
 
           <v-divider />
 
-          <v-card-actions>
+          <v-card-actions class="pa-4">
             <v-spacer />
             <v-btn
               variant="text"
@@ -220,7 +213,6 @@
             <v-btn
               type="submit"
               color="primary"
-              variant="elevated"
               :loading="saving"
               :disabled="!valid"
             >
@@ -235,17 +227,18 @@
     <v-dialog
       v-model="deleteDialog"
       max-width="400"
+      aria-labelledby="delete-dialog-title"
     >
-      <v-card>
-        <v-card-title>Confirmar Exclusão</v-card-title>
-        
-        <v-card-text>
+      <v-card class="dialog-card" role="alertdialog" aria-modal="true" aria-describedby="delete-dialog-description">
+        <v-card-title id="delete-dialog-title" class="dialog-title">Confirmar Exclusão</v-card-title>
+
+        <v-card-text id="delete-dialog-description" class="pa-6">
           Tem certeza que deseja remover o setor
           <strong>{{ deletingItem?.name }}</strong>?
           Esta ação não pode ser desfeita.
         </v-card-text>
 
-        <v-card-actions>
+        <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn
             variant="text"
@@ -255,7 +248,6 @@
           </v-btn>
           <v-btn
             color="error"
-            variant="elevated"
             @click="deleteSector"
             :loading="deleting"
           >
@@ -269,13 +261,10 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useSectorStore } from '@/stores/sectors'
-import PaginationControls from '@/components/PaginationControls.vue'
 import dayjs from 'dayjs'
 
-const router = useRouter()
 const authStore = useAuthStore()
 const sectorStore = useSectorStore()
 
@@ -290,10 +279,6 @@ const filterActive = ref(null)
 const editingItem = ref(null)
 const deletingItem = ref(null)
 
-// ✨ Estado de paginação
-const currentPage = ref(1)
-const itemsPerPage = ref(12)
-
 const form = ref(null)
 const formData = ref({
   name: '',
@@ -301,23 +286,42 @@ const formData = ref({
   isActive: true
 })
 
+// Options
+const activeOptions = [
+  { title: 'Ativos', value: true },
+  { title: 'Inativos', value: false }
+]
+
+const headers = [
+  { title: 'Setor', key: 'name', width: '350px', align: 'start' },
+  { title: 'Status', key: 'isActive', width: '120px', align: 'center' },
+  { title: 'Usuários', key: 'usersCount', width: '140px', align: 'center' },
+  { title: 'Criado em', key: 'createdAt', width: '130px', align: 'center' },
+  { title: '', key: 'actions', width: '140px', align: 'center', sortable: false },
+]
+
 // Computed
 const loading = computed(() => sectorStore.loading)
 const sectors = computed(() => sectorStore.sectors)
 
-const filteredSectors = computed(() => {
-  let result = sectors.value
+const sectorsWithInfo = computed(() => {
+  return sectors.value.map(sector => ({
+    ...sector,
+    usersCount: sector._count?.users || 0
+  }))
+})
 
-  // Filtro de busca
+const filteredSectors = computed(() => {
+  let result = sectorsWithInfo.value
+
   if (search.value) {
     const searchLower = search.value.toLowerCase()
-    result = result.filter(s => 
+    result = result.filter(s =>
       s.name.toLowerCase().includes(searchLower) ||
       s.description?.toLowerCase().includes(searchLower)
     )
   }
 
-  // Filtro de status
   if (filterActive.value !== null) {
     result = result.filter(s => s.isActive === filterActive.value)
   }
@@ -325,33 +329,15 @@ const filteredSectors = computed(() => {
   return result
 })
 
-const paginatedSectors = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value
-  const end = start + itemsPerPage.value
-  return filteredSectors.value.slice(start, end)
-})
-
-// ✨ Watchers para resetar página quando filtros mudam
-watch([search, filterActive, itemsPerPage], () => {
-  currentPage.value = 1
-})
-
 // Regras de validação
 const nameRules = [
-  v => !!v || 'Nome é obrigatório',
-  v => v.length >= 2 || 'Nome deve ter no mínimo 2 caracteres',
-  v => v.length <= 50 || 'Nome deve ter no máximo 50 caracteres'
+  v => !!v || 'O nome é obrigatório',
+  v => v.length >= 2 || 'O nome deve ter no mínimo 2 caracteres',
+  v => v.length <= 50 || 'O nome deve ter no máximo 50 caracteres'
 ]
 
 const descriptionRules = [
-  v => !v || v.length <= 200 || 'Descrição deve ter no máximo 200 caracteres'
-]
-
-// Opções
-const activeOptions = [
-  { title: 'Todos', value: null },
-  { title: 'Ativos', value: true },
-  { title: 'Inativos', value: false }
+  v => !v || v.length <= 200 || 'A descrição deve ter no máximo 200 caracteres'
 ]
 
 // Métodos
@@ -434,70 +420,241 @@ async function deleteSector() {
   }
 }
 
-function viewSector(sector) {
-  router.push(`/sectors/${sector.id}`)
-}
-
 onMounted(() => {
   sectorStore.fetchSectors()
 })
 </script>
 
 <style scoped>
-/* ✨ Paginação */
-.pagination-section {
-  margin-top: 32px;
+.sectors-page {
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-.pagination-card {
+/* Modern Page Header with Gradient */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
   border-radius: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  background: white;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
 }
 
-.pagination-info {
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white !important;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
+}
+
+.action-btn {
+  text-transform: none;
   font-weight: 500;
+  border-radius: 10px;
+  color: var(--color-primary-600) !important;
 }
 
-.pagination-controls {
-  flex-wrap: wrap;
+/* Filters */
+.filters-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
 }
 
-.items-per-page-select :deep(.v-field) {
-  border-radius: 12px;
+.filters-grid {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  gap: 16px;
 }
 
-.pagination-component :deep(.v-pagination__item) {
-  border-radius: 12px;
+@media (max-width: 600px) {
+  .filters-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.filter-input :deep(.v-field) {
+  border-radius: 10px;
+}
+
+/* Table Card */
+.table-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.modern-table {
+  border: none !important;
+}
+
+.modern-table :deep(th) {
+  background: var(--color-neutral-50) !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-neutral-500) !important;
+  border-bottom: 1px solid var(--color-surface-border) !important;
+}
+
+.modern-table :deep(td) {
+  padding: 16px !important;
+  border-bottom: 1px solid var(--color-surface-border) !important;
+}
+
+.modern-table :deep(tr:hover td) {
+  background: var(--color-neutral-50) !important;
+}
+
+/* Sector Name */
+.sector-name {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.name-text {
+  font-weight: 500;
+  color: var(--color-neutral-800);
+}
+
+.description-text {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-500);
+  margin: 2px 0 0 0;
+}
+
+/* Users Count */
+.users-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  color: var(--color-neutral-600);
+}
+
+/* Date Cell */
+.date-cell {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-600);
+}
+
+/* Actions */
+.actions-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Loading State - Skeleton */
+.loading-state {
+  padding: 0;
+}
+
+.skeleton-table {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+}
+
+.table-loading {
+  display: flex;
+  justify-content: center;
+  padding: 48px;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 64px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+}
+
+.empty-title {
+  font-size: 1.25rem;
   font-weight: 600;
-  min-width: 40px;
-  height: 40px;
+  color: var(--color-neutral-700);
+  margin: 16px 0 8px;
 }
 
-.pagination-component :deep(.v-pagination__item--is-active) {
-  background: linear-gradient(135deg, #1976D2, #42A5F5);
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+.empty-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-neutral-500);
+  margin-bottom: 24px;
 }
 
-/* ✨ Responsividade */
+/* Dialog */
+.dialog-card {
+  border-radius: 16px !important;
+}
+
+.dialog-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  padding: 20px 24px;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
-  .pagination-controls {
-    width: 100%;
-    justify-content: center;
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px;
   }
 
-  .pagination-info {
-    width: 100%;
-    text-align: center;
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
   }
-}
 
-/* ✨ Tema Escuro */
-@media (prefers-color-scheme: dark) {
-  .pagination-card {
-    border-color: rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
+  .action-btn {
+    width: 100%;
+  }
+
+  .filters-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -1,267 +1,252 @@
 <template>
-  <div>
-    <!-- Header -->
-    <div class="mb-6">
-      <h1 class="text-h4 font-weight-bold mb-2">
-        Bem-vindo(a), {{ user?.name }}!
-      </h1>
-      <p class="text-subtitle-1 text-medium-emphasis">
-        {{ greeting }} Aqui está um resumo das suas atividades pessoais em <strong>{{ activeCompany?.name }}</strong>.
-      </p>
+  <div class="dashboard">
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <h1 class="page-title">{{ greeting }}, {{ user?.name?.split(' ')[0] }}!</h1>
+        <p class="page-subtitle">
+          Aqui está o resumo das suas atividades em <span class="company-name">{{ activeCompany?.name }}</span>
+        </p>
+      </div>
+      <div class="header-actions">
+        <v-btn
+          color="primary"
+          variant="flat"
+          @click="createNewProcess"
+          class="new-process-btn"
+        >
+          <v-icon start>mdi-plus</v-icon>
+          Novo Processo
+        </v-btn>
+      </div>
     </div>
 
-    <!-- Cards de estatísticas do usuário -->
-    <v-row class="mb-6">
-      <v-col
+    <!-- Stats Cards -->
+    <div class="stats-grid" role="list" aria-label="Estatísticas do usuário">
+      <div
         v-for="stat in userStats"
         :key="stat.title"
-        cols="12"
-        sm="6"
-        lg="3"
+        class="stat-card"
+        :class="[`stat-card--${stat.colorClass}`, { 'stat-card--clickable': stat.action }]"
+        role="listitem"
+        :aria-label="`${stat.title}: ${stat.value}`"
+        :tabindex="stat.action ? 0 : -1"
+        @click="stat.action && stat.action()"
+        @keydown.enter="stat.action && stat.action()"
       >
-        <v-hover v-slot="{ isHovering, props }">
-          <v-card
-            v-bind="props"
-            :elevation="isHovering ? 8 : 2"
-            class="pa-4 transition-swing cursor-pointer"
-            :color="stat.color"
-            variant="tonal"
-            @click="stat.action && stat.action()"
+        <div class="stat-card__content">
+          <div class="stat-card__icon" :class="`stat-card__icon--${stat.colorClass}`">
+            <v-icon :icon="stat.icon" size="24" />
+          </div>
+          <div class="stat-card__info">
+            <span class="stat-card__label">{{ stat.title }}</span>
+            <span class="stat-card__value">{{ stat.value }}</span>
+          </div>
+          <v-icon
+            v-if="stat.action"
+            class="stat-card__arrow"
+            size="20"
+            aria-hidden="true"
           >
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <p class="text-subtitle-2 text-medium-emphasis mb-1">
-                  {{ stat.title }}
-                </p>
-                <p class="text-h4 font-weight-bold">
-                  {{ stat.value }}
-                </p>
-                <p v-if="stat.subtitle" class="text-caption text-medium-emphasis">
-                  {{ stat.subtitle }}
-                </p>
-              </div>
-              <v-avatar
-                :color="stat.color"
-                size="48"
-              >
-                <v-icon
-                  :icon="stat.icon"
-                  size="24"
-                />
+            mdi-chevron-right
+          </v-icon>
+        </div>
+        <div v-if="stat.progress !== undefined" class="stat-card__progress">
+          <div
+            class="stat-card__progress-bar"
+            :class="`stat-card__progress-bar--${stat.colorClass}`"
+            :style="{ width: `${stat.progress}%` }"
+            role="progressbar"
+            :aria-valuenow="stat.progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="content-grid">
+      <!-- Tasks Section -->
+      <div class="content-card tasks-card">
+        <div class="card-header">
+          <div class="card-header__left">
+            <v-icon color="primary" class="mr-2">mdi-checkbox-marked-circle-outline</v-icon>
+            <h2 class="card-title">Minhas Tarefas</h2>
+            <v-chip v-if="myTasks.length > 0" size="small" color="primary" variant="tonal" class="ml-2">
+              {{ myTasks.length }}
+            </v-chip>
+          </div>
+          <div class="card-header__right">
+            <v-btn
+              variant="text"
+              size="small"
+              @click="refreshTasks"
+              :loading="loadingTasks"
+            >
+              <v-icon start size="18">mdi-refresh</v-icon>
+              Atualizar
+            </v-btn>
+            <v-btn
+              variant="text"
+              size="small"
+              color="primary"
+              @click="goToTasks"
+            >
+              Ver todas
+              <v-icon end size="18">mdi-arrow-right</v-icon>
+            </v-btn>
+          </div>
+        </div>
+
+        <!-- Loading State - Skeleton -->
+        <div v-if="loadingTasks" class="loading-state" aria-label="Carregando tarefas">
+          <v-skeleton-loader
+            type="list-item-avatar-two-line@3"
+            class="skeleton-tasks"
+          />
+        </div>
+
+        <!-- Tasks List -->
+        <div v-else-if="myTasks.length > 0" class="tasks-list" role="list" aria-label="Lista de tarefas pendentes">
+          <div
+            v-for="task in myTasks.slice(0, 5)"
+            :key="task.id"
+            class="task-item"
+            :class="{ 'task-item--urgent': isUrgentTask(task) }"
+            role="listitem"
+            :aria-label="`Tarefa ${task.processInstance.code}: ${task.step.name}`"
+            tabindex="0"
+            @click="openTask(task)"
+            @keydown.enter="openTask(task)"
+          >
+            <div class="task-item__avatar">
+              <v-avatar :color="getStepTypeColor(task.step.type)" size="42">
+                <v-icon :icon="getStepTypeIcon(task.step.type)" size="20" color="white" />
               </v-avatar>
             </div>
-
-            <!-- Progress bar para alguns cards -->
-            <v-progress-linear
-              v-if="stat.progress !== undefined"
-              :model-value="stat.progress"
-              :color="stat.color"
-              height="4"
-              rounded
-              class="mt-3"
-            />
-          </v-card>
-        </v-hover>
-      </v-col>
-    </v-row>
-
-    <v-row>
-      <!-- Minhas Tarefas Pendentes -->
-      <v-col cols="12" lg="8">
-        <v-card>
-          <v-card-title class="d-flex align-center justify-space-between">
-            <div class="d-flex align-center">
-              <v-icon class="mr-2">mdi-clipboard-text</v-icon>
-              <span class="text-h6">Minhas Tarefas Pendentes</span>
-              <v-chip
-                v-if="myTasks.length > 0"
-                size="small"
-                color="primary"
-                class="ml-2"
-              >
-                {{ myTasks.length }}
-              </v-chip>
-            </div>
-            <div>
-              <v-btn
-                variant="text"
-                size="small"
-                @click="refreshTasks"
-                :loading="loadingTasks"
-                class="mr-2"
-              >
-                <v-icon start>mdi-refresh</v-icon>
-                Atualizar
-              </v-btn>
-              <v-btn
-                variant="text"
-                size="small"
-                color="primary"
-                @click="goToTasks"
-              >
-                Ver todas
-                <v-icon end>mdi-arrow-right</v-icon>
-              </v-btn>
-            </div>
-          </v-card-title>
-          
-          <v-divider />
-
-          <!-- Loading -->
-          <v-progress-linear
-            v-if="loadingTasks"
-            indeterminate
-            color="primary"
-          />
-
-          <!-- Lista de tarefas -->
-          <v-list
-            v-if="!loadingTasks && myTasks.length > 0"
-            lines="three"
-            class="py-0"
-          >
-            <template v-for="(task, index) in myTasks.slice(0, 5)" :key="task.id">
-              <v-list-item
-                @click="openTask(task)"
-                class="py-3 cursor-pointer"
-                :class="{ 'bg-error-lighten-5': isUrgentTask(task) }"
-              >
-                <template v-slot:prepend>
-                  <v-avatar
-                    :color="getStepTypeColor(task.step.type)"
-                    size="40"
-                  >
-                    <v-icon
-                      :icon="getStepTypeIcon(task.step.type)"
-                      size="20"
-                    />
-                  </v-avatar>
-                </template>
-
-                <v-list-item-title class="font-weight-medium">
+            <div class="task-item__content">
+              <div class="task-item__header">
+                <span class="task-item__title">
                   {{ task.processInstance.title || task.processInstance.code }}
+                </span>
+                <div class="task-item__badges">
                   <v-chip
                     v-if="task.step.requiresSignature"
                     size="x-small"
                     color="error"
-                    class="ml-2"
+                    variant="flat"
                   >
                     <v-icon start size="12">mdi-draw-pen</v-icon>
                     Assinatura
                   </v-chip>
-                </v-list-item-title>
-                
-                <v-list-item-subtitle>
-                  <div class="mb-1">
-                    <v-icon size="16">mdi-file-document-outline</v-icon>
-                    {{ task.processInstance.processType.name }}
-                    <span class="mx-2">•</span>
-                    <v-icon size="16">mdi-debug-step-over</v-icon>
-                    {{ task.step.name }}
-                  </div>
-                  <div>
-                    <v-icon size="16">mdi-account</v-icon>
-                    {{ task.processInstance.createdBy.name }}
-                    <span class="mx-2">•</span>
-                    <v-icon size="16">mdi-clock-outline</v-icon>
-                    {{ getTimeAgo(task.createdAt) }}
-                  </div>
-                </v-list-item-subtitle>
+                  <v-chip
+                    size="x-small"
+                    :color="getTaskPriorityColor(task)"
+                    variant="tonal"
+                  >
+                    {{ task.processInstance.code }}
+                  </v-chip>
+                </div>
+              </div>
+              <div class="task-item__meta">
+                <span class="meta-item">
+                  <v-icon size="14">mdi-file-document-outline</v-icon>
+                  {{ task.processInstance.processType.name }}
+                </span>
+                <span class="meta-divider">•</span>
+                <span class="meta-item">
+                  <v-icon size="14">mdi-arrow-right-circle-outline</v-icon>
+                  {{ task.step.name }}
+                </span>
+                <span class="meta-divider">•</span>
+                <span class="meta-item">
+                  <v-icon size="14">mdi-clock-outline</v-icon>
+                  {{ getTimeAgo(task.createdAt) }}
+                </span>
+              </div>
+            </div>
+            <div class="task-item__action">
+              <v-btn
+                variant="tonal"
+                color="primary"
+                size="small"
+                @click.stop="openTask(task)"
+              >
+                Executar
+              </v-btn>
+            </div>
+          </div>
+        </div>
 
-                <template v-slot:append>
-                  <div class="text-center">
-                    <v-chip
-                      size="small"
-                      :color="getTaskPriorityColor(task)"
-                      variant="tonal"
-                    >
-                      {{ task.processInstance.code }}
-                    </v-chip>
-                    <div class="text-caption mt-1">
-                      {{ getTaskPriorityText(task) }}
-                    </div>
-                  </div>
-                </template>
-              </v-list-item>
-              
-              <v-divider v-if="index < Math.min(myTasks.length, 5) - 1" />
-            </template>
-          </v-list>
+        <!-- Empty State -->
+        <div v-else class="empty-state">
+          <div class="empty-state__icon">
+            <v-icon size="40">mdi-checkbox-marked-circle-outline</v-icon>
+          </div>
+          <h3 class="empty-state__title">Tudo em dia!</h3>
+          <p class="empty-state__description">
+            Você não tem tarefas pendentes no momento.
+          </p>
+        </div>
+      </div>
 
-          <!-- Estado vazio -->
-          <v-card-text
-            v-else-if="!loadingTasks && myTasks.length === 0"
-            class="text-center py-8"
-          >
-            <v-icon
-              size="64"
-              color="grey-lighten-1"
-            >
-              mdi-checkbox-marked-circle-outline
-            </v-icon>
-            <p class="text-h6 mt-4 text-grey">
-              Nenhuma tarefa pendente
-            </p>
-            <p class="text-body-2 text-grey">
-              Todas as suas tarefas foram concluídas!
-            </p>
-          </v-card-text>
-        </v-card>
-      </v-col>
-
-      <!-- Painel lateral com ações rápidas e atividades -->
-      <v-col cols="12" lg="4">
-       
-        <!-- Ações Rápidas -->
-        <v-card class="mb-4">
-          <v-card-title class="d-flex align-center">
-            <v-icon class="mr-2">mdi-flash</v-icon>
-            Ações Rápidas
-          </v-card-title>
-          
-          <v-card-text>
+      <!-- Sidebar -->
+      <div class="sidebar-content">
+        <!-- Quick Actions -->
+        <div class="content-card quick-actions-card">
+          <div class="card-header">
+            <v-icon color="primary" class="mr-2">mdi-lightning-bolt</v-icon>
+            <h2 class="card-title">Ações Rápidas</h2>
+          </div>
+          <div class="quick-actions">
             <v-btn
               block
               color="primary"
-              variant="elevated"
-              class="mb-3"
+              variant="flat"
+              class="quick-action-btn"
               @click="createNewProcess"
             >
               <v-icon start>mdi-plus</v-icon>
               Novo Processo
             </v-btn>
-            
             <v-btn
               block
               variant="outlined"
-              class="mb-3"
+              class="quick-action-btn"
               @click="goToSignatures"
               :disabled="userPendingSignatures === 0"
             >
               <v-icon start>mdi-draw-pen</v-icon>
               Assinar Documentos
-              <v-chip v-if="userPendingSignatures > 0" size="x-small" color="error" class="ml-2">
+              <v-chip
+                v-if="userPendingSignatures > 0"
+                size="x-small"
+                color="error"
+                variant="flat"
+                class="ml-2"
+              >
                 {{ userPendingSignatures }}
               </v-chip>
             </v-btn>
-            
             <v-btn
               block
               variant="outlined"
+              class="quick-action-btn"
               @click="goToMyProcesses"
             >
-              <v-icon start>mdi-folder-account</v-icon>
+              <v-icon start>mdi-folder-account-outline</v-icon>
               Meus Processos
             </v-btn>
-          </v-card-text>
-        </v-card>
+          </div>
+        </div>
 
-        <!-- Atividade Recente dos Meus Processos -->
-        <v-card>
-          <v-card-title class="d-flex align-center justify-space-between">
-            <div class="d-flex align-center">
-              <v-icon class="mr-2">mdi-history</v-icon>
-              <span>Meus Processos Recentes</span>
+        <!-- Recent Processes -->
+        <div class="content-card recent-processes-card">
+          <div class="card-header">
+            <div class="card-header__left">
+              <v-icon color="primary" class="mr-2">mdi-history</v-icon>
+              <h2 class="card-title">Processos Recentes</h2>
             </div>
             <v-btn
               variant="text"
@@ -271,95 +256,65 @@
             >
               Ver todos
             </v-btn>
-          </v-card-title>
-          
-          <v-divider />
+          </div>
 
-          <!-- Loading -->
-          <v-progress-linear
-            v-if="loadingMyProcesses"
-            indeterminate
-            color="primary"
-          />
+          <!-- Loading State - Skeleton -->
+          <div v-if="loadingMyProcesses" class="loading-state loading-state--small" aria-label="Carregando processos">
+            <v-skeleton-loader
+              type="list-item-avatar@4"
+              class="skeleton-recent"
+            />
+          </div>
 
-          <v-list
-            v-if="!loadingMyProcesses && myRecentProcesses.length > 0"
-            density="comfortable"
-            lines="three"
-          >
-            <v-list-item
-              v-for="(process, index) in myRecentProcesses.slice(0, 3)"
+          <!-- Processes List -->
+          <div v-else-if="myRecentProcesses.length > 0" class="recent-list">
+            <div
+              v-for="process in myRecentProcesses.slice(0, 4)"
               :key="process.id"
+              class="recent-item"
               @click="viewProcess(process)"
-              class="cursor-pointer"
             >
-              <template v-slot:prepend>
-                <v-avatar
-                  :color="getProcessStatusColor(process.status)"
-                  size="32"
-                >
-                  <v-icon
-                    :icon="getProcessStatusIcon(process.status)"
-                    size="16"
-                    color="white"
-                  />
-                </v-avatar>
-              </template>
+              <v-avatar
+                :color="getProcessStatusColor(process.status)"
+                size="36"
+                class="recent-item__avatar"
+              >
+                <v-icon :icon="getProcessStatusIcon(process.status)" size="18" color="white" />
+              </v-avatar>
+              <div class="recent-item__content">
+                <span class="recent-item__title">
+                  {{ process.code }}{{ process.title ? ` - ${process.title}` : '' }}
+                </span>
+                <span class="recent-item__meta">
+                  {{ process.processType.name }} • {{ getTimeAgo(process.createdAt) }}
+                </span>
+              </div>
+              <v-chip
+                :color="getProcessStatusColor(process.status)"
+                size="x-small"
+                variant="flat"
+              >
+                {{ getProcessStatusText(process.status) }}
+              </v-chip>
+            </div>
+          </div>
 
-              <v-list-item-title class="text-body-2 font-weight-medium">
-                {{ process.code }}{{ process.title ? ` - ${process.title}` : ` - ${process.processType.name}` }}
-              </v-list-item-title>
-
-              <v-list-item-subtitle class="text-caption">
-                <div>
-                  <v-icon size="12">mdi-file-document</v-icon>
-                  {{ process.processType.name }}
-                </div>
-                <div class="mt-1">
-                  <v-icon size="12">mdi-calendar</v-icon>
-                  {{ getTimeAgo(process.createdAt) }}
-                  <span class="mx-1">•</span>
-                  <v-icon size="12">mdi-progress-check</v-icon>
-                  {{ getCurrentStepName(process) }}
-                </div>
-              </v-list-item-subtitle>
-
-              <template v-slot:append>
-                <v-chip
-                  :color="getProcessStatusColor(process.status)"
-                  size="x-small"
-                  variant="flat"
-                  class="text-white"
-                >
-                  {{ getProcessStatusText(process.status) }}
-                </v-chip>
-              </template>
-            </v-list-item>
-          </v-list>
-
-          <v-card-text
-            v-else-if="!loadingMyProcesses && myRecentProcesses.length === 0"
-            class="text-center py-6"
-          >
-            <v-icon size="48" color="grey-lighten-1">
-              mdi-folder-outline
-            </v-icon>
-            <p class="text-body-2 text-grey mt-2">
-              Nenhum processo criado ainda
-            </p>
+          <!-- Empty State -->
+          <div v-else class="empty-state empty-state--small">
+            <v-icon size="32" color="grey-lighten-1">mdi-folder-outline</v-icon>
+            <p class="empty-state__description">Nenhum processo criado</p>
             <v-btn
               size="small"
               color="primary"
               variant="text"
               @click="createNewProcess"
-              class="mt-2"
             >
               Criar primeiro processo
             </v-btn>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -379,7 +334,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const processStore = useProcessStore()
 
-// Estado
+// State
 const loadingTasks = ref(false)
 const loadingMyProcesses = ref(false)
 const myRecentProcesses = ref([])
@@ -387,105 +342,90 @@ const myRecentProcesses = ref([])
 // Computed
 const user = computed(() => authStore.user)
 const activeCompany = computed(() => authStore.activeCompany)
-const myTasks = computed(() => processStore.myTasks)
+const myTasks = computed(() => processStore.myTasks || [])
 
-// Saudação baseada no horário
 const greeting = computed(() => {
   const hour = new Date().getHours()
-  if (hour < 12) return 'Bom dia!'
-  if (hour < 18) return 'Boa tarde!'
-  return 'Boa noite!'
+  if (hour < 12) return 'Bom dia'
+  if (hour < 18) return 'Boa tarde'
+  return 'Boa noite'
 })
 
-// ✅ DADOS ESPECÍFICOS DO USUÁRIO - CORRIGIDOS
-const userPendingTasks = computed(() => {
-  return myTasks.value?.length || 0
-})
+const userPendingTasks = computed(() => myTasks.value.length)
 
 const userPendingSignatures = computed(() => {
   if (!myTasks.value) return 0
-
-  // ✅ MESMA LÓGICA DA PÁGINA PendingSignatures.vue
-  // Contar apenas tarefas que:
-  // 1. Têm requisitos de assinatura válidos configurados
-  // 2. Têm PDFs não assinados
   return myTasks.value.filter(task => {
-    // Verificar se tem requisitos de assinatura configurados
-    if (!task.hasValidSignatureRequirements) {
-      return false
-    }
-    const hasPdfAttachments = task.attachments && task.attachments.some(att =>
+    if (!task.hasValidSignatureRequirements) return false
+    const hasPdfAttachments = task.attachments?.some(att =>
       att.mimeType === 'application/pdf' && !att.isSigned
     )
     return hasPdfAttachments
   }).length
 })
 
-const userActiveProcesses = computed(() => {
-  return myRecentProcesses.value.filter(p => p.status === 'IN_PROGRESS').length
-})
+const userActiveProcesses = computed(() =>
+  myRecentProcesses.value.filter(p => p.status === 'IN_PROGRESS').length
+)
 
-const userCompletedProcesses = computed(() => {
-  return myRecentProcesses.value.filter(p => p.status === 'COMPLETED').length
-})
+const userCompletedProcesses = computed(() =>
+  myRecentProcesses.value.filter(p => p.status === 'COMPLETED').length
+)
 
-// ✅ ESTATÍSTICAS FOCADAS NO USUÁRIO
 const userStats = computed(() => [
   {
     title: 'Minhas Tarefas',
     value: userPendingTasks.value,
-    subtitle: userPendingSignatures.value > 0 
+    subtitle: userPendingSignatures.value > 0
       ? `${userPendingSignatures.value} requerem assinatura`
-      : 'Tarefas aguardando sua ação',
-    icon: 'mdi-clipboard-account',
-    color: userPendingTasks.value > 5 ? 'warning' : 'info',
+      : 'Tarefas aguardando ação',
+    icon: 'mdi-checkbox-marked-circle-outline',
+    colorClass: userPendingTasks.value > 5 ? 'warning' : 'info',
     action: () => router.push('/minhas-tarefas'),
   },
   {
-    title: 'Assinaturas Pendentes',
+    title: 'Assinaturas',
     value: userPendingSignatures.value,
-    subtitle: userPendingSignatures.value === 0 
-      ? 'Nenhuma assinatura pendente' 
-      : 'Documentos aguardando assinatura',
+    subtitle: userPendingSignatures.value === 0 ? 'Nenhuma pendente' : 'Documentos para assinar',
     icon: 'mdi-draw-pen',
-    color: userPendingSignatures.value > 0 ? 'error' : 'success',
+    colorClass: userPendingSignatures.value > 0 ? 'error' : 'success',
     action: () => router.push('/assinaturas/pendentes'),
   },
   {
-    title: 'Processos Ativos',
+    title: 'Em Andamento',
     value: userActiveProcesses.value,
-    subtitle: 'Processos criados por você em andamento',
-    icon: 'mdi-rocket-launch',
-    color: 'primary',
+    subtitle: 'Processos ativos',
+    icon: 'mdi-rocket-launch-outline',
+    colorClass: 'primary',
     action: () => router.push('/meus-processos?status=IN_PROGRESS'),
     progress: userActiveProcesses.value > 0 ? Math.min((userActiveProcesses.value / 10) * 100, 100) : 0,
   },
   {
-    title: 'Processos Concluídos',
+    title: 'Concluídos',
     value: userCompletedProcesses.value,
     subtitle: getCompletionInsight(),
-    icon: 'mdi-check-circle',
-    color: 'success',
+    icon: 'mdi-check-circle-outline',
+    colorClass: 'success',
     action: () => router.push('/meus-processos?status=COMPLETED'),
   }
 ])
 
-// Métodos auxiliares
+// Methods
 function getCompletionInsight() {
   const total = myRecentProcesses.value.length
   const completed = userCompletedProcesses.value
-  if (total === 0) return 'Nenhum processo criado ainda'
+  if (total === 0) return 'Nenhum processo'
   const percentage = Math.round((completed / total) * 100)
-  return `${percentage}% dos seus processos`
+  return `${percentage}% concluídos`
 }
 
 function getStepTypeColor(type) {
   const colors = {
-    INPUT: 'blue',
-    APPROVAL: 'orange',
-    UPLOAD: 'purple',
-    REVIEW: 'teal',
-    SIGNATURE: 'red'
+    INPUT: 'info',
+    APPROVAL: 'warning',
+    UPLOAD: 'secondary',
+    REVIEW: 'info',
+    SIGNATURE: 'error'
   }
   return colors[type] || 'grey'
 }
@@ -506,13 +446,6 @@ function getTaskPriorityColor(task) {
   if (daysOpen > 3) return 'error'
   if (daysOpen > 1) return 'warning'
   return 'info'
-}
-
-function getTaskPriorityText(task) {
-  const daysOpen = dayjs().diff(dayjs(task.createdAt), 'day')
-  if (daysOpen > 3) return 'Urgente'
-  if (daysOpen > 1) return 'Alta'
-  return 'Normal'
 }
 
 function isUrgentTask(task) {
@@ -556,12 +489,7 @@ function getProcessStatusText(status) {
   return texts[status] || status
 }
 
-function getCurrentStepName(process) {
-  const currentStep = process.stepExecutions?.find(se => se.status === 'IN_PROGRESS')
-  return currentStep?.step?.name || 'Concluído'
-}
-
-// Métodos de navegação
+// Navigation
 function createNewProcess() {
   router.push('/processos')
 }
@@ -586,7 +514,7 @@ function viewProcess(process) {
   router.push(`/processos/${process.id}`)
 }
 
-// ✅ CARREGAR DADOS - USANDO ENDPOINTS CORRETOS
+// Data Loading
 async function refreshTasks() {
   loadingTasks.value = true
   try {
@@ -597,20 +525,13 @@ async function refreshTasks() {
 }
 
 function extractProcessesFromTasks() {
-  if (!myTasks.value?.length || !user.value?.id) {
-    return []
-  }
-
+  if (!myTasks.value?.length || !user.value?.id) return []
   const seen = new Set()
   return myTasks.value
     .map(task => task.processInstance)
     .filter(process => {
-      if (!process?.id || process.createdBy?.id !== user.value.id) {
-        return false
-      }
-      if (seen.has(process.id)) {
-        return false
-      }
+      if (!process?.id || process.createdBy?.id !== user.value.id) return false
+      if (seen.has(process.id)) return false
       seen.add(process.id)
       return true
     })
@@ -622,7 +543,6 @@ async function loadMyProcesses() {
     const data = await processStore.fetchMyCreatedProcesses()
     myRecentProcesses.value = Array.isArray(data) ? data : []
   } catch (error) {
-    console.error('Failed to load processes created by user for dashboard', error)
     myRecentProcesses.value = extractProcessesFromTasks()
   } finally {
     if (!myRecentProcesses.value.length) {
@@ -637,7 +557,7 @@ async function loadDashboardData() {
     await refreshTasks()
     await loadMyProcesses()
   } catch (error) {
-    // Falha silenciosa
+    // Silent error
   }
 }
 
@@ -656,19 +576,467 @@ watch(
 </script>
 
 <style scoped>
-.transition-swing {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.5, 1);
+.dashboard {
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-.cursor-pointer {
+/* Page Header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32px;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-neutral-900);
+  margin: 0 0 4px 0;
+  line-height: 1.3;
+}
+
+.page-subtitle {
+  font-size: 0.9375rem;
+  color: var(--color-neutral-500);
+  margin: 0;
+}
+
+.company-name {
+  font-weight: 600;
+  color: var(--color-primary-600);
+}
+
+.new-process-btn {
+  font-weight: 600;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stat-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+  padding: 20px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card--clickable {
   cursor: pointer;
 }
 
-.v-list-item:hover {
-  background-color: rgba(0, 0, 0, 0.04);
+.stat-card--clickable:hover {
+  border-color: var(--color-primary-200);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }
 
-.bg-error-lighten-5 {
-  background-color: rgba(244, 67, 54, 0.05);
+.stat-card__content {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.stat-card__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-card__icon--primary {
+  background: var(--color-primary-100);
+  color: var(--color-primary-600);
+}
+
+.stat-card__icon--info {
+  background: var(--color-info-50);
+  color: var(--color-info-600);
+}
+
+.stat-card__icon--success {
+  background: var(--color-success-50);
+  color: var(--color-success-600);
+}
+
+.stat-card__icon--warning {
+  background: var(--color-warning-50);
+  color: var(--color-warning-600);
+}
+
+.stat-card__icon--error {
+  background: var(--color-error-50);
+  color: var(--color-error-600);
+}
+
+.stat-card__info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-card__label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-neutral-500);
+}
+
+.stat-card__value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-neutral-900);
+  line-height: 1.2;
+}
+
+.stat-card__arrow {
+  color: var(--color-neutral-300);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.stat-card--clickable:hover .stat-card__arrow {
+  color: var(--color-primary-500);
+  transform: translateX(2px);
+}
+
+.stat-card--clickable:focus {
+  outline: 2px solid var(--color-primary-300);
+  outline-offset: 2px;
+}
+
+.stat-card__subtitle {
+  font-size: 0.75rem;
+  color: var(--color-neutral-400);
+}
+
+.stat-card__progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--color-neutral-100);
+}
+
+.stat-card__progress-bar {
+  height: 100%;
+  border-radius: 0 2px 0 0;
+  transition: width 0.3s ease;
+}
+
+.stat-card__progress-bar--primary {
+  background: var(--color-primary-500);
+}
+
+/* Content Grid */
+.content-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 24px;
+}
+
+@media (max-width: 1100px) {
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Content Card */
+.content-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-surface-border);
+}
+
+.card-header__left {
+  display: flex;
+  align-items: center;
+}
+
+.card-header__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+  margin: 0;
+}
+
+/* Tasks List */
+.tasks-list {
+  padding: 8px;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.task-item:hover {
+  background: var(--color-neutral-50);
+}
+
+.task-item--urgent {
+  background: var(--color-error-50);
+  border-left: 3px solid var(--color-error-500);
+}
+
+.task-item__avatar {
+  flex-shrink: 0;
+}
+
+.task-item__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-item__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.task-item__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+}
+
+.task-item__badges {
+  display: flex;
+  gap: 6px;
+}
+
+.task-item__meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  color: var(--color-neutral-500);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.meta-divider {
+  color: var(--color-neutral-300);
+}
+
+.task-item__action {
+  flex-shrink: 0;
+}
+
+/* Quick Actions */
+.quick-actions-card {
+  margin-bottom: 16px;
+}
+
+.quick-actions {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.quick-action-btn {
+  justify-content: flex-start;
+  font-weight: 500;
+}
+
+/* Recent Processes */
+.recent-list {
+  padding: 8px;
+}
+
+.recent-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.recent-item:hover {
+  background: var(--color-neutral-50);
+}
+
+.recent-item__avatar {
+  flex-shrink: 0;
+}
+
+.recent-item__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recent-item__title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-neutral-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-item__meta {
+  font-size: 0.75rem;
+  color: var(--color-neutral-500);
+}
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 48px;
+}
+
+.loading-state--small {
+  padding: 32px;
+}
+
+.skeleton-tasks {
+  width: 100%;
+  padding: 0 16px;
+}
+
+.skeleton-tasks :deep(.v-skeleton-loader__bone) {
+  margin-bottom: 8px;
+}
+
+.skeleton-recent {
+  width: 100%;
+  padding: 0 8px;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.empty-state--small {
+  padding: 32px 16px;
+}
+
+.empty-state__icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--color-neutral-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-neutral-400);
+  margin-bottom: 16px;
+}
+
+.empty-state__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+  margin: 0 0 4px 0;
+}
+
+.empty-state__description {
+  font-size: 0.875rem;
+  color: var(--color-neutral-500);
+  margin: 0;
+}
+
+/* Sidebar Content */
+.sidebar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .new-process-btn {
+    width: 100%;
+  }
+
+  .task-item {
+    flex-wrap: wrap;
+  }
+
+  .task-item__action {
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .task-item__action .v-btn {
+    width: 100%;
+  }
 }
 </style>

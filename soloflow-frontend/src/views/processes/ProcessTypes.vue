@@ -1,671 +1,387 @@
 <template>
-  <div>
-    <!-- Header -->
-    <div class="d-flex align-center justify-space-between mb-6">
-      <div>
-        <h1 class="text-h4 font-weight-bold">Tipos de Processo</h1>
-        <p class="text-subtitle-1 text-medium-emphasis">
-          Configure os fluxos de trabalho da empresa
-        </p>
+  <div class="process-types-page">
+    <!-- Modern Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <div class="header-icon">
+          <v-icon size="28" color="white">mdi-sitemap</v-icon>
+        </div>
+        <div class="header-text">
+          <h1 class="page-title">Tipos de Processo</h1>
+          <p class="page-subtitle">Configure os fluxos de trabalho da empresa</p>
+        </div>
       </div>
-      <div class="d-flex gap-2">
-        <v-btn
-          variant="text"
-          @click="refreshData"
-          :loading="refreshing"
-        >
-          <v-icon start>mdi-refresh</v-icon>
-          Atualizar
-        </v-btn>
-        <v-btn
-          color="primary"
-          @click="createNew"
-          prepend-icon="mdi-plus"
-        >
-          Novo Tipo
-        </v-btn>
+      <v-btn
+        variant="flat"
+        color="white"
+        @click="createNew"
+        prepend-icon="mdi-plus"
+        class="action-btn"
+      >
+        Novo Tipo
+      </v-btn>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-card">
+      <div class="filters-grid">
+        <v-text-field
+          v-model="searchQuery"
+          placeholder="Buscar tipos de processo..."
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          class="filter-input"
+        />
+        <v-select
+          v-model="filterStatus"
+          :items="statusOptions"
+          placeholder="Status"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          class="filter-input"
+        />
       </div>
     </div>
 
-    <!-- 🔧 Indicador de carregamento -->
-    <v-alert
-      v-if="loading && processTypes.length === 0"
-      type="info"
-      variant="tonal"
-      class="mb-6"
-    >
-      <v-progress-circular
-        indeterminate
-        size="20"
-        class="mr-3"
+    <!-- Loading State - Skeleton -->
+    <div v-if="loading && processTypes.length === 0" class="loading-state" aria-label="Carregando tipos de processo">
+      <v-skeleton-loader
+        type="list-item-two-line@5"
+        class="skeleton-list"
       />
-      Carregando tipos de processo...
-    </v-alert>
+    </div>
 
-    <!-- 🔧 Alerta de erro -->
+    <!-- Error Alert -->
     <v-alert
       v-if="error"
       type="error"
       variant="tonal"
-      class="mb-6"
       closable
+      class="mb-4"
       @click:close="clearError"
     >
-      <v-icon start>mdi-alert-circle</v-icon>
       {{ error }}
     </v-alert>
 
-    <!-- ✨ Filtro de Busca -->
-    <v-card v-if="!loading || processTypes.length > 0" class="filter-card mb-6" elevation="2">
-      <v-card-text class="py-4">
-        <v-row align="center">
-          <v-col cols="12">
-            <v-text-field
-              v-model="searchQuery"
-              label="Buscar tipo de processo por nome"
-              prepend-inner-icon="mdi-magnify"
-              clearable
-              variant="outlined"
-              density="comfortable"
-              hide-details
-              class="search-field"
-              placeholder="Digite o nome do tipo de processo..."
-            />
-          </v-col>
-        </v-row>
-      </v-card-text>
-    </v-card>
-
-    <!-- Lista de Tipos de Processo -->
-    <v-row v-if="!loading || processTypes.length > 0">
-      <v-col
-        v-for="processType in paginatedProcessTypes"
-        :key="processType.id"
-        cols="12"
-        md="6"
-        lg="4"
+    <!-- Process Types List -->
+    <div v-if="!loading || processTypes.length > 0" class="types-list" role="list" aria-label="Lista de tipos de processo">
+      <div
+        v-for="item in paginatedProcessTypes"
+        :key="item.id"
+        class="type-row"
+        :class="{ 'type-row--inactive': !item.isActive }"
+        role="listitem"
+        :aria-label="`${item.name} - ${item.isActive ? 'Ativo' : 'Inativo'} - ${item.stepsCount} etapas`"
+        tabindex="0"
+        @click="editProcessType(item)"
+        @keydown.enter="editProcessType(item)"
       >
-        <v-hover v-slot="{ isHovering, props }">
-          <v-card
-            v-bind="props"
-            :elevation="isHovering ? 8 : 2"
-            class="h-100 d-flex flex-column transition-all position-relative"
-            :class="{ 'border-warning': processType.hasIssues }"
-          >
-            <!-- 🔧 Badge de status -->
-            <v-chip
-              v-if="processType.hasIssues"
-              size="small"
-              color="warning"
-              class="position-absolute"
-              style="top: 8px; right: 8px; z-index: 1;"
-            >
-              <v-icon start size="16">mdi-alert</v-icon>
-              Atenção
-            </v-chip>
-
-            <v-card-title class="pb-2 d-flex align-center flex-wrap">
-              <v-icon color="primary" class="mr-2">
-                mdi-file-document-multiple-outline
-              </v-icon>
-              <span class="mr-2">{{ processType.name }}</span>
-
-              <!-- Badge de Somente Subprocesso -->
-              <v-tooltip v-if="processType.isChildProcessOnly" location="top">
-                <template v-slot:activator="{ props }">
-                  <v-chip
-                    v-bind="props"
-                    size="x-small"
-                    color="orange"
-                    variant="flat"
-                    class="mr-1"
-                  >
-                    <v-icon start size="12">mdi-lock</v-icon>
-                    Apenas Sub
-                  </v-chip>
-                </template>
-                <span>
-                  Este tipo só pode ser usado como subprocesso
-                </span>
-              </v-tooltip>
-
-              <!-- Badge de Sub-Processo -->
-              <v-tooltip v-if="processType.isSubProcess" location="top">
-                <template v-slot:activator="{ props }">
-                  <v-chip
-                    v-bind="props"
-                    size="x-small"
-                    color="deep-purple"
-                    variant="flat"
-                    class="mr-1"
-                  >
-                    <v-icon start size="12">mdi-source-branch</v-icon>
-                    Sub
-                  </v-chip>
-                </template>
-                <span>
-                  Sub-processo de: {{ processType.parentNames.join(', ') }}
-                </span>
-              </v-tooltip>
-
-              <!-- Badge de Pai (tem sub-processos) -->
-              <v-tooltip v-if="processType.hasChildProcesses" location="top">
-                <template v-slot:activator="{ props }">
-                  <v-chip
-                    v-bind="props"
-                    size="x-small"
-                    color="teal"
-                    variant="flat"
-                  >
-                    <v-icon start size="12">mdi-sitemap</v-icon>
-                    {{ processType.childProcessCount }}
-                  </v-chip>
-                </template>
-                <span>
-                  Possui {{ processType.childProcessCount }} tipo(s) de sub-processo configurado(s)
-                </span>
-              </v-tooltip>
-            </v-card-title>
-
-            <v-card-subtitle v-if="processType.description" class="pb-1">
-              {{ processType.description }}
-            </v-card-subtitle>
-
-            <v-card-text class="flex-grow-1">
-              <!-- 🔧 Estatísticas aprimoradas -->
-              <div class="mb-3">
-                <div class="d-flex align-center justify-space-between mb-2">
-                  <div class="d-flex align-center">
-                    <v-icon size="20" class="mr-2" color="primary">mdi-debug-step-over</v-icon>
-                    <span class="text-body-2">{{ processType.stepsCount }} etapas</span>
-                  </div>
-                  <v-chip
-                    v-if="processType.stepsCount === 0"
-                    size="x-small"
-                    color="warning"
-                    variant="tonal"
-                  >
-                    Sem etapas
-                  </v-chip>
-                </div>
-                
-                <div class="d-flex align-center justify-space-between mb-2">
-                  <div class="d-flex align-center">
-                    <v-icon size="20" class="mr-2" color="info">mdi-form-textbox</v-icon>
-                    <span class="text-body-2">{{ processType.formFieldsCount }} campos</span>
-                  </div>
-                </div>
-                
-                <div class="d-flex align-center justify-space-between">
-                  <div class="d-flex align-center">
-                    <v-icon size="20" class="mr-2" color="success">mdi-counter</v-icon>
-                    <span class="text-body-2">{{ processType.instancesCount }} usos</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 🔧 Preview das etapas melhorado -->
-              <div v-if="processType.stepsCount > 0" class="mt-3">
-                <p class="text-caption text-medium-emphasis mb-2">Fluxo do processo:</p>
-                <div class="d-flex flex-wrap gap-1">
-                  <v-chip
-                    v-for="step in processType.stepsPreview"
-                    :key="step.order"
-                    size="x-small"
-                    class="mr-1 mb-1"
-                    variant="tonal"
-                    :color="getStepTypeColor(step.type)"
-                  >
-                    {{ step.order }}. {{ step.name }}
-                  </v-chip>
-                  
-                  <v-chip
-                    v-if="processType.hasMoreSteps"
-                    size="x-small"
-                    variant="outlined"
-                    class="mb-1"
-                  >
-                    +{{ processType.moreStepsCount }}
-                  </v-chip>
-                </div>
-              </div>
-              
-              <!-- 🔧 Alerta para tipos sem configuração -->
-              <div v-else class="mt-3">
-                <v-alert
-                  type="warning"
-                  variant="tonal"
-                  density="compact"
-                >
-                  <v-icon start size="16">mdi-alert</v-icon>
-                  Nenhuma etapa configurada
-                </v-alert>
-              </div>
-
-              <!-- 🔧 Indicadores de recursos -->
-              <div v-if="processType.stepsCount > 0" class="mt-3">
-                <div class="d-flex flex-wrap gap-1">
-                  <v-chip
-                    v-if="processType.hasSignatureSteps"
-                    size="x-small"
-                    color="error"
-                    variant="tonal"
-                  >
-                    <v-icon start size="12">mdi-draw-pen</v-icon>
-                    Assinatura
-                  </v-chip>
-                  <v-chip
-                    v-if="processType.hasAttachmentSteps"
-                    size="x-small"
-                    color="info"
-                    variant="tonal"
-                  >
-                    <v-icon start size="12">mdi-paperclip</v-icon>
-                    Anexos
-                  </v-chip>
-                  <v-chip
-                    v-if="processType.formFieldsCount > 0"
-                    size="x-small"
-                    color="purple"
-                    variant="tonal"
-                  >
-                    <v-icon start size="12">mdi-form-textbox</v-icon>
-                    Formulário
-                  </v-chip>
-                </div>
-              </div>
-            </v-card-text>
-
-            <v-divider />
-
-            <!-- 🔧 Actions aprimoradas -->
-            <v-card-actions class="pa-4">
-              <!-- Badge de status -->
-              <v-chip
-                :color="processType.isActive ? 'success' : 'error'"
-                size="small"
-                variant="tonal"
+        <!-- Left: Icon + Info -->
+        <div class="type-row__main">
+          <div class="type-row__icon">
+            <v-icon size="20">mdi-sitemap-outline</v-icon>
+          </div>
+          <div class="type-row__info">
+            <div class="type-row__header">
+              <span class="type-row__name">{{ item.name }}</span>
+              <span
+                class="type-row__status"
+                :class="item.isActive ? 'type-row__status--active' : 'type-row__status--inactive'"
               >
-                <v-icon start size="16">
-                  {{ processType.isActive ? 'mdi-check-circle' : 'mdi-cancel' }}
-                </v-icon>
-                {{ processType.isActive ? 'Ativo' : 'Inativo' }}
-              </v-chip>
+                {{ item.isActive ? 'Ativo' : 'Inativo' }}
+              </span>
+            </div>
+            <p v-if="item.description" class="type-row__description">
+              {{ item.description }}
+            </p>
+          </div>
+        </div>
 
-              <v-spacer />
+        <!-- Center: Stats -->
+        <div class="type-row__stats">
+          <div class="stat-pill">
+            <v-icon size="14">mdi-debug-step-over</v-icon>
+            <span>{{ item.stepsCount }}</span>
+          </div>
+          <div class="stat-pill">
+            <v-icon size="14">mdi-form-textbox</v-icon>
+            <span>{{ item.formFieldsCount }}</span>
+          </div>
+          <div class="stat-pill">
+            <v-icon size="14">mdi-file-document-multiple-outline</v-icon>
+            <span>{{ item.instancesCount }}</span>
+          </div>
+        </div>
 
+        <!-- Center: Features -->
+        <div class="type-row__features">
+          <v-tooltip v-if="item.stepsCount === 0" location="top">
+            <template v-slot:activator="{ props }">
+              <span v-bind="props" class="feature-badge feature-badge--warning">
+                <v-icon size="12">mdi-alert</v-icon>
+              </span>
+            </template>
+            <span>Sem etapas configuradas</span>
+          </v-tooltip>
+          <v-tooltip v-if="item.hasSignatureSteps" location="top">
+            <template v-slot:activator="{ props }">
+              <span v-bind="props" class="feature-badge feature-badge--signature">
+                <v-icon size="12">mdi-draw-pen</v-icon>
+              </span>
+            </template>
+            <span>Requer assinatura</span>
+          </v-tooltip>
+          <v-tooltip v-if="item.hasAttachmentSteps" location="top">
+            <template v-slot:activator="{ props }">
+              <span v-bind="props" class="feature-badge feature-badge--attachment">
+                <v-icon size="12">mdi-paperclip</v-icon>
+              </span>
+            </template>
+            <span>Permite anexos</span>
+          </v-tooltip>
+          <v-tooltip v-if="item.formFieldsCount > 0" location="top">
+            <template v-slot:activator="{ props }">
+              <span v-bind="props" class="feature-badge feature-badge--form">
+                <v-icon size="12">mdi-form-textbox</v-icon>
+              </span>
+            </template>
+            <span>Possui formulário</span>
+          </v-tooltip>
+          <v-tooltip v-if="item.hasChildProcesses" location="top">
+            <template v-slot:activator="{ props }">
+              <span v-bind="props" class="feature-badge feature-badge--subprocess">
+                <v-icon size="12">mdi-source-branch</v-icon>
+              </span>
+            </template>
+            <span>{{ item.childProcessCount }} subprocessos</span>
+          </v-tooltip>
+        </div>
+
+        <!-- Right: Actions -->
+        <div class="type-row__actions">
+          <v-btn
+            size="small"
+            variant="text"
+            color="primary"
+            @click.stop="editProcessType(item)"
+          >
+            Editar
+          </v-btn>
+          <v-menu>
+            <template v-slot:activator="{ props }">
               <v-btn
+                v-bind="props"
+                icon="mdi-dots-horizontal"
                 variant="text"
                 size="small"
-                color="primary"
-                @click="editProcessType(processType)"
-                :disabled="loading"
-              >
-                <v-icon start>mdi-pencil</v-icon>
-                Editar
-              </v-btn>
-              
-              <v-menu>
-                <template v-slot:activator="{ props }">
-                  <v-btn
-                    v-bind="props"
-                    icon="mdi-dots-vertical"
-                    variant="text"
-                    size="small"
-                    :disabled="loading"
-                  />
+                @click.stop
+              />
+            </template>
+            <v-list density="compact">
+              <v-list-item @click="toggleProcessTypeStatus(item)">
+                <template v-slot:prepend>
+                  <v-icon size="18">{{ item.isActive ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
                 </template>
-                
-                <v-list>
-                  <v-list-item
-                    @click="toggleProcessTypeStatus(processType)"
-                  >
-                    <v-list-item-title>
-                      <v-icon start>{{ processType.isActive ? 'mdi-cancel' : 'mdi-check-circle' }}</v-icon>
-                      {{ processType.isActive ? 'Desativar' : 'Ativar' }}
-                    </v-list-item-title>
-                  </v-list-item>
-                  <v-list-item
-                    @click="duplicateProcessType(processType)"
-                    :disabled="processType.stepsCount === 0"
-                  >
-                    <v-list-item-title>
-                      <v-icon start>mdi-content-copy</v-icon>
-                      Duplicar
-                    </v-list-item-title>
-                  </v-list-item>
-                </v-list>
-              </v-menu>
-            </v-card-actions>
-          </v-card>
-        </v-hover>
-      </v-col>
-    </v-row>
+                <v-list-item-title>{{ item.isActive ? 'Desativar' : 'Ativar' }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item
+                @click="duplicateProcessType(item)"
+                :disabled="item.stepsCount === 0"
+              >
+                <template v-slot:prepend>
+                  <v-icon size="18">mdi-content-copy</v-icon>
+                </template>
+                <v-list-item-title>Duplicar</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+        </div>
+      </div>
 
-    <!-- ✨ Paginação -->
-    <PaginationControls
-      v-model:current-page="currentPage"
-      v-model:items-per-page="itemsPerPage"
-      :total-items="filteredProcessTypes.length"
-      item-label="tipos de processo"
-    />
+      <!-- Empty Search -->
+      <div v-if="filteredProcessTypes.length === 0 && processTypes.length > 0" class="empty-search">
+        <p>Nenhum tipo encontrado</p>
+        <v-btn variant="text" size="small" @click="clearFilters">Limpar filtros</v-btn>
+      </div>
+    </div>
 
-    <!-- Estado vazio -->
-    <v-card
-      v-if="!loading && processTypes.length === 0 && !error"
-      class="text-center py-12"
-    >
-      <v-icon size="64" color="grey-lighten-1">
-        mdi-file-document-multiple-outline
-      </v-icon>
-      <p class="text-h6 mt-4 text-grey">
-        Nenhum tipo de processo criado
+    <!-- Pagination -->
+    <div v-if="filteredProcessTypes.length > itemsPerPage" class="pagination-wrapper">
+      <span class="pagination-info">
+        {{ paginationStart }}-{{ paginationEnd }} de {{ filteredProcessTypes.length }}
+      </span>
+      <v-pagination
+        v-model="currentPage"
+        :length="totalPages"
+        :total-visible="5"
+        density="compact"
+        rounded
+      />
+    </div>
+
+    <!-- Empty State -->
+    <div v-if="!loading && processTypes.length === 0 && !error" class="empty-state">
+      <div class="empty-state__icon">
+        <v-icon size="32">mdi-sitemap-outline</v-icon>
+      </div>
+      <h3 class="empty-state__title">Nenhum tipo de processo</h3>
+      <p class="empty-state__text">
+        Crie seu primeiro tipo de processo para começar
       </p>
-      <p class="text-body-2 text-grey mb-4">
-        Crie tipos de processo para que os usuários possam iniciar workflows
-      </p>
-      <v-btn
-        color="primary"
-        @click="createNew"
-        size="large"
-      >
+      <v-btn color="primary" @click="createNew">
         <v-icon start>mdi-plus</v-icon>
-        Criar Primeiro Tipo
+        Criar Tipo de Processo
       </v-btn>
-    </v-card>
-
-    <!-- ✨ Estado vazio de busca -->
-    <v-card
-      v-if="!loading && processTypes.length > 0 && filteredProcessTypes.length === 0"
-      class="text-center py-12"
-      elevation="0"
-    >
-      <v-icon size="64" color="grey-lighten-1">
-        mdi-file-search
-      </v-icon>
-      <p class="text-h6 mt-4 text-grey">
-        Nenhum tipo de processo encontrado
-      </p>
-      <p class="text-body-2 text-grey mb-4">
-        Não encontramos tipos de processo que correspondam à busca "{{ searchQuery }}"
-      </p>
-      <v-btn
-        color="primary"
-        variant="outlined"
-        @click="clearSearch"
-      >
-        <v-icon start>mdi-filter-remove</v-icon>
-        Limpar Busca
-      </v-btn>
-    </v-card>
-
-    <!-- 🔧 Loading skeleton (quando recarregando) -->
-    <v-row v-if="loading && processTypes.length > 0">
-      <v-col v-for="n in 3" :key="`skeleton-${n}`" cols="12" md="6" lg="4">
-        <v-skeleton-loader
-          type="card"
-          height="280"
-        />
-      </v-col>
-    </v-row>
-
-    <!-- 🔧 Snackbar para feedback -->
-    <v-snackbar
-      v-model="showSnackbar"
-      :color="snackbarColor"
-      :timeout="3000"
-      location="top right"
-    >
-      {{ snackbarMessage }}
-      <template v-slot:actions>
-        <v-btn
-          variant="text"
-          @click="showSnackbar = false"
-        >
-          Fechar
-        </v-btn>
-      </template>
-    </v-snackbar>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProcessTypeStore } from '@/stores/processTypes'
 import { useAuthStore } from '@/stores/auth'
-import PaginationControls from '@/components/PaginationControls.vue'
 
 const router = useRouter()
 const processTypeStore = useProcessTypeStore()
 const authStore = useAuthStore()
 
-// 🔧 Estado local
+// Estado local
 const refreshing = ref(false)
-const showSnackbar = ref(false)
-const snackbarMessage = ref('')
-const snackbarColor = ref('success')
-
-// ✨ Estado de busca e paginação
 const searchQuery = ref('')
+const filterStatus = ref(null)
 const currentPage = ref(1)
-const itemsPerPage = ref(12)
+const itemsPerPage = 15
+
+// Options
+const statusOptions = [
+  { title: 'Ativos', value: true },
+  { title: 'Inativos', value: false },
+]
 
 // Computed
 const loading = computed(() => processTypeStore.loading)
 const processTypes = computed(() => processTypeStore.processTypes)
 const error = computed(() => processTypeStore.error)
 
-// 🔧 Computed aprimorado para informações dos process types
+// Computed para informações dos process types
 const processTypesWithInfo = computed(() => {
-  // Primeiro, identificar quais tipos são usados como sub-processos
   const usedAsChildProcessIds = new Set()
-  const parentProcessNames = {} // Mapeia ID do filho para nomes dos pais
 
   processTypes.value.forEach(pt => {
     if (Array.isArray(pt.allowedChildProcessTypes) && pt.allowedChildProcessTypes.length > 0) {
       pt.allowedChildProcessTypes.forEach(childId => {
         usedAsChildProcessIds.add(childId)
-        if (!parentProcessNames[childId]) {
-          parentProcessNames[childId] = []
-        }
-        parentProcessNames[childId].push(pt.name)
       })
     }
   })
 
   return processTypes.value.map(processType => {
-    // Garantir que steps e formFields são arrays
     const steps = Array.isArray(processType.steps) ? processType.steps : []
     const formFields = Array.isArray(processType.formFields) ? processType.formFields : []
-
-    // Verificar se este tipo é usado como sub-processo
-    const isSubProcess = usedAsChildProcessIds.has(processType.id)
-    const parentNames = parentProcessNames[processType.id] || []
-
-    // Verificar se este tipo tem sub-processos configurados
     const hasChildProcesses = Array.isArray(processType.allowedChildProcessTypes) &&
                               processType.allowedChildProcessTypes.length > 0
 
     return {
       ...processType,
-      // Contagens corretas
       stepsCount: steps.length,
       formFieldsCount: formFields.length,
       instancesCount: processType._count?.instances || 0,
-
-      // Preview das etapas (primeiras 3)
-      stepsPreview: steps.slice(0, 3).map((step, idx) => ({
-        order: idx + 1,
-        name: step.name || `Etapa ${idx + 1}`,
-        type: step.type || 'INPUT'
-      })),
-
-      // Indicadores
-      hasMoreSteps: steps.length > 3,
-      moreStepsCount: Math.max(0, steps.length - 3),
       hasSignatureSteps: steps.some(step => step.requiresSignature),
       hasAttachmentSteps: steps.some(step => step.allowAttachment),
-      hasIssues: steps.length === 0, // Problema se não tem etapas
-
-      // Indicadores de sub-processo
-      isSubProcess,
-      parentNames,
       hasChildProcesses,
       childProcessCount: processType.allowedChildProcessTypes?.length || 0
     }
   })
 })
 
-// ✨ Computed para filtrar por busca
+// Filtered process types
 const filteredProcessTypes = computed(() => {
   let result = processTypesWithInfo.value
 
-  // Filtro por busca de nome
   if (searchQuery.value) {
     const search = searchQuery.value.toLowerCase().trim()
-    result = result.filter(pt => 
+    result = result.filter(pt =>
       pt.name.toLowerCase().includes(search) ||
       pt.description?.toLowerCase().includes(search)
     )
   }
 
+  if (filterStatus.value !== null) {
+    result = result.filter(pt => pt.isActive === filterStatus.value)
+  }
+
   return result
 })
 
+// Pagination
+const totalPages = computed(() => Math.ceil(filteredProcessTypes.value.length / itemsPerPage))
+const paginationStart = computed(() => (currentPage.value - 1) * itemsPerPage + 1)
+const paginationEnd = computed(() => Math.min(currentPage.value * itemsPerPage, filteredProcessTypes.value.length))
+
 const paginatedProcessTypes = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value
-  const end = start + itemsPerPage.value
-  return filteredProcessTypes.value.slice(start, end)
+  const start = (currentPage.value - 1) * itemsPerPage
+  return filteredProcessTypes.value.slice(start, start + itemsPerPage)
 })
 
-// ✨ Watchers para resetar página quando filtros mudam
-watch([searchQuery, itemsPerPage], () => {
-  currentPage.value = 1
-})
-
-// Métodos auxiliares
-function getStepTypeColor(type) {
-  const colors = {
-    INPUT: 'blue',
-    APPROVAL: 'orange', 
-    UPLOAD: 'purple',
-    REVIEW: 'teal',
-    SIGNATURE: 'red'
-  }
-  return colors[type] || 'grey'
-}
-
-function showMessage(message, color = 'success') {
-  snackbarMessage.value = message
-  snackbarColor.value = color
-  showSnackbar.value = true
-}
-
-// ✨ Método para limpar busca
-function clearSearch() {
-  searchQuery.value = ''
-  currentPage.value = 1
-}
-
-// Métodos principais
+// Methods
 function createNew() {
   router.push('/tipos-de-processo/novo')
 }
 
 function editProcessType(processType) {
-  console.log('📝 Editing process type:', processType.id)
   router.push(`/tipos-de-processo/${processType.id}/editar`)
 }
 
-function viewProcessTypeDetails(processType) {
-  console.log('👁️ Viewing details for:', processType.name)
-  showMessage(`Detalhes de "${processType.name}" - Feature em desenvolvimento`, 'info')
+function clearFilters() {
+  searchQuery.value = ''
+  filterStatus.value = null
+  currentPage.value = 1
 }
 
-function testProcessType(processType) {
-  console.log('🧪 Testing process type:', processType.name)
-  showMessage(`Teste de "${processType.name}" - Feature em desenvolvimento`, 'info')
-}
-
-// 🔧 Método de duplicação aprimorado
 async function duplicateProcessType(processType) {
   if (processType.stepsCount === 0) {
-    showMessage('Não é possível duplicar um tipo de processo sem etapas', 'warning')
+    window.showSnackbar('Não é possível duplicar um tipo sem etapas', 'warning')
     return
   }
 
   try {
-    console.log('📋 Duplicating process type:', processType.name)
-    
     refreshing.value = true
-    
     const result = await processTypeStore.duplicateProcessType(processType)
-    
-    console.log('✅ Process type duplicated:', result.name)
-    showMessage(`Tipo de processo "${result.name}" duplicado com sucesso!`, 'success')
-    
-    // Atualizar lista
+    window.showSnackbar(`"${result.name}" duplicado`, 'success')
     await refreshData()
-    
-  } catch (error) {
-    console.error('❌ Error duplicating process type:', error)
-    showMessage('Erro ao duplicar tipo de processo: ' + (error.message || 'Erro desconhecido'), 'error')
+  } catch (err) {
+    window.showSnackbar('Erro ao duplicar', 'error')
   } finally {
     refreshing.value = false
   }
 }
 
-// Toggle de status ativo/inativo
 async function toggleProcessTypeStatus(processType) {
   const newStatus = !processType.isActive
-  const action = newStatus ? 'ativar' : 'desativar'
 
   try {
-    console.log(`${newStatus ? '✅' : '❌'} Toggling process type status:`, processType.name, 'to', newStatus)
-
     refreshing.value = true
-
-    await processTypeStore.updateProcessType(processType.id, {
-      isActive: newStatus
-    })
-
-    const message = newStatus
-      ? `Tipo de processo "${processType.name}" ativado. Usuários podem criar novas solicitações.`
-      : `Tipo de processo "${processType.name}" desativado. Novas solicitações não poderão ser criadas, mas processos em andamento continuam.`
-
-    showMessage(message, 'success')
-
-    // Atualizar lista
+    await processTypeStore.updateProcessType(processType.id, { isActive: newStatus })
+    window.showSnackbar(newStatus ? 'Ativado' : 'Desativado', 'success')
     await refreshData()
-
-  } catch (error) {
-    console.error(`❌ Error ${action}ing process type:`, error)
-    showMessage(`Erro ao ${action} tipo de processo: ` + (error.message || 'Erro desconhecido'), 'error')
+  } catch (err) {
+    window.showSnackbar('Erro ao alterar status', 'error')
   } finally {
     refreshing.value = false
   }
 }
 
-// 🔧 Método de atualização aprimorado
 async function refreshData() {
   try {
-    console.log('🔄 Refreshing process types...')
-    refreshing.value = true
-    
     await processTypeStore.fetchProcessTypes()
-    
-    console.log('✅ Process types refreshed, count:', processTypes.value.length)
-    
-    if (processTypes.value.length === 0) {
-      showMessage('Nenhum tipo de processo encontrado', 'info')
-    }
-    
-  } catch (error) {
-    console.error('❌ Error refreshing data:', error)
-    showMessage('Erro ao atualizar dados: ' + (error.message || 'Erro desconhecido'), 'error')
-  } finally {
-    refreshing.value = false
+  } catch (err) {
+    window.showSnackbar('Erro ao carregar dados', 'error')
   }
 }
 
@@ -673,126 +389,395 @@ function clearError() {
   processTypeStore.clearError()
 }
 
-// 🔧 Lifecycle melhorado
+// Lifecycle
 onMounted(async () => {
-  console.log('🚀 ProcessTypes page mounted')
-  
-  // Verificar se o usuário tem permissão
   if (!authStore.canManageProcessTypes) {
-    console.warn('⚠️ User does not have permission to manage process types')
-    showMessage('Você não tem permissão para gerenciar tipos de processo', 'error')
+    window.showSnackbar('Sem permissão', 'error')
     router.push('/painel')
     return
   }
-  
-  // Carregar dados se necessário
+
   if (processTypes.value.length === 0 && !loading.value) {
-    console.log('📥 No process types loaded, fetching...')
     await refreshData()
-  } else {
-    console.log('✅ Process types already loaded:', processTypes.value.length)
   }
 })
 </script>
 
 <style scoped>
-.transition-all {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.5, 1);
+.process-types-page {
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-.border-warning {
-  border-left: 4px solid rgb(var(--v-theme-warning)) !important;
+/* Modern Page Header with Gradient */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
 }
 
-.gap-2 {
-  gap: 8px;
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
-.gap-1 {
+.header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
 }
 
-.position-relative {
-  position: relative;
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white !important;
+  margin: 0;
+  letter-spacing: -0.01em;
 }
 
-.position-absolute {
-  position: absolute;
+.page-subtitle {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
 }
 
-/* ✨ Filter Card */
-.filter-card {
-  border-radius: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  backdrop-filter: blur(10px);
+.action-btn {
+  text-transform: none;
+  font-weight: 500;
+  border-radius: 10px;
+  color: var(--color-primary-600) !important;
 }
 
-.search-field :deep(.v-field) {
+/* Filters */
+.filters-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
+  padding: 16px;
+  margin-bottom: 16px;
 }
 
-/* ✨ Paginação */
-.pagination-section {
-  margin-top: 32px;
+.filters-grid {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 12px;
 }
 
-.pagination-card {
-  border-radius: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  background: white;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+@media (max-width: 600px) {
+  .filters-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.pagination-info {
+.filter-input :deep(.v-field) {
+  border-radius: 8px;
+}
+
+/* Types List */
+.types-list {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Type Row */
+.type-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--color-surface-border);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.type-row:last-child {
+  border-bottom: none;
+}
+
+.type-row:hover {
+  background: var(--color-neutral-50);
+}
+
+.type-row--inactive {
+  opacity: 0.6;
+}
+
+.type-row__main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.type-row__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--color-primary-50);
+  color: var(--color-primary-600);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.type-row--inactive .type-row__icon {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-500);
+}
+
+.type-row__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.type-row__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.type-row__name {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-neutral-900);
+}
+
+.type-row__status {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.type-row__status--active {
+  background: var(--color-success-50);
+  color: var(--color-success-700);
+}
+
+.type-row__status--inactive {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-500);
+}
+
+.type-row__description {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-500);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Stats */
+.type-row__stats {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--color-neutral-100);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: var(--color-neutral-600);
+}
+
+.stat-pill .v-icon {
+  color: var(--color-neutral-400);
+}
+
+/* Features */
+.type-row__features {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.feature-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feature-badge--warning {
+  background: var(--color-warning-100);
+  color: var(--color-warning-600);
+}
+
+.feature-badge--signature {
+  background: var(--color-error-50);
+  color: var(--color-error-600);
+}
+
+.feature-badge--attachment {
+  background: var(--color-info-50);
+  color: var(--color-info-600);
+}
+
+.feature-badge--form {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+.feature-badge--subprocess {
+  background: #f0fdfa;
+  color: #0d9488;
+}
+
+/* Actions */
+.type-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.type-row__actions :deep(.v-btn) {
+  text-transform: none;
   font-weight: 500;
 }
 
-.pagination-controls {
-  flex-wrap: wrap;
+/* Empty Search */
+.empty-search {
+  padding: 32px;
+  text-align: center;
+  color: var(--color-neutral-500);
 }
 
-.items-per-page-select :deep(.v-field) {
+.empty-search p {
+  margin: 0 0 8px 0;
+}
+
+/* Pagination */
+.pagination-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  margin-top: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
   border-radius: 12px;
 }
 
-.pagination-component :deep(.v-pagination__item) {
+.pagination-info {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-500);
+}
+
+/* Loading State - Skeleton */
+.loading-state {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
   border-radius: 12px;
+  overflow: hidden;
+}
+
+.skeleton-list {
+  width: 100%;
+}
+
+.skeleton-list :deep(.v-skeleton-loader__bone) {
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--color-surface-border);
+}
+
+/* Focus state for keyboard navigation */
+.type-row:focus {
+  outline: 2px solid var(--color-primary-300);
+  outline-offset: -2px;
+  background: var(--color-neutral-50);
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 12px;
+}
+
+.empty-state__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--color-neutral-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  color: var(--color-neutral-400);
+}
+
+.empty-state__title {
+  font-size: 1rem;
   font-weight: 600;
-  min-width: 40px;
-  height: 40px;
+  color: var(--color-neutral-700);
+  margin: 0 0 4px;
 }
 
-.pagination-component :deep(.v-pagination__item--is-active) {
-  background: linear-gradient(135deg, #1976D2, #42A5F5);
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+.empty-state__text {
+  font-size: 0.875rem;
+  color: var(--color-neutral-500);
+  margin: 0 0 20px;
 }
 
-/* ✨ Responsividade */
-@media (max-width: 768px) {
-  .pagination-controls {
+/* Responsive */
+@media (max-width: 900px) {
+  .type-row__stats,
+  .type-row__features {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-header .v-btn {
     width: 100%;
-    justify-content: center;
   }
 
-  .pagination-info {
-    width: 100%;
-    text-align: center;
-  }
-}
-
-/* ✨ Tema Escuro */
-@media (prefers-color-scheme: dark) {
-  .filter-card,
-  .pagination-card {
-    border-color: rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
+  .type-row {
+    padding: 12px 16px;
   }
 
-  .search-field :deep(.v-field) {
-    background: rgba(255, 255, 255, 0.05);
+  .pagination-wrapper {
+    flex-direction: column;
+    gap: 12px;
   }
 }
 </style>

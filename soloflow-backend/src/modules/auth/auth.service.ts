@@ -5,10 +5,11 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SwitchCompanyDto } from './dto/switch-company.dto';
 import * as bcrypt from 'bcrypt';
-import { UserRole } from '@prisma/client';
+import { UserRole, ConsentType } from '@prisma/client';
 import { ProfilesService } from '../profiles/profiles.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
+import { LgpdService } from '../lgpd/lgpd.service';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +17,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private profilesService: ProfilesService,
+    private lgpdService: LgpdService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -31,11 +33,22 @@ export class AuthService {
     return null;
   }
 
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto, ipAddress?: string, userAgent?: string) {
     const user = await this.validateUser(loginDto.email, loginDto.password);
-    
+
     if (!user) {
       throw new UnauthorizedException('Credenciais inválidas');
+    }
+
+    // LGPD: Registrar consentimento implícito no login (Art. 7 LGPD)
+    // O usuário concorda com a política ao fazer login
+    try {
+      await this.lgpdService.recordMultipleConsents(user.id, [
+        { consentType: 'PRIVACY_POLICY' as ConsentType, accepted: true, ipAddress, userAgent },
+        { consentType: 'TERMS_OF_USE' as ConsentType, accepted: true, ipAddress, userAgent },
+      ]);
+    } catch (error) {
+      console.warn('Erro ao registrar consentimento LGPD:', error.message);
     }
 
     //  MELHORADO: Buscar empresas do usuário com validações rigorosas

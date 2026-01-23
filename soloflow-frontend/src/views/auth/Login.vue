@@ -1,78 +1,102 @@
 <template>
-  <v-card
-    class="mx-auto pa-8 pb-6 login-card"
-    elevation="24"
-    max-width="420"
-    rounded="xl"
-  >
-    <!-- Logo/Título -->
-    <div class="text-center mb-6 logo-container">
+  <v-card class="login-card" elevation="0">
+    <!-- Logo Section -->
+    <div class="logo-section">
       <img src="/logo.png" alt="SoloFlow" class="logo-image" />
-      <p class="subtitle-text">Entre com suas credenciais para continuar</p>
+      <p class="subtitle">Entre com suas credenciais para acessar o sistema</p>
     </div>
 
-    <!-- Formulário -->
+    <!-- Login Form -->
     <v-form
       v-model="valid"
       @submit.prevent="handleLogin"
       ref="form"
+      class="login-form"
     >
-      <v-text-field
-        v-model="credentials.email"
-        :rules="emailRules"
-        label="E-mail"
-        type="email"
-        prepend-inner-icon="mdi-email-outline"
-        variant="outlined"
-        color="primary"
-        class="mb-3 modern-input"
-        density="comfortable"
-      />
+      <!-- Email Field -->
+      <div class="form-group">
+        <label class="form-label" id="email-label">E-mail</label>
+        <v-text-field
+          v-model="credentials.email"
+          :rules="emailRules"
+          type="email"
+          placeholder="seu@email.com"
+          prepend-inner-icon="mdi-email-outline"
+          variant="outlined"
+          density="comfortable"
+          hide-details="auto"
+          class="modern-input"
+          aria-required="true"
+          aria-labelledby="email-label"
+          autocomplete="email"
+        />
+      </div>
 
-      <v-text-field
-        v-model="credentials.password"
-        :rules="passwordRules"
-        :type="showPassword ? 'text' : 'password'"
-        label="Senha"
-        prepend-inner-icon="mdi-lock-outline"
-        :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-        @click:append-inner="showPassword = !showPassword"
-        variant="outlined"
-        color="primary"
-        class="mb-2 modern-input"
-        density="comfortable"
-      />
+      <!-- Password Field -->
+      <div class="form-group">
+        <label class="form-label" id="password-label">Senha</label>
+        <v-text-field
+          v-model="credentials.password"
+          :rules="passwordRules"
+          :type="showPassword ? 'text' : 'password'"
+          placeholder="Digite sua senha"
+          prepend-inner-icon="mdi-lock-outline"
+          :append-inner-icon="showPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+          @click:append-inner="showPassword = !showPassword"
+          variant="outlined"
+          density="comfortable"
+          hide-details="auto"
+          class="modern-input"
+          aria-required="true"
+          aria-labelledby="password-label"
+          autocomplete="current-password"
+        />
+      </div>
 
-      <div class="d-flex align-center justify-space-between mb-4">
+      <!-- Remember & Forgot -->
+      <div class="form-options">
         <v-checkbox
           v-model="rememberMe"
           label="Lembrar-me"
           hide-details
           density="compact"
           color="primary"
+          class="remember-checkbox"
         />
-        <a
-          href="#"
-          class="text-caption text-decoration-none forgot-link"
-          @click.prevent="forgotPassword"
-        >
+        <a href="#" class="forgot-link" @click.prevent="forgotPassword">
           Esqueceu a senha?
         </a>
       </div>
 
-      <!-- Alert de erro -->
+      <!-- LGPD Consent Notice -->
+      <div class="consent-notice">
+        <v-icon size="16" color="primary" class="mr-1">mdi-shield-check</v-icon>
+        <span>
+          Ao entrar, você concorda com nossa
+          <router-link to="/politica-de-privacidade" target="_blank" class="consent-link">
+            Política de Privacidade
+          </router-link>
+          e
+          <router-link to="/termos-de-uso" target="_blank" class="consent-link">
+            Termos de Uso
+          </router-link>.
+        </span>
+      </div>
+
+      <!-- Error Alert -->
       <v-alert
         v-if="authStore.error"
         type="error"
         variant="tonal"
-        class="mb-4"
+        class="error-alert"
         closable
+        density="compact"
         @click:close="authStore.error = null"
       >
         {{ authStore.error }}
       </v-alert>
 
-      <!-- Botão de login -->
+      <!-- Login Button -->
       <v-btn
         :disabled="!valid || authStore.loading"
         :loading="authStore.loading"
@@ -80,16 +104,13 @@
         color="primary"
         size="x-large"
         type="submit"
-        variant="elevated"
-        class="mb-4 login-button"
-        rounded="lg"
+        variant="flat"
+        class="login-button"
+        aria-label="Entrar no sistema"
       >
-        <span class="text-h6 font-weight-medium">Entrar</span>
+        Entrar
       </v-btn>
-
-
     </v-form>
-
   </v-card>
 </template>
 
@@ -110,38 +131,36 @@ const credentials = reactive({
   password: ''
 })
 
-// Carregar credenciais salvas ao montar o componente
+// Load saved email
 onMounted(() => {
   const savedEmail = localStorage.getItem('rememberedEmail')
-  
   if (savedEmail) {
     credentials.email = savedEmail
     rememberMe.value = true
   }
 })
 
-// Regras de validação
+// Validation rules
 const emailRules = [
-  v => !!v || 'E-mail é obrigatório',
-  v => /.+@.+\..+/.test(v) || 'E-mail deve ser válido',
+  v => !!v || 'O e-mail é obrigatório',
+  v => /.+@.+\..+/.test(v) || 'O e-mail deve ser válido',
 ]
 
 const passwordRules = [
-  v => !!v || 'Senha é obrigatória',
-  v => v.length >= 6 || 'Senha deve ter no mínimo 6 caracteres',
+  v => !!v || 'A senha é obrigatória',
+  v => v.length >= 6 || 'A senha deve ter no mínimo 6 caracteres',
 ]
 
 async function handleLogin() {
   if (!valid.value) return
 
   try {
-    // Salvar ou remover e-mail baseado no checkbox
     if (rememberMe.value) {
       localStorage.setItem('rememberedEmail', credentials.email)
     } else {
       localStorage.removeItem('rememberedEmail')
     }
-    
+
     await authStore.login(credentials)
     window.showSnackbar('Login realizado com sucesso!', 'success')
   } catch (error) {
@@ -156,175 +175,218 @@ function forgotPassword() {
 
 <style scoped>
 .login-card {
-  background: rgba(255, 255, 255, 0.95) !important;
+  background: rgba(255, 255, 255, 0.98) !important;
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
-  animation: fadeIn 0.5s ease-out;
+  border-radius: 24px !important;
+  padding: 40px;
+  max-width: 440px;
+  margin: 0 auto;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.03),
+    0 2px 4px rgba(0, 0, 0, 0.03),
+    0 12px 24px rgba(0, 0, 0, 0.06),
+    0 24px 48px rgba(0, 0, 0, 0.06) !important;
+  animation: cardAppear 0.5s ease-out;
 }
 
-@keyframes fadeIn {
+@keyframes cardAppear {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(20px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
-.logo-container {
-  animation: slideDown 0.6s ease-out;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Logo Section */
+.logo-section {
+  text-align: center;
+  margin-bottom: 32px;
 }
 
 .logo-image {
-  width: 280px;
-  height: auto;
-  margin: 0 auto;
-  display: block;
-  filter: drop-shadow(0 4px 12px rgba(37, 99, 235, 0.15));
-  transition: transform 0.3s ease;
+  height: 48px;
+  width: auto;
+  margin-bottom: 16px;
+  animation: logoFloat 0.6s ease-out;
 }
 
-.logo-image:hover {
-  transform: scale(1.05);
-}
-
-.welcome-text {
-  font-size: 1.75rem;
-  font-weight: 600;
-  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin: 0;
-}
-
-.subtitle-text {
-  color: #64748b;
-  font-size: 0.95rem;
-  margin-top: 8px;
-  font-weight: 400;
-}
-
-.modern-input {
-  transition: all 0.3s ease;
-}
-
-.modern-input:deep(.v-field) {
-  border-radius: 12px;
-  transition: all 0.3s ease;
-}
-
-.modern-input:deep(.v-field--focused) {
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-.login-button {
-  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%) !important;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3) !important;
-  text-transform: none;
-  letter-spacing: 0.5px;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.login-button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  transition: left 0.5s ease;
-}
-
-.login-button:hover::before {
-  left: 100%;
-}
-
-.login-button:hover {
-  box-shadow: 0 6px 24px rgba(37, 99, 235, 0.4) !important;
-  transform: translateY(-2px);
-}
-
-.login-button:active {
-  transform: translateY(0);
-}
-
-.forgot-link {
-  color: #2563eb;
-  font-weight: 500;
-  transition: all 0.2s;
-  position: relative;
-}
-
-.forgot-link::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  width: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #2563eb, #1e40af);
-  transition: width 0.3s ease;
-}
-
-.forgot-link:hover::after {
-  width: 100%;
-}
-
-.forgot-link:hover {
-  color: #1e40af;
-}
-
-/* Estilo do checkbox */
-:deep(.v-checkbox .v-selection-control__input) {
-  transition: all 0.3s ease;
-}
-
-/* Alert com animação */
-.v-alert {
-  animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
+@keyframes logoFloat {
   from {
     opacity: 0;
-    transform: translateX(-10px);
+    transform: translateY(-10px);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateY(0);
   }
 }
 
-/* Responsividade */
+.subtitle {
+  font-size: 0.9375rem;
+  color: var(--color-neutral-500);
+  margin: 0;
+  font-weight: 400;
+}
+
+/* Form */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+}
+
+.modern-input :deep(.v-field) {
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.modern-input :deep(.v-field--focused) {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.modern-input :deep(.v-field__outline) {
+  --v-field-border-opacity: 0.3;
+}
+
+.modern-input :deep(.v-field--focused .v-field__outline) {
+  --v-field-border-opacity: 1;
+}
+
+/* Form Options */
+.form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.remember-checkbox {
+  margin-left: -8px;
+}
+
+.remember-checkbox :deep(.v-label) {
+  font-size: 0.875rem;
+  color: var(--color-neutral-600);
+}
+
+.forgot-link {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-primary-600);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.forgot-link:hover {
+  color: var(--color-primary-700);
+  text-decoration: underline;
+}
+
+/* LGPD Consent Notice */
+.consent-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 16px;
+  background: var(--color-primary-50, #eff6ff);
+  border-radius: 10px;
+  font-size: 0.8125rem;
+  color: var(--color-neutral-600);
+  line-height: 1.5;
+}
+
+.consent-notice .v-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.consent-link {
+  color: var(--color-primary-600);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.consent-link:hover {
+  text-decoration: underline;
+}
+
+/* Error Alert */
+.error-alert {
+  border-radius: 12px;
+}
+
+/* Login Button */
+.login-button {
+  height: 52px !important;
+  border-radius: 12px !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35) !important;
+  transition: all 0.2s ease !important;
+}
+
+.login-button:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.45) !important;
+  transform: translateY(-1px);
+}
+
+.login-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Footer */
+.login-footer {
+  margin-top: 32px;
+  text-align: center;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-neutral-200);
+}
+
+.footer-text {
+  font-size: 0.875rem;
+  color: var(--color-neutral-500);
+  margin: 0;
+}
+
+.support-link {
+  color: var(--color-primary-600);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.support-link:hover {
+  text-decoration: underline;
+}
+
+/* Responsive */
 @media (max-width: 600px) {
-  .logo-image {
-    width: 220px;
-  }
-  
-  .welcome-text {
-    font-size: 1.5rem;
-  }
-  
   .login-card {
-    max-width: 90% !important;
+    padding: 32px 24px;
+    border-radius: 20px !important;
+  }
+
+  .logo-image {
+    height: 40px;
+  }
+
+  .login-button {
+    height: 48px !important;
   }
 }
 </style>

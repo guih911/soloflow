@@ -8,10 +8,14 @@ import { AssignUserCompanyDto } from './dto/assign-user-company.dto';
 import { Prisma, User, UserCompany, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
+import { CryptoService } from '../lgpd/crypto.service';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cryptoService: CryptoService,
+  ) {}
 
 
   private async validateProfileForCompany(profileId: string, companyId: string) {
@@ -139,6 +143,15 @@ export class UsersService {
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
+    // Criptografar CPF se fornecido (LGPD)
+    let cpfEncrypted: string | null = null;
+    let cpfHash: string | null = null;
+    if (createUserDto.cpf) {
+      const cpfData = this.cryptoService.encryptCPF(createUserDto.cpf);
+      cpfEncrypted = cpfData.encrypted;
+      cpfHash = cpfData.hash;
+    }
+
     try {
       const { user } = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
@@ -146,7 +159,8 @@ export class UsersService {
             name: createUserDto.name,
             email: createUserDto.email,
             password: hashedPassword,
-            cpf: createUserDto.cpf || null, // Incluir CPF na criação
+            cpf: cpfEncrypted, // CPF criptografado (LGPD)
+            cpfHash: cpfHash,  // Hash para busca
           },
         });
 
@@ -234,7 +248,8 @@ export class UsersService {
       id: uc.user.id,
       name: uc.user.name,
       email: uc.user.email,
-      cpf: uc.user.cpf, // Incluir CPF
+      cpf: uc.user.cpf ? this.cryptoService.decryptCPF(uc.user.cpf) : null, // CPF descriptografado (LGPD)
+      cpfMasked: uc.user.cpf ? this.cryptoService.maskCPF(this.cryptoService.decryptCPF(uc.user.cpf)) : null, // CPF mascarado
       role: uc.role, // Role na empresa atual
       sector: uc.sector,
       isActive: uc.user.isActive,
@@ -278,9 +293,15 @@ export class UsersService {
       throw new NotFoundException('Usuário não encontrado');
     }
 
-    const { password, ...result } = user;
+    const { password, cpf, cpfHash, ...result } = user;
+
+    // Descriptografar CPF para retorno (LGPD)
+    const decryptedCPF = cpf ? this.cryptoService.decryptCPF(cpf) : null;
+
     return {
       ...result,
+      cpf: decryptedCPF,
+      cpfMasked: decryptedCPF ? this.cryptoService.maskCPF(decryptedCPF) : null,
       companies: user.userCompanies.map((uc) => {
         const profileAssignment = user.user_profiles.find(pa => pa.companyId === uc.companyId);
         return {
@@ -305,13 +326,36 @@ export class UsersService {
   async update(id: string, updateUserDto: UpdateUserDto): Promise<any> {
     await this.findOne(id);
 
+    // Preparar dados para atualização
+    const updateData: any = { ...updateUserDto };
+
+    // Criptografar CPF se estiver sendo atualizado (LGPD)
+    if (updateUserDto.cpf !== undefined) {
+      if (updateUserDto.cpf) {
+        const cpfData = this.cryptoService.encryptCPF(updateUserDto.cpf);
+        updateData.cpf = cpfData.encrypted;
+        updateData.cpfHash = cpfData.hash;
+      } else {
+        updateData.cpf = null;
+        updateData.cpfHash = null;
+      }
+    }
+
     const user = await this.prisma.user.update({
       where: { id },
-      data: updateUserDto,
+      data: updateData,
     });
 
-    const { password, ...result } = user;
-    return result;
+    const { password, cpf, cpfHash, ...result } = user;
+
+    // Descriptografar CPF para retorno
+    const decryptedCPF = cpf ? this.cryptoService.decryptCPF(cpf) : null;
+
+    return {
+      ...result,
+      cpf: decryptedCPF,
+      cpfMasked: decryptedCPF ? this.cryptoService.maskCPF(decryptedCPF) : null,
+    };
   }
 
   async updateUserCompanies(id: string, updateDto: UpdateUserCompaniesDto, assignedBy?: string): Promise<any> {

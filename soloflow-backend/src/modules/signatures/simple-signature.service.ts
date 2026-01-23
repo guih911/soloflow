@@ -1,18 +1,22 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFImage } from 'pdf-lib';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import * as crypto from 'crypto';
+import * as path from 'path';
+import * as QRCode from 'qrcode';
 
 export interface SignatureMetadata {
   signer: {
     name: string;
     cpf?: string;
     email: string;
+    company?: string;
+    sector?: string;
   };
   reason?: string;
   location?: string;
   contactInfo?: string;
-  ipAddress?: string; // IP público do assinante
+  ipAddress?: string;
 }
 
 export interface SignatureResult {
@@ -22,26 +26,44 @@ export interface SignatureResult {
   signatureToken: string;
 }
 
+interface AppConfig {
+  appName: string;
+  appUrl: string;
+  companyName: string;
+  logoPath: string;
+  validationUrl: string;
+}
+
 @Injectable()
 export class SimpleSignatureService {
+  private config: AppConfig;
+
+  constructor() {
+    this.config = {
+      appName: process.env.APP_NAME || 'Soloflow',
+      appUrl: process.env.APP_URL || 'http://localhost:5173',
+      companyName: process.env.APP_COMPANY_NAME || 'Soloflow Tecnologia',
+      logoPath: process.env.APP_LOGO_PATH || './assets/logo.png',
+      validationUrl: process.env.SIGNATURE_VALIDATION_URL || 'http://localhost:5173/validar-assinatura',
+    };
+  }
+
   /**
    * Assina um PDF com assinatura digital simples (sem certificado A1)
-   * Valida pela senha do usuário e adiciona marcação visual + hash
+   * Design profissional inspirado em DocuSign, Adobe Sign e ClickSign
    */
   async signPDF(
     pdfPath: string,
     outputPath: string,
     metadata: SignatureMetadata,
-    userPassword: string,
+    _userPassword: string,
     signatureOrder: number = 0,
   ): Promise<SignatureResult> {
     try {
-      // Verificar se arquivo existe
       if (!existsSync(pdfPath)) {
         throw new BadRequestException('Arquivo PDF não encontrado');
       }
 
-      // Carregar PDF
       const existingPdfBytes = readFileSync(pdfPath);
       const pdfDoc = await PDFDocument.load(existingPdfBytes);
 
@@ -51,17 +73,15 @@ export class SimpleSignatureService {
         .update(existingPdfBytes)
         .digest('hex');
 
-      // Obter última página
       const pages = pdfDoc.getPages();
       const lastPage = pages[pages.length - 1];
+      const { width: pageWidth } = lastPage.getSize();
 
-      // Embed font
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      // Embed fonts
+      const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-      const fontSize = 8;
-      const titleSize = 10;
 
-      // Preparar texto da assinatura
+      // Preparar dados da assinatura
       const now = new Date();
       const dateStr = now.toLocaleString('pt-BR', {
         day: '2-digit',
@@ -73,173 +93,313 @@ export class SimpleSignatureService {
         timeZone: 'America/Sao_Paulo',
       });
 
-      // Gerar token único de validação
       const signatureToken = this.generateSignatureToken(
         metadata.signer.email,
         documentHash,
         now.toISOString(),
       );
 
-      // Dimensões da caixa de assinatura (aumentada para acomodar mais informações)
-      const boxWidth = 520;
-      const boxHeight = 140;
-      const margin = 50;
-      const x = margin;
-      // Posição Y calculada baseada na ordem da assinatura (empilha verticalmente)
-      const y = 50 + (signatureOrder * (boxHeight + 10)); // 10px de espaçamento entre assinaturas
+      const validationUrl = `${this.config.validationUrl}/${signatureToken}`;
 
-      // Desenhar borda externa (cinza escuro)
+      // === DIMENSÕES E POSICIONAMENTO ===
+      const boxWidth = 280;
+      const boxHeight = 155;
+      const margin = 40;
+      const spacing = 15;
+
+      // Calcular posição X (centralizado ou lado a lado para múltiplas assinaturas)
+      const signaturesPerRow = Math.floor((pageWidth - margin * 2 + spacing) / (boxWidth + spacing));
+      const col = signatureOrder % signaturesPerRow;
+      const row = Math.floor(signatureOrder / signaturesPerRow);
+
+      const x = margin + col * (boxWidth + spacing);
+      const y = 30 + row * (boxHeight + spacing);
+
+      // === CORES DO TEMA ===
+      const primaryColor = rgb(0.243, 0.318, 0.627);     // #3E51A0 - Azul corporativo
+      const secondaryColor = rgb(0.106, 0.635, 0.467);   // #1BA277 - Verde sucesso
+      const textDark = rgb(0.133, 0.145, 0.161);         // #222529 - Texto principal
+      const textMuted = rgb(0.424, 0.447, 0.475);        // #6C7279 - Texto secundário
+      const borderColor = rgb(0.878, 0.886, 0.898);      // #E0E2E5 - Borda
+      const bgLight = rgb(0.976, 0.98, 0.984);           // #F9FAFB - Fundo claro
+
+      // === DESENHAR CAIXA PRINCIPAL ===
+      // Sombra sutil (simulada com retângulo mais escuro)
+      lastPage.drawRectangle({
+        x: x + 2,
+        y: y - 2,
+        width: boxWidth,
+        height: boxHeight,
+        color: rgb(0.85, 0.85, 0.85),
+        opacity: 0.5,
+      });
+
+      // Fundo principal branco
       lastPage.drawRectangle({
         x: x,
         y: y,
         width: boxWidth,
         height: boxHeight,
-        borderColor: rgb(0.3, 0.3, 0.3),
-        borderWidth: 1.5,
-        color: rgb(1, 1, 1), // Fundo branco
+        color: rgb(1, 1, 1),
+        borderColor: borderColor,
+        borderWidth: 1,
       });
 
-      // Desenhar borda interna (mais clara)
+      // Barra superior colorida (indica assinatura válida)
       lastPage.drawRectangle({
-        x: x + 3,
-        y: y + 3,
-        width: boxWidth - 6,
-        height: boxHeight - 6,
-        borderColor: rgb(0.7, 0.7, 0.7),
-        borderWidth: 0.5,
+        x: x,
+        y: y + boxHeight - 4,
+        width: boxWidth,
+        height: 4,
+        color: secondaryColor,
       });
 
-      // Posição inicial do texto
-      let currentY = y + boxHeight - 20;
-      const textX = x + 15;
+      // === TENTAR CARREGAR LOGO ===
+      let logoImage: PDFImage | null = null;
+      const logoHeight = 22;
+      let logoWidth = 22;
 
-      // Título: "Assinado eletronicamente por"
-      lastPage.drawText('Assinado eletronicamente por', {
-        x: textX,
-        y: currentY,
-        size: titleSize,
+      try {
+        const absoluteLogoPath = path.resolve(this.config.logoPath);
+        if (existsSync(absoluteLogoPath)) {
+          const logoBytes = readFileSync(absoluteLogoPath);
+          const ext = path.extname(absoluteLogoPath).toLowerCase();
+
+          if (ext === '.png') {
+            logoImage = await pdfDoc.embedPng(logoBytes);
+          } else if (ext === '.jpg' || ext === '.jpeg') {
+            logoImage = await pdfDoc.embedJpg(logoBytes);
+          }
+
+          if (logoImage) {
+            const aspectRatio = logoImage.width / logoImage.height;
+            logoWidth = logoHeight * aspectRatio;
+          }
+        }
+      } catch (e) {
+        // Logo não disponível, continuar sem ela
+        console.warn('Logo não encontrada ou inválida:', e.message);
+      }
+
+      // === CABEÇALHO COM LOGO E TÍTULO ===
+      let currentY = y + boxHeight - 22;
+      const contentX = x + 12;
+      const contentWidth = boxWidth - 24;
+
+      // Ícone de verificado (checkmark) ou logo
+      if (logoImage) {
+        lastPage.drawImage(logoImage, {
+          x: contentX,
+          y: currentY - 2,
+          width: logoWidth,
+          height: logoHeight,
+        });
+      } else {
+        // Desenhar círculo verde de verificação se não houver logo
+        lastPage.drawCircle({
+          x: contentX + 10,
+          y: currentY + 8,
+          size: 10,
+          color: secondaryColor,
+        });
+        // Desenhar checkmark simplificado
+        lastPage.drawLine({
+          start: { x: contentX + 5, y: currentY + 7 },
+          end: { x: contentX + 9, y: currentY + 3 },
+          thickness: 2,
+          color: rgb(1, 1, 1),
+        });
+        lastPage.drawLine({
+          start: { x: contentX + 9, y: currentY + 3 },
+          end: { x: contentX + 15, y: currentY + 12 },
+          thickness: 2,
+          color: rgb(1, 1, 1),
+        });
+      }
+
+      // Título "Assinado digitalmente"
+      const headerX = contentX + (logoImage ? logoWidth + 8 : 26);
+      lastPage.drawText('Assinado digitalmente', {
+        x: headerX,
+        y: currentY + 8,
+        size: 9,
         font: fontBold,
-        color: rgb(0.1, 0.1, 0.1),
+        color: textDark,
       });
-      currentY -= 16;
 
-      // Nome do assinante (em negrito e maior)
-      lastPage.drawText(metadata.signer.name.toUpperCase(), {
-        x: textX,
-        y: currentY,
-        size: titleSize,
-        font: fontBold,
-        color: rgb(0, 0, 0),
+      lastPage.drawText(`via ${this.config.appName}`, {
+        x: headerX,
+        y: currentY - 3,
+        size: 7,
+        font: fontRegular,
+        color: textMuted,
       });
+
+      currentY -= 28;
+
+      // === LINHA SEPARADORA ===
+      lastPage.drawLine({
+        start: { x: contentX, y: currentY },
+        end: { x: x + boxWidth - 12, y: currentY },
+        thickness: 0.5,
+        color: borderColor,
+      });
+
+      currentY -= 12;
+
+      // === NOME DO ASSINANTE ===
+      const signerName = metadata.signer.name.toUpperCase();
+      const maxNameWidth = contentWidth - 10;
+      let displayName = signerName;
+
+      // Truncar nome se muito longo
+      while (fontBold.widthOfTextAtSize(displayName, 10) > maxNameWidth && displayName.length > 10) {
+        displayName = displayName.substring(0, displayName.length - 4) + '...';
+      }
+
+      lastPage.drawText(displayName, {
+        x: contentX,
+        y: currentY,
+        size: 10,
+        font: fontBold,
+        color: textDark,
+      });
+
+      currentY -= 12;
+
+      // === CPF (parcialmente oculto para privacidade) ===
+      if (metadata.signer.cpf) {
+        const maskedCpf = this.maskCPF(metadata.signer.cpf);
+        lastPage.drawText(`CPF: ${maskedCpf}`, {
+          x: contentX,
+          y: currentY,
+          size: 7.5,
+          font: fontRegular,
+          color: textMuted,
+        });
+        currentY -= 10;
+      }
+
+      // === E-MAIL ===
+      const maxEmailWidth = contentWidth - 10;
+      let displayEmail = metadata.signer.email;
+      while (fontRegular.widthOfTextAtSize(displayEmail, 7.5) > maxEmailWidth && displayEmail.length > 15) {
+        displayEmail = displayEmail.substring(0, displayEmail.length - 4) + '...';
+      }
+
+      lastPage.drawText(displayEmail, {
+        x: contentX,
+        y: currentY,
+        size: 7.5,
+        font: fontRegular,
+        color: textMuted,
+      });
+
       currentY -= 14;
 
-      // CPF
-      if (metadata.signer.cpf) {
-        lastPage.drawText(`CPF: ${this.formatCPF(metadata.signer.cpf)}`, {
-          x: textX,
-          y: currentY,
-          size: fontSize,
-          font: font,
-          color: rgb(0.2, 0.2, 0.2),
-        });
-        currentY -= 12;
-      }
-
-      // E-mail
-      lastPage.drawText(`E-mail: ${metadata.signer.email}`, {
-        x: textX,
+      // === DATA E HORA ===
+      lastPage.drawText(`${dateStr} (Horário de Brasília)`, {
+        x: contentX,
         y: currentY,
-        size: fontSize,
-        font: font,
-        color: rgb(0.2, 0.2, 0.2),
+        size: 7,
+        font: fontRegular,
+        color: textMuted,
       });
-      currentY -= 12;
 
-      // IP público (se disponível)
+      currentY -= 10;
+
+      // === IP (se disponível) ===
       if (metadata.ipAddress) {
         lastPage.drawText(`IP: ${metadata.ipAddress}`, {
-          x: textX,
+          x: contentX,
           y: currentY,
-          size: fontSize,
-          font: font,
-          color: rgb(0.2, 0.2, 0.2),
+          size: 6.5,
+          font: fontRegular,
+          color: textMuted,
         });
-        currentY -= 12;
+        currentY -= 10;
       }
 
-      // Data e hora
-      lastPage.drawText(`Data e hora: ${dateStr}`, {
-        x: textX,
-        y: currentY,
-        size: fontSize,
-        font: font,
-        color: rgb(0.2, 0.2, 0.2),
+      // === SEÇÃO INFERIOR COM TOKEN E QR CODE ===
+      // Fundo da seção inferior
+      lastPage.drawRectangle({
+        x: x + 1,
+        y: y + 1,
+        width: boxWidth - 2,
+        height: 35,
+        color: bgLight,
       });
-      currentY -= 16;
-
-      // Linha separadora
-      lastPage.drawLine({
-        start: { x: textX, y: currentY },
-        end: { x: x + boxWidth - 15, y: currentY },
-        thickness: 0.5,
-        color: rgb(0.7, 0.7, 0.7),
-      });
-      currentY -= 12;
-
-      // Nota de validade jurídica conforme MP 2.200-2/2001
-      const legalNote1 = 'Este documento foi assinado eletronicamente conforme a MP 2.200-2/2001.';
-      lastPage.drawText(legalNote1, {
-        x: textX,
-        y: currentY,
-        size: 7,
-        font: font,
-        color: rgb(0.3, 0.3, 0.3),
-      });
-      currentY -= 9;
-
-      const legalNote2 = 'Esta é uma assinatura eletrônica simples, com validade restrita a processos';
-      lastPage.drawText(legalNote2, {
-        x: textX,
-        y: currentY,
-        size: 7,
-        font: font,
-        color: rgb(0.3, 0.3, 0.3),
-      });
-      currentY -= 9;
-
-      const legalNote3 = 'administrativos e relações contratuais entre as partes envolvidas.';
-      lastPage.drawText(legalNote3, {
-        x: textX,
-        y: currentY,
-        size: 7,
-        font: font,
-        color: rgb(0.3, 0.3, 0.3),
-      });
-      currentY -= 12;
 
       // Token de validação
-      const validationText = `Token de validação: ${signatureToken}`;
-      lastPage.drawText(validationText, {
-        x: textX,
-        y: currentY,
-        size: 7,
-        font: fontBold,
-        color: rgb(0.1, 0.3, 0.7),
+      lastPage.drawText('Código de verificação:', {
+        x: contentX,
+        y: y + 26,
+        size: 6,
+        font: fontRegular,
+        color: textMuted,
       });
 
-      // Adicionar metadados ao PDF
-      pdfDoc.setTitle('Documento Assinado Digitalmente - Soloflow');
-      pdfDoc.setProducer('Soloflow - Sistema de Gestão de Processos');
+      lastPage.drawText(signatureToken, {
+        x: contentX,
+        y: y + 16,
+        size: 8,
+        font: fontBold,
+        color: primaryColor,
+      });
+
+      // URL de validação
+      const shortUrl = this.config.appUrl.replace(/^https?:\/\//, '');
+      lastPage.drawText(`Verifique em: ${shortUrl}/validar`, {
+        x: contentX,
+        y: y + 6,
+        size: 5.5,
+        font: fontRegular,
+        color: textMuted,
+      });
+
+      // === GERAR QR CODE ===
+      try {
+        const qrCodeDataUrl = await QRCode.toDataURL(validationUrl, {
+          width: 100,
+          margin: 0,
+          color: {
+            dark: '#3E51A0',
+            light: '#FFFFFF',
+          },
+        });
+
+        // Converter data URL para buffer
+        const qrCodeBase64 = qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
+        const qrCodeBuffer = Buffer.from(qrCodeBase64, 'base64');
+        const qrCodeImage = await pdfDoc.embedPng(qrCodeBuffer);
+
+        // Desenhar QR Code
+        const qrSize = 32;
+        lastPage.drawImage(qrCodeImage, {
+          x: x + boxWidth - qrSize - 10,
+          y: y + 5,
+          width: qrSize,
+          height: qrSize,
+        });
+      } catch (qrError) {
+        // Se falhar ao gerar QR Code, apenas logar e continuar
+        console.warn('Erro ao gerar QR Code:', qrError.message);
+      }
+
+      // === METADADOS DO PDF ===
+      pdfDoc.setTitle(`Documento Assinado - ${this.config.appName}`);
+      pdfDoc.setProducer(`${this.config.appName} - Sistema de Gestão de Processos`);
       pdfDoc.setCreator(metadata.signer.name);
       pdfDoc.setAuthor(metadata.signer.name);
       pdfDoc.setSubject(
-        `Documento assinado por ${metadata.signer.name} em ${dateStr}`,
+        `Documento assinado eletronicamente por ${metadata.signer.name} em ${dateStr}`,
       );
       pdfDoc.setKeywords([
         'assinado',
-        'soloflow',
+        'assinatura eletrônica',
+        this.config.appName.toLowerCase(),
         signatureToken,
-        documentHash,
+        documentHash.substring(0, 16),
       ]);
       pdfDoc.setCreationDate(now);
       pdfDoc.setModificationDate(now);
@@ -257,6 +417,7 @@ export class SimpleSignatureService {
             documentHash,
             timestamp: now.toISOString(),
             token: signatureToken,
+            ip: metadata.ipAddress,
           }),
         )
         .digest('hex');
@@ -302,7 +463,7 @@ export class SimpleSignatureService {
         expectedHash: expectedDocumentHash,
         message: isValid
           ? 'Documento íntegro - não foi alterado desde a assinatura'
-          : 'ATENÇÃO: Documento foi alterado após a assinatura',
+          : 'ATENÇÃO: O documento foi modificado após a assinatura',
       };
     } catch (error) {
       throw new BadRequestException(
@@ -312,7 +473,7 @@ export class SimpleSignatureService {
   }
 
   /**
-   * Gera token único de validação
+   * Gera token único de validação (16 caracteres hexadecimais)
    */
   generateSignatureToken(
     email: string,
@@ -349,12 +510,13 @@ export class SimpleSignatureService {
   }
 
   /**
-   * Formata CPF: 000.000.000-00
+   * Mascara CPF para exibição: ***.456.789-**
+   * Protege os dados sensíveis mantendo a identificação parcial
    */
-  private formatCPF(cpf: string): string {
+  private maskCPF(cpf: string): string {
     const cleaned = cpf.replace(/\D/g, '');
-    if (cleaned.length !== 11) return cpf;
-    return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    if (cleaned.length !== 11) return '***.***.***-**';
+    return `***.${cleaned.substring(3, 6)}.${cleaned.substring(6, 9)}-**`;
   }
 
   /**
@@ -367,15 +529,12 @@ export class SimpleSignatureService {
     userPassword: string,
     signatureOrder: number,
   ): Promise<SignatureResult> {
-    // Usa o mesmo método signPDF, mas passa a ordem para posicionar verticalmente
-    const result = await this.signPDF(
+    return this.signPDF(
       pdfPath,
       outputPath,
       metadata,
       userPassword,
       signatureOrder,
     );
-
-    return result;
   }
 }

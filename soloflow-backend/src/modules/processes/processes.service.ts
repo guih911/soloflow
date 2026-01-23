@@ -21,6 +21,7 @@ import {
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
+import { fixFilenameEncoding } from '../../config/multer.config';
 
 export interface AttachmentMeta {
   attachmentId: string;
@@ -181,11 +182,12 @@ export class ProcessesService {
 
     // Upload to R2
     const uploadResult = await this.storageService.upload(file, R2_FOLDERS.ANEXOS);
+    const fixedOriginalName = fixFilenameEncoding(file.originalname);
 
     const attachment: Attachment = await this.prisma.attachment.create({
       data: {
         filename: uploadResult.filename,
-        originalName: file.originalname,
+        originalName: fixedOriginalName,
         mimeType: file.mimetype,
         size: file.size,
         path: uploadResult.key, // Store R2 key
@@ -198,7 +200,7 @@ export class ProcessesService {
       (process.formData as Record<string, any>) || {};
     const attachmentMeta: AttachmentMeta = {
       attachmentId: attachment.id,
-      originalName: file.originalname,
+      originalName: fixedOriginalName,
       size: file.size,
       mimeType: file.mimetype,
     };
@@ -274,11 +276,12 @@ export class ProcessesService {
       async (file: Express.Multer.File) => {
         // Upload to R2
         const uploadResult = await this.storageService.upload(file, R2_FOLDERS.ANEXOS);
+        const fixedOriginalName = fixFilenameEncoding(file.originalname);
 
         return this.prisma.attachment.create({
           data: {
             filename: uploadResult.filename,
-            originalName: file.originalname,
+            originalName: fixedOriginalName,
             mimeType: file.mimetype,
             size: file.size,
             path: uploadResult.key, // Store R2 key
@@ -362,6 +365,7 @@ export class ProcessesService {
 
     // Upload to R2
     const uploadResult = await this.storageService.upload(file, R2_FOLDERS.ANEXOS);
+    const fixedOriginalName = fixFilenameEncoding(file.originalname);
 
     // Se é um arquivo de campo do formulário da etapa, marcar no signatureData
     const signatureData = isStepFormField
@@ -371,7 +375,7 @@ export class ProcessesService {
     const attachment: Attachment = await this.prisma.attachment.create({
       data: {
         filename: uploadResult.filename,
-        originalName: file.originalname,
+        originalName: fixedOriginalName,
         mimeType: file.mimetype,
         size: file.size,
         path: uploadResult.key, // Store R2 key
@@ -706,6 +710,14 @@ export class ProcessesService {
                     status: true,
                     signerId: true,
                     requirementId: true,
+                    signedAt: true,
+                    signerName: true,
+                    signer: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
                   },
                 },
               },

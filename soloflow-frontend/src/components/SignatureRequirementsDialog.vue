@@ -1,9 +1,9 @@
 <template>
-  <v-dialog :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" max-width="800" persistent>
-    <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
+  <v-dialog :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" max-width="800" persistent aria-labelledby="signature-config-title">
+    <v-card role="dialog" aria-modal="true">
+      <v-card-title id="signature-config-title" class="d-flex align-center justify-space-between">
         <div>
-          <v-icon start color="primary">mdi-draw-pen</v-icon>
+          <v-icon start color="primary" aria-hidden="true">mdi-draw-pen</v-icon>
           Configurar Assinantes
         </div>
         <v-btn
@@ -39,12 +39,13 @@
           </v-btn>
         </div>
 
-        <v-list v-if="requirements.length > 0" lines="two">
+        <v-list v-if="requirements.length > 0" lines="two" role="list" aria-label="Lista de assinantes configurados">
           <v-list-item
             v-for="(req, index) in sortedRequirements"
             :key="req.tempId || req.id"
             class="mb-2"
             border
+            role="listitem"
           >
             <template #prepend>
               <v-avatar :color="req.type === 'SEQUENTIAL' ? 'primary' : 'secondary'" size="40">
@@ -123,9 +124,9 @@
     </v-card>
 
     <!-- Dialog para adicionar/editar assinante -->
-    <v-dialog v-model="requirementDialog" max-width="600" persistent>
-      <v-card>
-        <v-card-title>
+    <v-dialog v-model="requirementDialog" max-width="600" persistent aria-labelledby="requirement-dialog-title">
+      <v-card role="dialog" aria-modal="true">
+        <v-card-title id="requirement-dialog-title">
           {{ editingIndex !== null ? 'Editar' : 'Adicionar' }} Assinante
         </v-card-title>
 

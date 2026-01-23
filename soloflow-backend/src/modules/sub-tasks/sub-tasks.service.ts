@@ -20,6 +20,7 @@ import {
   SubTaskAssignmentType,
   StepExecutionStatus,
 } from '@prisma/client';
+import { fixFilenameEncoding } from '../../config/multer.config';
 
 @Injectable()
 export class SubTasksService {
@@ -541,12 +542,13 @@ export class SubTasksService {
 
     // Upload to R2
     const uploadResult = await this.storageService.upload(file, R2_FOLDERS.SUBTAREFAS);
+    const fixedOriginalName = fixFilenameEncoding(file.originalname);
 
     return this.prisma.subTask.update({
       where: { id: subTaskId },
       data: {
         attachmentPath: uploadResult.key, // Store R2 key
-        attachmentName: file.originalname,
+        attachmentName: fixedOriginalName,
         attachmentSize: file.size,
         attachmentMimeType: file.mimetype,
         requireSignature: requireSignature,

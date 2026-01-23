@@ -1,10 +1,14 @@
 import { PrismaService } from "../src/prisma/prisma.service";
 import { UsersService } from "../src/modules/users/users.service";
+import { CryptoService } from "../src/modules/lgpd/crypto.service";
+import { ConfigService } from "@nestjs/config";
 import { UserRole } from "@prisma/client";
 
 async function main() {
   const prisma = new PrismaService();
-  const service = new UsersService(prisma);
+  const configService = new ConfigService();
+  const cryptoService = new CryptoService(configService);
+  const service = new UsersService(prisma, cryptoService);
 
   const dto = {
     name: "CPF Test Service",

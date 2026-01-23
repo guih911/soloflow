@@ -1,269 +1,243 @@
 <template>
-  <div>
-    <!-- Header -->
-    <div class="d-flex align-center justify-space-between mb-6">
-      <div>
-        <h1 class="text-h4 font-weight-bold">Gerenciar Processos</h1>
-        <p class="text-subtitle-1 text-medium-emphasis">
-          Visualize e acompanhe todos os processos da empresa
-        </p>
+  <div class="manage-processes-page">
+    <!-- Modern Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <div class="header-icon">
+          <v-icon size="28" color="white">mdi-folder-multiple</v-icon>
+        </div>
+        <div class="header-text">
+          <h1 class="page-title">Gerenciar Processos</h1>
+          <p class="page-subtitle">Visualize e acompanhe todos os processos da empresa</p>
+        </div>
       </div>
       <v-btn
-        color="primary"
+        variant="flat"
+        color="white"
         @click="createProcess"
         prepend-icon="mdi-plus"
+        class="action-btn"
       >
         Novo Processo
       </v-btn>
     </div>
 
-    <!-- Filtros -->
-    <v-card class="mb-6">
-      <v-card-text>
-        <v-row>
-          <v-col cols="12" md="4">
-            <v-text-field
-              v-model="filters.search"
-              label="Buscar processo"
-              prepend-inner-icon="mdi-magnify"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-select
-              v-model="filters.processTypeId"
-              :items="processTypes"
-              item-title="name"
-              item-value="id"
-              label="Tipo de Processo"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-select
-              v-model="filters.status"
-              :items="statusOptions"
-              label="Status"
-              clearable
-              hide-details
-            />
-          </v-col>
-        </v-row>
-      </v-card-text>
-    </v-card>
-
-    <!-- Lista de Processos em Cartões -->
-    <v-row v-if="!loading">
-      <v-col
-        v-for="process in paginatedProcesses"
-        :key="process.id"
-        cols="12"
-        md="6"
-        lg="4"
-      >
-        <v-hover v-slot="{ isHovering, props }">
-          <v-card
-            v-bind="props"
-            :elevation="isHovering ? 8 : 2"
-            class="h-100 d-flex flex-column"
-            @click="viewProcess(process)"
-          >
-            <!-- Status Badge -->
-            <v-sheet
-              :color="getStatusColor(process.status)"
-              class="pa-2 d-flex align-center justify-space-between"
-            >
-              <v-chip
-                size="small"
-                color="white"
-                variant="tonal"
-              >
-                {{ process.code }}
-              </v-chip>
-              <span class="text-caption text-white">
-                {{ getStatusText(process.status) }}
-              </span>
-            </v-sheet>
-
-            <v-card-title class="pb-1 d-flex align-center">
-              <div class="text-truncate" style="max-width: 280px;" :title="process.code + ' - ' + (process.title || process.processType.name)">
-                {{ process.code }} - {{ process.title || process.processType.name }}
-              </div>
-              <v-chip
-                v-if="process.isChildProcess"
-                size="x-small"
-                color="secondary"
-                variant="tonal"
-                class="ml-2"
-              >
-                <v-icon start size="12">mdi-source-branch</v-icon>
-                Sub-processo
-              </v-chip>
-            </v-card-title>
-
-            <v-card-subtitle v-if="process.title && process.title !== 'undefined'">
-              <v-icon size="16">mdi-text</v-icon>
-              {{ process.title }}
-            </v-card-subtitle>
-
-            <!-- Link para processo pai se for sub-processo -->
-            <v-card-subtitle v-if="process.isChildProcess && process.parentProcess" class="pt-0">
-              <v-icon size="16" color="secondary">mdi-link-variant</v-icon>
-              Vinculado a: <span class="text-secondary font-weight-medium">{{ process.parentProcess.code }}</span>
-            </v-card-subtitle>
-
-            <v-card-text class="flex-grow-1">
-              <div v-if="process.description" class="text-body-2 mb-3">
-                {{ process.description }}
-              </div>
-
-              <!-- Informações do Processo -->
-              <div class="text-caption">
-                <div class="d-flex align-center mb-2">
-                  <v-icon size="16" class="mr-1">mdi-account</v-icon>
-                  <span>Criado por: {{ process.createdBy.name }}</span>
-                </div>
-                <div class="d-flex align-center mb-2">
-                  <v-icon size="16" class="mr-1">mdi-calendar</v-icon>
-                  <span>Iniciado: {{ formatDate(process.createdAt) }}</span>
-                </div>
-                <div v-if="process.completedAt" class="d-flex align-center mb-2">
-                  <v-icon size="16" class="mr-1">mdi-calendar-check</v-icon>
-                  <span>Concluído: {{ formatDate(process.completedAt) }}</span>
-                </div>
-              </div>
-
-              <!-- Progress -->
-              <div class="mt-3">
-                <div class="d-flex justify-space-between text-caption mb-1">
-                  <span>Progresso</span>
-                  <span>{{ getProgress(process) }}%</span>
-                </div>
-                <v-progress-linear
-                  :model-value="getProgress(process)"
-                  :color="getProgressColor(process)"
-                  height="6"
-                  rounded
-                />
-              </div>
-
-              <!-- Etapa Atual -->
-              <div v-if="getCurrentStep(process)" class="mt-3">
-                <v-chip
-                  size="small"
-                  variant="tonal"
-                  :color="getStepTypeColor(getCurrentStep(process).step.type)"
-                >
-                  <v-icon start size="16">
-                    {{ getStepTypeIcon(getCurrentStep(process).step.type) }}
-                  </v-icon>
-                  {{ getCurrentStep(process).step.name }}
-                </v-chip>
-              </div>
-            </v-card-text>
-
-            <v-divider />
-
-            <v-card-actions>
-              <v-btn
-                variant="text"
-                size="small"
-                @click.stop="viewProcess(process)"
-              >
-                <v-icon start>mdi-eye</v-icon>
-                Visualizar
-              </v-btn>
-              <v-spacer />
-              <v-chip
-                size="x-small"
-                variant="text"
-              >
-                <v-icon start size="16">mdi-attachment</v-icon>
-                {{ getAttachmentCount(process) }}
-              </v-chip>
-              <v-chip
-                size="x-small"
-                variant="text"
-              >
-                <v-icon start size="16">mdi-comment-outline</v-icon>
-                {{ getCommentCount(process) }}
-              </v-chip>
-            </v-card-actions>
-          </v-card>
-        </v-hover>
-      </v-col>
-    </v-row>
-
-    <!-- Estado vazio -->
-    <v-card
-      v-if="!loading && filteredProcesses.length === 0"
-      class="text-center py-12"
-    >
-      <v-icon size="64" color="grey-lighten-1">
-        mdi-file-document-multiple-outline
-      </v-icon>
-      <p class="text-h6 mt-4 text-grey">
-        Nenhum processo encontrado
-      </p>
-      <p class="text-body-2 text-grey mb-4">
-        {{ hasFilters ? 'Tente ajustar os filtros' : 'Comece criando um novo processo' }}
-      </p>
-      <v-btn
-        v-if="!hasFilters"
-        color="primary"
-        @click="createProcess"
-      >
-        <v-icon start>mdi-plus</v-icon>
-        Criar Primeiro Processo
-      </v-btn>
-    </v-card>
-
-    <!-- Loading -->
-    <div v-if="loading" class="text-center py-12">
-      <v-progress-circular
-        indeterminate
-        color="primary"
-        size="64"
-      />
+    <!-- Loading State - Skeleton -->
+    <div v-if="loading && processes.length === 0" class="loading-state" aria-label="Carregando processos">
+      <v-skeleton-loader type="table-heading, table-row@5" class="skeleton-table" />
     </div>
 
-    <!-- Paginação -->
-    <PaginationControls
-      v-model:current-page="currentPage"
-      v-model:items-per-page="itemsPerPage"
-      :total-items="filteredProcesses.length"
-      item-label="processos"
-    />
+    <!-- Tabela de Processos -->
+    <v-card v-if="!loading || processes.length > 0" flat class="table-card">
+      <v-data-table
+        :headers="headers"
+        :items="filteredProcesses"
+        :loading="loading"
+        :search="filters.search"
+        class="elevation-0 processes-table"
+        items-per-page-text="Itens por página"
+        :items-per-page-options="[
+          { value: 10, title: '10' },
+          { value: 25, title: '25' },
+          { value: 50, title: '50' },
+          { value: -1, title: 'Todos' }
+        ]"
+        no-data-text="Nenhum processo encontrado"
+        loading-text="Carregando..."
+        page-text="{0}-{1} de {2}"
+        hover
+        @click:row="(event, { item }) => viewProcess(item)"
+      >
+        <template v-slot:top>
+          <v-card-title class="table-header">
+            <div class="table-header-left">
+              <v-icon icon="mdi-folder-multiple" class="mr-2" aria-hidden="true"></v-icon>
+              Lista de Processos
+              <v-chip size="small" color="primary" variant="tonal" class="ml-2">
+                {{ filteredProcesses.length }}
+              </v-chip>
+            </div>
+            <div class="table-header-right">
+              <v-text-field
+                v-model="filters.search"
+                density="compact"
+                placeholder="Buscar..."
+                prepend-inner-icon="mdi-magnify"
+                variant="outlined"
+                hide-details
+                single-line
+                class="search-field"
+                aria-label="Buscar processos"
+              ></v-text-field>
+              <v-select
+                v-model="filters.processTypeId"
+                :items="processTypes"
+                item-title="name"
+                item-value="id"
+                label="Tipo"
+                variant="outlined"
+                density="compact"
+                clearable
+                hide-details
+                class="filter-select"
+              />
+              <v-select
+                v-model="filters.status"
+                :items="statusOptions"
+                label="Status"
+                variant="outlined"
+                density="compact"
+                clearable
+                hide-details
+                class="filter-select filter-select--small"
+              />
+            </div>
+          </v-card-title>
+        </template>
+
+        <!-- Código -->
+        <template v-slot:item.code="{ item }">
+          <div class="code-cell">
+            <span class="process-code">{{ item.code }}</span>
+            <span v-if="item.isChildProcess" class="subprocess-indicator">
+              <v-icon size="12">mdi-source-branch</v-icon>
+            </span>
+          </div>
+        </template>
+
+        <!-- Título/Tipo -->
+        <template v-slot:item.title="{ item }">
+          <div class="title-cell">
+            <span class="process-title">{{ item.title || item.processType.name }}</span>
+            <span class="process-type-label">{{ item.processType.name }}</span>
+          </div>
+        </template>
+
+        <!-- Status -->
+        <template v-slot:item.status="{ item }">
+          <v-chip
+            :color="getStatusColor(item.status)"
+            size="small"
+            variant="flat"
+            class="status-chip"
+          >
+            {{ getStatusText(item.status) }}
+          </v-chip>
+        </template>
+
+        <!-- Progresso -->
+        <template v-slot:item.progress="{ item }">
+          <div class="progress-cell">
+            <div class="progress-bar-mini">
+              <div
+                class="progress-fill-mini"
+                :class="`fill-${getProgressColor(item)}`"
+                :style="{ width: `${getProgress(item)}%` }"
+              ></div>
+            </div>
+            <span class="progress-text">{{ getProgress(item) }}%</span>
+          </div>
+        </template>
+
+        <!-- Etapa Atual -->
+        <template v-slot:item.currentStep="{ item }">
+          <div v-if="getCurrentStep(item)" class="step-cell">
+            <v-chip
+              size="small"
+              :color="getStepTypeColor(getCurrentStep(item).step.type)"
+              variant="tonal"
+            >
+              <v-icon start size="14">{{ getStepTypeIcon(getCurrentStep(item).step.type) }}</v-icon>
+              {{ truncateText(getCurrentStep(item).step.name, 20) }}
+            </v-chip>
+          </div>
+          <span v-else class="text-grey">-</span>
+        </template>
+
+        <!-- Criado por -->
+        <template v-slot:item.createdBy="{ item }">
+          <span class="creator-text">{{ item.createdBy.name }}</span>
+        </template>
+
+        <!-- Data -->
+        <template v-slot:item.createdAt="{ item }">
+          <span class="date-text">{{ formatDate(item.createdAt) }}</span>
+        </template>
+
+        <!-- Ações -->
+        <template v-slot:item.actions="{ item }">
+          <div class="actions-cell">
+            <v-btn
+              icon
+              size="small"
+              variant="text"
+              color="primary"
+              @click.stop="viewProcess(item)"
+            >
+              <v-icon size="20">mdi-eye</v-icon>
+              <v-tooltip activator="parent" location="top">Visualizar</v-tooltip>
+            </v-btn>
+          </div>
+        </template>
+      </v-data-table>
+    </v-card>
+
+    <!-- Empty State -->
+    <div v-if="!loading && filteredProcesses.length === 0 && processes.length > 0" class="empty-state">
+      <v-icon size="48" color="grey-lighten-1">mdi-file-search-outline</v-icon>
+      <h3 class="empty-state-title">Nenhum processo encontrado</h3>
+      <p class="empty-state-text">Tente ajustar os filtros de busca</p>
+      <v-btn
+        variant="outlined"
+        color="primary"
+        @click="filters.search = ''; filters.processTypeId = null; filters.status = null"
+      >
+        <v-icon start>mdi-filter-remove</v-icon>
+        Limpar Filtros
+      </v-btn>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
 import { useProcessTypeStore } from '@/stores/processTypes'
 import { useAuthStore } from '@/stores/auth'
-import PaginationControls from '@/components/PaginationControls.vue'
 import dayjs from 'dayjs'
 
 const router = useRouter()
+const route = useRoute()
 const processStore = useProcessStore()
 const processTypeStore = useProcessTypeStore()
 const authStore = useAuthStore()
 
 // Estado
 const filters = ref({
-  search: '',
+  search: route.query.search || '',
   processTypeId: null,
   status: null
 })
 
-// Estado de paginação
-const currentPage = ref(1)
-const itemsPerPage = ref(12)
-const itemsPerPageOptions = [6, 12, 24, 48]
+// Sincronizar query param 'search' com o filtro
+watch(() => route.query.search, (newSearch) => {
+  if (newSearch !== undefined) {
+    filters.value.search = newSearch
+  }
+})
+
+// Headers da tabela
+const headers = [
+  { title: 'Código', key: 'code', width: '140px' },
+  { title: 'Título / Tipo', key: 'title' },
+  { title: 'Status', key: 'status', width: '140px', align: 'center' },
+  { title: 'Progresso', key: 'progress', width: '130px', align: 'center', sortable: false },
+  { title: 'Etapa Atual', key: 'currentStep', width: '180px', sortable: false },
+  { title: 'Criado por', key: 'createdBy', width: '160px' },
+  { title: 'Data', key: 'createdAt', width: '110px' },
+  { title: 'Ações', key: 'actions', width: '80px', align: 'center', sortable: false }
+]
 
 // Computed
 const loading = computed(() => processStore.loading)
@@ -301,16 +275,6 @@ const filteredProcesses = computed(() => {
     return hasAccess
   })
 
-  if (filters.value.search) {
-    const search = filters.value.search.toLowerCase()
-    result = result.filter(p =>
-      p.code.toLowerCase().includes(search) ||
-      p.title?.toLowerCase().includes(search) ||
-      p.processType.name.toLowerCase().includes(search) ||
-      p.description?.toLowerCase().includes(search)
-    )
-  }
-
   if (filters.value.processTypeId) {
     result = result.filter(p => {
       const typeId = p.processTypeId || p.processType?.id
@@ -325,24 +289,14 @@ const filteredProcesses = computed(() => {
   return result
 })
 
-const paginatedProcesses = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value
-  const end = start + itemsPerPage.value
-  return filteredProcesses.value.slice(start, end)
-})
-
-// Watchers para resetar página quando filtros mudarem
-watch(filters, () => {
-  currentPage.value = 1
-}, { deep: true })
-
-watch(itemsPerPage, () => {
-  currentPage.value = 1
-})
+// Função auxiliar para truncar texto
+function truncateText(text, maxLength) {
+  if (!text) return ''
+  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
+}
 
 // Opções
 const statusOptions = [
-  { title: 'Rascunho', value: 'DRAFT' },
   { title: 'Em Andamento', value: 'IN_PROGRESS' },
   { title: 'Concluído', value: 'COMPLETED' },
   { title: 'Cancelado', value: 'CANCELLED' },
@@ -452,42 +406,333 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ✨ Paginação */
-.pagination-section {
-  margin-top: 32px;
+.manage-processes-page {
+  max-width: 1600px;
+  margin: 0 auto;
 }
 
-.pagination-card {
-  border-radius: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
+/* Modern Page Header */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
 }
 
-.pagination-info {
-  font-weight: 400;
-  color: rgba(0, 0, 0, 0.6);
-}
-
-.pagination-controls {
-  flex-wrap: wrap;
+.header-content {
+  display: flex;
+  align-items: center;
   gap: 16px;
 }
 
-.items-per-page-select :deep(.v-field) {
-  border-radius: 4px;
+.header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.pagination-component :deep(.v-pagination__item) {
-  border-radius: 4px;
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white !important;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
+}
+
+.action-btn {
+  text-transform: none;
   font-weight: 500;
-  min-width: 36px;
-  height: 36px;
+  border-radius: 10px;
+  color: var(--color-primary-600) !important;
 }
 
-.pagination-component :deep(.v-pagination__item--is-active) {
-  background: #1976D2;
-  color: #fff;
-  box-shadow: none;
+/* Loading State */
+.loading-state {
+  padding: 0;
+}
+
+.skeleton-table {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+}
+
+/* Table Card */
+.table-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* Table Header */
+.table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 20px !important;
+}
+
+.table-header-left {
+  display: flex;
+  align-items: center;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+}
+
+.table-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-field {
+  width: 220px;
+}
+
+.search-field :deep(.v-field) {
+  border-radius: 10px;
+}
+
+.filter-select {
+  width: 180px;
+}
+
+.filter-select--small {
+  width: 140px;
+}
+
+.filter-select :deep(.v-field) {
+  border-radius: 10px;
+}
+
+/* Table Styles */
+.processes-table {
+  border-radius: 0;
+}
+
+.processes-table :deep(.v-data-table__tr) {
+  cursor: pointer;
+}
+
+.processes-table :deep(.v-data-table__tr:hover) {
+  background: var(--color-primary-50) !important;
+}
+
+/* Cell Styles */
+.code-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.process-code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+}
+
+.subprocess-indicator {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-secondary-500);
+}
+
+.title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.process-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.process-type-label {
+  font-size: 0.75rem;
+  color: var(--color-neutral-500);
+}
+
+.status-chip {
+  font-size: 0.75rem !important;
+  font-weight: 600;
+}
+
+/* Progress Cell */
+.progress-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-bar-mini {
+  flex: 1;
+  height: 6px;
+  background: var(--color-neutral-200);
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 50px;
+}
+
+.progress-fill-mini {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.fill-success { background: linear-gradient(90deg, var(--color-success-400), var(--color-success-500)); }
+.fill-info { background: linear-gradient(90deg, var(--color-info-400), var(--color-info-500)); }
+.fill-warning { background: linear-gradient(90deg, var(--color-warning-400), var(--color-warning-500)); }
+.fill-grey { background: var(--color-neutral-400); }
+
+.progress-text {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-neutral-600);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* Step Cell */
+.step-cell .v-chip {
+  font-size: 0.75rem !important;
+}
+
+/* Creator & Date */
+.creator-text {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-600);
+}
+
+.date-text {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-500);
+}
+
+/* Actions */
+.actions-cell {
+  display: flex;
+  justify-content: center;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  background: var(--color-surface);
+  border: 1px dashed var(--color-surface-border);
+  border-radius: 16px;
+  text-align: center;
+  margin-top: 24px;
+}
+
+.empty-state-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+  margin: 16px 0 8px 0;
+}
+
+.empty-state-text {
+  font-size: 0.875rem;
+  color: var(--color-neutral-500);
+  margin: 0 0 20px 0;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .table-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .table-header-left {
+    justify-content: center;
+  }
+
+  .table-header-right {
+    justify-content: center;
+  }
+
+  .search-field {
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .filter-select,
+  .filter-select--small {
+    width: 140px;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .action-btn {
+    width: 100%;
+  }
+
+  .table-header-right {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .search-field,
+  .filter-select,
+  .filter-select--small {
+    width: 100%;
+    max-width: none;
+  }
+
+  .process-title {
+    max-width: 180px;
+  }
 }
 </style>

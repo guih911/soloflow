@@ -36,6 +36,8 @@ export class SignaturesService {
           select: {
             sectorId: true,
             companyId: true,
+            company: { select: { id: true, name: true } },
+            sector: { select: { id: true, name: true } },
           },
         },
       },
@@ -176,11 +178,18 @@ export class SignaturesService {
     }
 
     // 9. Preparar metadados da assinatura
+    // Obter empresa e setor principal do usuário
+    const primaryCompany = user.userCompanies?.[0];
+    const companyName = primaryCompany?.company?.name;
+    const sectorName = primaryCompany?.sector?.name;
+
     const metadata: SignatureMetadata = {
       signer: {
         name: user.name,
         cpf: user.cpf ?? undefined,
         email: user.email,
+        company: companyName,
+        sector: sectorName,
       },
       reason: dto.reason || 'Assinatura Digital',
       location: dto.location,
@@ -924,6 +933,8 @@ export class SignaturesService {
           select: {
             sectorId: true,
             companyId: true,
+            company: { select: { id: true, name: true } },
+            sector: { select: { id: true, name: true } },
           },
         },
       },
@@ -1028,11 +1039,18 @@ export class SignaturesService {
     }
 
     // 9. Preparar metadados da assinatura
+    // Obter empresa e setor principal do usuário
+    const primaryCompanySubTask = user.userCompanies?.[0];
+    const companyNameSubTask = primaryCompanySubTask?.company?.name;
+    const sectorNameSubTask = primaryCompanySubTask?.sector?.name;
+
     const metadata: ModernSignatureMetadata = {
       signer: {
         name: user.name,
         cpf: user.cpf || '',
         email: user.email,
+        company: companyNameSubTask,
+        sector: sectorNameSubTask,
       },
       reason: dto.reason || `Assinatura de sub-tarefa: ${subTask.subTaskTemplate?.name || 'Sub-tarefa'}`,
       location: dto.location || 'Sistema SoloFlow',

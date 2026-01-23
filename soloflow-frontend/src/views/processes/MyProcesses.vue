@@ -1,138 +1,181 @@
 <template>
   <div class="my-processes">
-    <div class="d-flex align-center justify-space-between mb-6">
-      <div>
-        <h1 class="text-h4 font-weight-bold">Meus Processos</h1>
-        <p class="text-subtitle-1 text-medium-emphasis">
-          Processos que você criou ou nos quais está participando.
-        </p>
+    <!-- Modern Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <div class="header-icon">
+          <v-icon size="28" color="white">mdi-folder-account</v-icon>
+        </div>
+        <div class="header-text">
+          <h1 class="page-title">Meus Processos</h1>
+          <p class="page-subtitle">Processos que você criou ou participa</p>
+        </div>
       </div>
-      <v-btn color="primary" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="loadData">
+      <v-btn
+        variant="flat"
+        color="white"
+        @click="loadData"
+        :loading="loading"
+        class="action-btn"
+      >
+        <v-icon start>mdi-refresh</v-icon>
         Atualizar
       </v-btn>
     </div>
 
-    <v-row class="mb-6" dense>
-      <v-col cols="12" sm="6" md="3" v-for="card in summaryCards" :key="card.title">
-        <v-card variant="tonal" :color="card.color" class="pa-4 summary-card">
-          <div class="d-flex align-center justify-space-between">
-            <div>
-              <p class="text-subtitle-2 text-medium-emphasis mb-1">{{ card.title }}</p>
-              <p class="text-h4 font-weight-bold">{{ card.value }}</p>
-              <p v-if="card.subtitle" class="text-caption text-medium-emphasis">{{ card.subtitle }}</p>
-            </div>
-            <v-avatar :color="card.color" size="48">
-              <v-icon color="white" size="24">{{ card.icon }}</v-icon>
-            </v-avatar>
-          </div>
-        </v-card>
-      </v-col>
-    </v-row>
+    <!-- Filters -->
+    <div class="filters-card">
+      <div>
+         <div class="filters-header">
+        <v-icon size="20" class="mr-2">mdi-filter-variant</v-icon>
+        <span class="filters-title">Filtros</span>
+      </div>
+      </div>
+      <div class="filters-grid">
+        <v-text-field
+          v-model="filters.search"
+          placeholder="Buscar processos..."
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          class="filter-input"
+        />
+        <v-select
+          v-model="filters.status"
+          :items="statusOptions"
+          placeholder="Status"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          class="filter-input"
+        />
+        <v-select
+          v-model="filters.role"
+          :items="roleOptions"
+          placeholder="Meu papel"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          class="filter-input"
+        />
+      </div>
+      <div class="filters-toggle">
+        <v-switch
+          v-model="filters.onlyPending"
+          label="Mostrar apenas processos com ação pendente"
+          color="primary"
+          hide-details
+          density="compact"
+        />
+      </div>
+    </div>
 
-    <v-card class="mb-6">
-      <v-card-text>
-        <v-row>
-          <v-col cols="12" md="4">
-            <v-text-field
-              v-model="filters.search"
-              label="Buscar"
-              prepend-inner-icon="mdi-magnify"
-              clearable
-            />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-select
-              v-model="filters.status"
-              :items="statusOptions"
-              label="Status"
-              clearable
-            />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-select
-              v-model="filters.role"
-              :items="roleOptions"
-              label="Meu papel"
-              clearable
-            />
-          </v-col>
-          <v-col cols="12">
-            <v-switch
-              v-model="filters.onlyPending"
-              label="Mostrar apenas processos com ação pendente"
+    <!-- Processes Table -->
+    <div class="table-card">
+      <v-data-table
+        :headers="headers"
+        :items="tableItems"
+        :loading="loading"
+        item-key="id"
+        :items-per-page="10"
+        density="comfortable"
+        :no-data-text="filtersActive ? 'Nenhum processo encontrado com os filtros selecionados.' : 'Nenhum processo disponível.'"
+        class="modern-table"
+      >
+        <!-- Process Title -->
+        <template #item.title="{ value }">
+          <span class="process-title">{{ value }}</span>
+        </template>
+
+        <!-- Status -->
+        <template #item.status="{ value }">
+          <v-chip
+            size="small"
+            :color="getStatusColor(value)"
+            variant="flat"
+          >
+            <v-icon start size="14">{{ getStatusIcon(value) }}</v-icon>
+            {{ getStatusLabel(value) }}
+          </v-chip>
+        </template>
+
+        <!-- Involvement -->
+        <template #item.involvement="{ value }">
+          <div class="involvement-badges">
+            <v-chip
+              v-for="role in value"
+              :key="role"
+              size="x-small"
               color="primary"
-              hide-details
-              class="mt-2"
-            />
-          </v-col>
-        </v-row>
-      </v-card-text>
-    </v-card>
+              variant="tonal"
+            >
+              {{ role }}
+            </v-chip>
+          </div>
+        </template>
 
-    <v-data-table
-      :headers="headers"
-      :items="tableItems"
-      :loading="loading"
-      item-key="id"
-      class="elevation-2"
-      :items-per-page="10"
-      density="comfortable"
-      :no-data-text="filtersActive ? 'Nenhum processo encontrado com os filtros selecionados.' : 'Nenhum processo disponível.'"
-    >
-      <template #item.status="{ value }">
-        <v-chip size="small" :color="getStatusColor(value)" variant="tonal">
-          {{ getStatusLabel(value) }}
-        </v-chip>
-      </template>
+        <!-- Pending Tasks -->
+        <template #item.pendingTasks="{ value }">
+          <div v-if="value.length > 0" class="pending-tasks">
+            <v-chip
+              v-for="task in value.slice(0, 2)"
+              :key="task.id"
+              size="x-small"
+              :color="task.requiresSignature ? 'error' : 'warning'"
+              variant="tonal"
+            >
+              <v-icon start size="12">{{ task.requiresSignature ? 'mdi-draw-pen' : 'mdi-play' }}</v-icon>
+              {{ task.name }}
+            </v-chip>
+            <v-chip
+              v-if="value.length > 2"
+              size="x-small"
+              color="grey"
+              variant="tonal"
+            >
+              +{{ value.length - 2 }}
+            </v-chip>
+          </div>
+          <span v-else class="no-pending">Nenhuma ação</span>
+        </template>
 
-      <template #item.involvement="{ value }">
-        <div class="d-flex flex-wrap gap-1">
-          <v-chip
-            v-for="role in value"
-            :key="role"
-            size="x-small"
-            color="primary"
-            variant="outlined"
-          >
-            {{ role }}
-          </v-chip>
-        </div>
-      </template>
+        <!-- Dates -->
+        <template #item.createdAt="{ value }">
+          <span class="date-cell">{{ formatDate(value) }}</span>
+        </template>
 
-      <template #item.pendingTasks="{ value }">
-        <div class="d-flex flex-wrap gap-1">
-          <v-chip
-            v-for="task in value"
-            :key="task.id"
-            size="x-small"
-            :color="task.requiresSignature ? 'error' : 'warning'"
+        <template #item.lastActivityAt="{ value }">
+          <span class="date-cell">{{ formatDate(value) }}</span>
+        </template>
+
+        <!-- Actions -->
+        <template #item.actions="{ item }">
+          <v-btn
+            size="small"
             variant="tonal"
+            color="primary"
+            @click="viewProcess(item)"
           >
-            <v-icon start size="14">{{ task.requiresSignature ? 'mdi-draw-pen' : 'mdi-play' }}</v-icon>
-            {{ task.name }}
-          </v-chip>
-          <span v-if="value.length === 0" class="text-caption text-medium-emphasis">Nenhuma ação pendente</span>
-        </div>
-      </template>
-
-      <template #item.createdAt="{ value }">{{ formatDate(value) }}</template>
-      <template #item.lastActivityAt="{ value }">{{ formatDate(value) }}</template>
-
-      <template #item.actions="{ item }">
-        <div class="d-flex align-center justify-center">
-          <v-btn size="small" variant="outlined" color="primary" @click="viewProcess(item)">
             <v-icon start size="16">mdi-eye</v-icon>
-            Detalhes
+            Ver
           </v-btn>
-        </div>
-      </template>
+        </template>
 
-      <template #loading>
-        <div class="text-center py-6">
-          <v-progress-circular indeterminate color="primary" size="48" />
-        </div>
-      </template>
-    </v-data-table>
+        <!-- Loading - Skeleton -->
+        <template #loading>
+          <div class="table-loading" aria-label="Carregando processos">
+            <v-skeleton-loader
+              type="table-row@5"
+              class="skeleton-table"
+            />
+          </div>
+        </template>
+      </v-data-table>
+    </div>
   </div>
 </template>
 
@@ -145,15 +188,17 @@ import 'dayjs/locale/pt-br'
 import { useAuthStore } from '@/stores/auth'
 import { useProcessStore } from '@/stores/processes'
 
+dayjs.locale('pt-br')
+
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const processStore = useProcessStore()
 
+// State
 const loading = ref(false)
 const processes = ref([])
 
-// Inicializar filtros com parâmetros da URL (se existirem)
 const filters = ref({
   search: '',
   status: route.query.status || null,
@@ -161,6 +206,7 @@ const filters = ref({
   onlyPending: false,
 })
 
+// Options
 const statusOptions = [
   { title: 'Em andamento', value: 'IN_PROGRESS' },
   { title: 'Concluído', value: 'COMPLETED' },
@@ -174,94 +220,66 @@ const roleOptions = [
 ]
 
 const headers = [
-  { title: 'Processo', key: 'title', width: '400px', align: 'start' },
-  { title: 'Status', key: 'status', width: '150px', align: 'center' },
+  { title: 'Processo', key: 'title', width: '350px', align: 'start' },
+  { title: 'Status', key: 'status', width: '140px', align: 'center' },
   { title: 'Meu Papel', key: 'involvement', width: '140px', align: 'center', sortable: false },
   { title: 'Ações Pendentes', key: 'pendingTasks', width: '200px', align: 'start', sortable: false },
-  { title: 'Iniciado em', key: 'createdAt', width: '150px', align: 'center' },
-  { title: 'Última Atividade', key: 'lastActivityAt', width: '150px', align: 'center' },
-  { title: 'Ações', key: 'actions', width: '220px', align: 'center', sortable: false },
+  { title: 'Iniciado', key: 'createdAt', width: '130px', align: 'center' },
+  { title: 'Última Atividade', key: 'lastActivityAt', width: '130px', align: 'center' },
+  { title: '', key: 'actions', width: '100px', align: 'center', sortable: false },
 ]
 
+// Computed
 const filtersActive = computed(() => {
   const f = filters.value
   return !!(f.search || f.status || f.role || f.onlyPending)
 })
 
 const tableItems = computed(() => {
-  return processes.value
-    .filter(proc => {
-      if (filters.value.status && proc.status !== filters.value.status) return false
-      if (filters.value.role && !proc.involvement.includes(filters.value.role)) return false
-      if (filters.value.onlyPending && proc.pendingTasks.length === 0) return false
+  return processes.value.filter(proc => {
+    if (filters.value.status && proc.status !== filters.value.status) return false
+    if (filters.value.role && !proc.involvement.includes(filters.value.role)) return false
+    if (filters.value.onlyPending && proc.pendingTasks.length === 0) return false
 
-      if (filters.value.search) {
-        const term = filters.value.search.toLowerCase()
-        const haystack = [
-          proc.code,
-          proc.title,
-          proc.processType,
-          proc.createdBy,
-          ...proc.involvement,
-          ...proc.pendingTasks.map(t => t.name),
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
+    if (filters.value.search) {
+      const term = filters.value.search.toLowerCase()
+      const haystack = [
+        proc.code,
+        proc.title,
+        proc.processType,
+        proc.createdBy,
+        ...proc.involvement,
+        ...proc.pendingTasks.map(t => t.name),
+      ].filter(Boolean).join(' ').toLowerCase()
 
-        if (!haystack.includes(term)) return false
-      }
+      if (!haystack.includes(term)) return false
+    }
 
-      return true
-    })
+    return true
+  })
 })
 
-const summaryCards = computed(() => {
-  const totalParticipating = processes.value.filter(proc => proc.involvement.includes('Executor')).length
-  const totalCreated = processes.value.filter(proc => proc.involvement.includes('Criador')).length
-  const totalActive = processes.value.filter(proc => proc.status === 'IN_PROGRESS').length
-  const totalCompleted = processes.value.filter(proc => proc.status === 'COMPLETED').length
-
-  return [
-    {
-      title: 'Participando',
-      value: totalParticipating,
-      icon: 'mdi-account-check',
-      color: 'info',
-    },
-    {
-      title: 'Criados por mim',
-      value: totalCreated,
-      icon: 'mdi-account-tie',
-      color: 'primary',
-    },
-    {
-      title: 'Em andamento',
-      value: totalActive,
-      icon: 'mdi-rocket-launch',
-      color: 'warning',
-    },
-    {
-      title: 'Concluídos',
-      value: totalCompleted,
-      icon: 'mdi-check-circle',
-      color: 'success',
-      subtitle: totalCompleted > 0 ? 'Bom trabalho!' : 'Nenhum processo concluído ainda',
-    },
-  ]
-})
-
+// Methods
 function formatDate(date) {
-  return date ? dayjs(date).format('DD/MM/YYYY HH:mm') : '-'
+  return date ? dayjs(date).format('DD/MM/YY HH:mm') : '-'
 }
 
 function getStatusColor(status) {
   return {
-    IN_PROGRESS: 'primary',
+    IN_PROGRESS: 'info',
     COMPLETED: 'success',
     REJECTED: 'error',
     CANCELLED: 'grey',
   }[status] || 'info'
+}
+
+function getStatusIcon(status) {
+  return {
+    IN_PROGRESS: 'mdi-play-circle-outline',
+    COMPLETED: 'mdi-check-circle-outline',
+    REJECTED: 'mdi-close-circle-outline',
+    CANCELLED: 'mdi-cancel',
+  }[status] || 'mdi-help-circle-outline'
 }
 
 function getStatusLabel(status) {
@@ -277,15 +295,8 @@ function viewProcess(proc) {
   router.push({ name: 'DetalhesDoProcesso', params: { id: proc.id } })
 }
 
-function continueProcess(proc) {
-  const nextTask = proc.pendingTasks[0]
-  if (!nextTask) return
-  router.push({ name: 'ExecutarEtapa', params: { id: proc.id, stepId: nextTask.id } })
-}
-
 function normalizeProcesses() {
   const map = new Map()
-  const userId = authStore.user?.id
 
   const ensureEntry = process => {
     if (!process || !process.id) return null
@@ -342,7 +353,9 @@ function normalizeProcesses() {
   processes.value = Array.from(map.values()).map(entry => ({
     ...entry,
     involvement: Array.from(entry.involvement),
-  })).sort((a, b) => dayjs(b.lastActivityAt || b.createdAt).valueOf() - dayjs(a.lastActivityAt || a.createdAt).valueOf())
+  })).sort((a, b) =>
+    dayjs(b.lastActivityAt || b.createdAt).valueOf() - dayjs(a.lastActivityAt || a.createdAt).valueOf()
+  )
 }
 
 async function loadData() {
@@ -360,6 +373,7 @@ async function loadData() {
   }
 }
 
+// Lifecycle
 onMounted(() => {
   loadData()
 })
@@ -379,48 +393,195 @@ watch(
 
 <style scoped>
 .my-processes {
-  min-height: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-.summary-card {
-  height: 100%;
+/* Modern Page Header with Gradient */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
 }
 
-.gap-1 {
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
 }
 
-.gap-2 {
-  gap: 8px;
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white !important;
+  margin: 0;
+  letter-spacing: -0.01em;
 }
 
-/* Melhorias na tabela */
-:deep(.v-data-table) {
-  border-radius: 8px;
+.page-subtitle {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
 }
 
-:deep(.v-data-table th) {
-  font-weight: 600 !important;
-  background-color: rgb(var(--v-theme-surface-light)) !important;
-  white-space: nowrap;
-}
-
-:deep(.v-data-table td) {
-  padding: 12px 16px !important;
-  vertical-align: middle !important;
-}
-
-:deep(.v-data-table .v-data-table__tr:hover) {
-  background-color: rgba(var(--v-theme-primary), 0.04) !important;
-}
-
-
-:deep(.v-chip) {
+.action-btn {
+  text-transform: none;
   font-weight: 500;
+  border-radius: 10px;
+  color: var(--color-primary-600) !important;
 }
 
+/* Filters */
+.filters-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+.filters-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  color: var(--color-neutral-600);
+}
 
-:deep(.v-switch .v-selection-control__wrapper) {
-  height: 24px;
+.filters-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .filters-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .filters-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.filter-input :deep(.v-field) {
+  border-radius: 10px;
+}
+
+.filters-toggle {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-surface-border);
+}
+
+/* Table Card */
+.table-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.modern-table {
+  border: none !important;
+}
+
+.modern-table :deep(th) {
+  background: var(--color-neutral-50) !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-neutral-500) !important;
+  border-bottom: 1px solid var(--color-surface-border) !important;
+}
+
+.modern-table :deep(td) {
+  padding: 16px !important;
+  border-bottom: 1px solid var(--color-surface-border) !important;
+}
+
+.modern-table :deep(tr:hover td) {
+  background: var(--color-neutral-50) !important;
+}
+
+.process-title {
+  font-weight: 500;
+  color: var(--color-neutral-800);
+}
+
+.involvement-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pending-tasks {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.no-pending {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-400);
+}
+
+.date-cell {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-600);
+}
+
+.table-loading {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  width: 100%;
+}
+
+.skeleton-table {
+  width: 100%;
+}
+
+.skeleton-table :deep(.v-skeleton-loader__bone) {
+  margin-bottom: 8px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .page-header {
+    flex-direction: column;
+  }
+
+  .refresh-btn {
+    width: 100%;
+  }
 }
 </style>

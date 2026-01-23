@@ -5,10 +5,11 @@
     max-width="960"
     scrollable
     @update:model-value="onDialogToggle"
+    aria-labelledby="profile-dialog-title"
   >
-    <v-card>
+    <v-card role="dialog" aria-modal="true">
       <v-toolbar color="primary" flat>
-        <v-toolbar-title class="text-white">
+        <v-toolbar-title id="profile-dialog-title" class="text-white">
           {{ form.id ? 'Editar perfil' : 'Novo perfil' }}
         </v-toolbar-title>
         <v-spacer />
@@ -25,6 +26,7 @@
                 placeholder="Ex.: Supervisor de Processos"
                 :rules="[requiredRule]"
                 required
+                aria-required="true"
               />
             </v-col>
             <v-col cols="12" md="6" class="d-flex align-center">
@@ -62,7 +64,7 @@
               em regras de acesso.
             </p>
 
-            <v-expansion-panels multiple>
+            <v-expansion-panels multiple aria-label="Lista de telas e permissões">
               <v-expansion-panel
                 v-for="screen in screenCatalog"
                 :key="screen.id"

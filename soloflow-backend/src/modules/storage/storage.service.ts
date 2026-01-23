@@ -10,6 +10,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { extname } from 'path';
 import { Readable } from 'stream';
+import { fixFilenameEncoding } from '../../config/multer.config';
 
 // Nomes das pastas no R2 (em português)
 export const R2_FOLDERS = {
@@ -66,7 +67,8 @@ export class StorageService {
     file: Express.Multer.File,
     folder: string = R2_FOLDERS.ANEXOS,
   ): Promise<UploadResult> {
-    const ext = extname(file.originalname);
+    const fixedOriginalName = fixFilenameEncoding(file.originalname);
+    const ext = extname(fixedOriginalName);
     const filename = `${uuidv4()}${ext}`;
     const key = `${folder}/${filename}`;
 
@@ -77,7 +79,7 @@ export class StorageService {
         Body: file.buffer,
         ContentType: file.mimetype,
         Metadata: {
-          originalName: encodeURIComponent(file.originalname),
+          originalName: encodeURIComponent(fixedOriginalName),
         },
       });
 

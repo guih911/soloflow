@@ -4,10 +4,11 @@
     @update:model-value="$emit('update:modelValue', $event)"
     max-width="700"
     persistent
+    aria-labelledby="subtask-dialog-title"
   >
-    <v-card class="subtask-dialog-card">
-      <v-card-title class="d-flex align-center py-4 px-6 bg-secondary">
-        <v-icon class="mr-3" color="white">mdi-subdirectory-arrow-right</v-icon>
+    <v-card class="subtask-dialog-card" role="dialog" aria-modal="true">
+      <v-card-title id="subtask-dialog-title" class="d-flex align-center py-4 px-6 bg-secondary">
+        <v-icon class="mr-3" color="white" aria-hidden="true">mdi-subdirectory-arrow-right</v-icon>
         <span class="text-white font-weight-medium">Nova Sub-etapa</span>
       </v-card-title>
 
@@ -20,11 +21,13 @@
                 v-model="subTaskData.name"
                 label="Nome da Sub-etapa"
                 placeholder="Ex: Verificar documentação, Aprovar orçamento..."
-                :rules="[v => !!v || 'Nome é obrigatório']"
+                :rules="[v => !!v || 'O nome da sub-etapa é obrigatório']"
                 variant="outlined"
                 density="comfortable"
                 prepend-inner-icon="mdi-format-title"
                 required
+                aria-required="true"
+                aria-describedby="name-hint"
               />
             </v-col>
 
@@ -37,6 +40,7 @@
                 density="comfortable"
                 rows="2"
                 prepend-inner-icon="mdi-text"
+                aria-label="Descrição da sub-etapa"
               />
             </v-col>
 
@@ -49,6 +53,7 @@
                 density="comfortable"
                 rows="3"
                 prepend-inner-icon="mdi-clipboard-text"
+                aria-label="Instruções para o executor"
               />
             </v-col>
           </v-row>
@@ -71,6 +76,7 @@
                 label="Tipo de Responsável"
                 variant="outlined"
                 density="comfortable"
+                aria-label="Selecionar tipo de responsável"
               >
                 <template v-slot:item="{ item, props }">
                   <v-list-item v-bind="props" :title="undefined">

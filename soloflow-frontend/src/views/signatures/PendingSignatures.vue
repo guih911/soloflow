@@ -1,291 +1,202 @@
 <template>
   <div class="pending-signatures-page">
-    <!-- Header -->
-    <div class="d-flex align-center justify-space-between mb-6">
-      <div>
-        <h1 class="text-h4 font-weight-bold">Assinaturas Pendentes</h1>
-        <p class="text-subtitle-1 text-medium-emphasis">
-          Documentos aguardando sua assinatura digital
-        </p>
+    <!-- Modern Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <div class="header-icon">
+          <v-icon size="28" color="white">mdi-draw-pen</v-icon>
+        </div>
+        <div class="header-text">
+          <h1 class="page-title">Assinaturas Pendentes</h1>
+          <p class="page-subtitle">Documentos aguardando sua assinatura digital</p>
+        </div>
       </div>
       <v-btn
-        variant="outlined"
+        variant="flat"
+        color="white"
         prepend-icon="mdi-refresh"
         :loading="loading"
         @click="refreshData"
+        class="refresh-btn"
       >
         Atualizar
       </v-btn>
     </div>
 
-    <!-- Stats Cards -->
-    <v-row class="mb-6">
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="stat-card" color="error" variant="tonal" elevation="0">
-          <v-card-text>
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <div class="text-h4 font-weight-bold">{{ totalPending }}</div>
-                <div class="text-body-2">Total Pendentes</div>
-              </div>
-              <v-icon size="48" color="error">mdi-draw-pen</v-icon>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="stat-card" color="warning" variant="tonal" elevation="0">
-          <v-card-text>
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <div class="text-h4 font-weight-bold">{{ urgentCount }}</div>
-                <div class="text-body-2">Urgentes</div>
-              </div>
-              <v-icon size="48" color="warning">mdi-clock-alert-outline</v-icon>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="stat-card" color="info" variant="tonal" elevation="0">
-          <v-card-text>
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <div class="text-h4 font-weight-bold">{{ todayCount }}</div>
-                <div class="text-body-2">Recebidas Hoje</div>
-              </div>
-              <v-icon size="48" color="info">mdi-calendar-today</v-icon>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="stat-card" color="success" variant="tonal" elevation="0">
-          <v-card-text>
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <div class="text-h4 font-weight-bold">{{ documentsCount }}</div>
-                <div class="text-body-2">Documentos</div>
-              </div>
-              <v-icon size="48" color="success">mdi-file-document-multiple</v-icon>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+    <!-- Modern Filters -->
+    <div class="filters-card">
+      <div class="filters-header">
+        <v-icon size="20" class="mr-2">mdi-filter-variant</v-icon>
+        <span class="filters-title">Filtros</span>
+      </div>
+      <div class="filters-content">
+        <v-text-field
+          v-model="search"
+          placeholder="Buscar por código, título ou processo..."
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined"
+          density="comfortable"
+          clearable
+          hide-details
+          class="filter-field"
+        />
+        <v-select
+          v-model="urgencyFilter"
+          :items="urgencyOptions"
+          label="Urgência"
+          variant="outlined"
+          density="comfortable"
+          clearable
+          hide-details
+          class="filter-field filter-field--small"
+        />
+        <v-select
+          v-model="typeFilter"
+          :items="typeOptions"
+          label="Tipo de Processo"
+          variant="outlined"
+          density="comfortable"
+          clearable
+          hide-details
+          class="filter-field filter-field--small"
+        />
+      </div>
+    </div>
 
-    <!-- Filtros -->
-    <v-card class="mb-6" elevation="0">
-      <v-card-text>
-        <v-row>
-          <v-col cols="12" md="5">
-            <v-text-field
-              v-model="search"
-              label="Buscar por código, título ou processo"
-              prepend-inner-icon="mdi-magnify"
-              variant="outlined"
-              density="comfortable"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="12" md="3">
-            <v-select
-              v-model="urgencyFilter"
-              :items="urgencyOptions"
-              label="Urgência"
-              variant="outlined"
-              density="comfortable"
-              clearable
-              hide-details
-            />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-select
-              v-model="typeFilter"
-              :items="typeOptions"
-              label="Tipo de Processo"
-              variant="outlined"
-              density="comfortable"
-              clearable
-              hide-details
-            />
-          </v-col>
-        </v-row>
-      </v-card-text>
-    </v-card>
-
-    <!-- Grid de Assinaturas (Cards Modernos) -->
-    <v-row v-if="!loading && paginatedTasks.length > 0">
-      <v-col
+    <!-- Modern Signature Cards -->
+    <div v-if="!loading && paginatedTasks.length > 0" class="signature-cards-list" role="list" aria-label="Lista de assinaturas pendentes">
+      <div
         v-for="task in paginatedTasks"
         :key="task.id"
-        cols="12"
+        class="signature-card"
+        :class="{
+          'signature-card--urgent': isUrgent(task),
+          'signature-card--high': isHighPriority(task)
+        }"
+        role="listitem"
+        :aria-label="`Processo ${task.processInstance.code} - ${getDocumentsToSign(task).length} documentos para assinar`"
+        tabindex="0"
+        @click="openSignatureDialog(task)"
+        @keydown.enter="openSignatureDialog(task)"
       >
-        <v-hover v-slot="{ isHovering, props }">
-          <v-card
-            v-bind="props"
-            class="signature-task-card"
-            :class="{
-              'border-urgent': isUrgent(task),
-              'border-high': isHighPriority(task)
-            }"
-            :elevation="isHovering ? 8 : 2"
-            @click="openSignatureDialog(task)"
-          >
-            <v-card-text class="pa-4">
-              <v-row align="center">
-                <!-- Avatar com Ícone -->
-                <v-col cols="auto">
-                  <v-avatar
-                    :color="getPriorityColor(task)"
-                    size="56"
-                    variant="tonal"
-                  >
-                    <v-icon
-                      :icon="getPriorityIcon(task)"
-                      size="28"
-                    />
-                  </v-avatar>
-                </v-col>
+        <div class="signature-card-priority" :class="`priority-${getPriorityLevel(task)}`"></div>
 
-                <!-- Informações Principais -->
-                <v-col>
-                  <div class="d-flex align-center mb-1">
-                    <h3 class="text-h6 font-weight-medium mr-2">
-                      {{ task.processInstance.title || task.processInstance.code }}
-                    </h3>
-                    <v-chip
-                      :color="getPriorityColor(task)"
-                      size="small"
-                      variant="tonal"
-                    >
-                      {{ task.processInstance.code }}
-                    </v-chip>
-                    <v-chip
-                      size="small"
-                      color="error"
-                      variant="tonal"
-                      class="ml-1"
-                    >
-                      <v-icon start size="16">mdi-draw-pen</v-icon>
-                      Requer Assinatura
-                    </v-chip>
-                  </div>
+        <div class="signature-card-content">
+          <!-- Left: Icon -->
+          <div class="signature-card-icon" :class="`icon-${getPriorityLevel(task)}`">
+            <v-icon :icon="getPriorityIcon(task)" size="24" color="white" />
+          </div>
 
-                  <p class="text-body-2 text-medium-emphasis mb-2">
-                    <v-icon size="16">mdi-file-document-outline</v-icon>
-                    {{ task.processInstance.processType?.name || 'Tipo de Processo' }}
-                    <span class="mx-2">•</span>
-                    <v-icon size="16">mdi-debug-step-over</v-icon>
-                    {{ task.step.name }}
-                  </p>
-
-                  <div class="text-caption text-medium-emphasis">
-                    <v-icon size="16">mdi-account</v-icon>
-                    Solicitado por: {{ task.processInstance.createdBy.name }}
-                    <span class="mx-2">•</span>
-                    <v-icon size="16">mdi-clock-outline</v-icon>
-                    {{ getTimeAgo(task.createdAt) }}
-                  </div>
-                </v-col>
-
-                <!-- Documentos Badge -->
-                <v-col cols="auto" class="text-center">
-                  <v-chip
-                    :color="getPriorityColor(task)"
-                    variant="tonal"
-                    size="large"
-                    class="font-weight-bold"
-                  >
-                    <div class="d-flex flex-column align-center">
-                      <v-icon size="24">mdi-file-pdf-box</v-icon>
-                      <div class="text-h6">{{ getDocumentsToSign(task).length }}</div>
-                      <div class="text-caption">documento(s)</div>
-                    </div>
-                  </v-chip>
-                </v-col>
-
-                <!-- Botão de Ação -->
-                <v-col cols="auto">
-                  <v-btn
-                    color="primary"
-                    size="large"
-                    @click.stop="openSignatureDialog(task)"
-                  >
-                    <v-icon start>mdi-draw-pen</v-icon>
-                    Assinar
-                  </v-btn>
-                </v-col>
-              </v-row>
-
-              <!-- Alerta de Descrição/Instruções (se houver) -->
-              <v-alert
-                v-if="task.step.description"
-                type="info"
-                variant="tonal"
-                density="compact"
-                class="mt-3"
-              >
-                {{ task.step.description }}
-              </v-alert>
-
-              <!-- Lista de Documentos (preview) -->
-              <div v-if="getDocumentsToSign(task).length > 0" class="mt-3">
-                <div class="d-flex flex-wrap gap-1">
-                  <v-chip
-                    v-for="doc in getDocumentsToSign(task).slice(0, 3)"
-                    :key="doc.id"
-                    size="small"
-                    variant="outlined"
-                    color="grey-darken-1"
-                  >
-                    <v-icon start size="16">mdi-file-pdf-box</v-icon>
-                    {{ truncateFilename(doc.originalName, 25) }}
-                  </v-chip>
-                  <v-chip
-                    v-if="getDocumentsToSign(task).length > 3"
-                    size="small"
-                    variant="tonal"
-                  >
-                    +{{ getDocumentsToSign(task).length - 3 }} mais
-                  </v-chip>
-                </div>
+          <!-- Center: Info -->
+          <div class="signature-card-info">
+            <div class="signature-card-header">
+              <h3 class="signature-card-title">
+                {{ task.processInstance.title || task.processInstance.code }}
+              </h3>
+              <div class="signature-card-badges">
+                <span class="badge badge--code">{{ task.processInstance.code }}</span>
+                <span class="badge badge--signature">
+                  <v-icon size="14">mdi-draw-pen</v-icon>
+                  Requer Assinatura
+                </span>
               </div>
-            </v-card-text>
-          </v-card>
-        </v-hover>
-      </v-col>
-    </v-row>
+            </div>
 
-    <!-- Estado vazio -->
-    <v-card
-      v-else-if="!loading && filteredTasks.length === 0"
-      class="text-center py-12"
-    >
-      <v-icon
-        size="64"
-        color="grey-lighten-1"
-      >
-        mdi-check-circle-outline
-      </v-icon>
-      <p class="text-h6 mt-4 text-grey">
-        Nenhuma assinatura pendente
-      </p>
-      <p class="text-body-2 text-grey">
+            <div class="signature-card-meta">
+              <span class="meta-item">
+                <v-icon size="16">mdi-file-document-outline</v-icon>
+                {{ task.processInstance.processType?.name || 'Tipo de Processo' }}
+              </span>
+              <span class="meta-divider">•</span>
+              <span class="meta-item">
+                <v-icon size="16">mdi-debug-step-over</v-icon>
+                {{ task.step.name }}
+              </span>
+            </div>
+
+            <div class="signature-card-submeta">
+              <span class="submeta-item">
+                <v-icon size="14">mdi-account</v-icon>
+                {{ task.processInstance.createdBy.name }}
+              </span>
+              <span class="submeta-divider">•</span>
+              <span class="submeta-item">
+                <v-icon size="14">mdi-clock-outline</v-icon>
+                {{ getTimeAgo(task.createdAt) }}
+              </span>
+            </div>
+
+            <!-- Documents Preview -->
+            <div v-if="getDocumentsToSign(task).length > 0" class="signature-card-docs">
+              <span
+                v-for="doc in getDocumentsToSign(task).slice(0, 3)"
+                :key="doc.id"
+                class="doc-chip"
+              >
+                <v-icon size="14">mdi-file-pdf-box</v-icon>
+                {{ truncateFilename(doc.originalName, 20) }}
+              </span>
+              <span v-if="getDocumentsToSign(task).length > 3" class="doc-chip doc-chip--more">
+                +{{ getDocumentsToSign(task).length - 3 }}
+              </span>
+            </div>
+
+            <!-- Step Description Alert -->
+            <div v-if="task.step.description" class="signature-card-alert">
+              <v-icon size="16">mdi-information</v-icon>
+              <span>{{ task.step.description }}</span>
+            </div>
+          </div>
+
+          <!-- Right: Documents Count & Action -->
+          <div class="signature-card-actions">
+            <div class="docs-count" :class="`docs-count--${getPriorityLevel(task)}`">
+              <v-icon size="24">mdi-file-pdf-box</v-icon>
+              <span class="docs-number">{{ getDocumentsToSign(task).length }}</span>
+              <span class="docs-label">documento(s)</span>
+            </div>
+
+            <v-btn
+              color="primary"
+              variant="flat"
+              size="large"
+              @click.stop="openSignatureDialog(task)"
+              class="sign-btn"
+            >
+              <v-icon start>mdi-draw-pen</v-icon>
+              Assinar
+            </v-btn>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modern Empty State -->
+    <div v-else-if="!loading && filteredTasks.length === 0" class="empty-state">
+      <div class="empty-state-icon">
+        <v-icon size="56" color="white">mdi-check-circle-outline</v-icon>
+      </div>
+      <h3 class="empty-state-title">Nenhuma assinatura pendente</h3>
+      <p class="empty-state-text">
         {{ search || urgencyFilter || typeFilter
-          ? 'Tente ajustar os filtros'
+          ? 'Tente ajustar os filtros de busca'
           : 'Todos os documentos estão assinados!' }}
       </p>
-    </v-card>
-
-    <!-- Loading -->
-    <div v-if="loading" class="text-center py-12">
-      <v-progress-circular
-        indeterminate
+      <v-btn
+        v-if="search || urgencyFilter || typeFilter"
+        variant="outlined"
         color="primary"
-        size="64"
-      />
+        @click="search = ''; urgencyFilter = null; typeFilter = null"
+        class="mt-4"
+      >
+        <v-icon start>mdi-filter-remove</v-icon>
+        Limpar Filtros
+      </v-btn>
+    </div>
+
+    <!-- Modern Loading State - Skeleton -->
+    <div v-if="loading" class="loading-state" aria-label="Carregando assinaturas pendentes">
+      <v-skeleton-loader type="card@3" class="skeleton-signatures" />
     </div>
 
     <!-- Paginação -->
@@ -301,16 +212,17 @@
       v-model="signatureDialog"
       fullscreen
       transition="dialog-bottom-transition"
+      aria-labelledby="signature-dialog-title"
     >
-      <v-card v-if="selectedTask" class="signature-fullscreen-dialog">
+      <v-card v-if="selectedTask" class="signature-fullscreen-dialog" role="dialog" aria-modal="true">
         <!-- Toolbar -->
         <v-toolbar color="primary" dark>
-          <v-btn icon @click="closeSignatureDialog">
+          <v-btn icon @click="closeSignatureDialog" aria-label="Fechar dialog de assinatura">
             <v-icon>mdi-close</v-icon>
           </v-btn>
-          <v-toolbar-title>
+          <v-toolbar-title id="signature-dialog-title">
             <div class="d-flex align-center">
-              <v-icon class="mr-2">mdi-draw-pen</v-icon>
+              <v-icon class="mr-2" aria-hidden="true">mdi-draw-pen</v-icon>
               <div>
                 <div class="text-subtitle-1">Assinatura de Documentos</div>
                 <div class="text-caption">
@@ -434,13 +346,15 @@
                     </h3>
                     <v-divider class="mb-3" />
 
-                    <v-list density="compact" class="documents-list">
+                    <v-list density="compact" class="documents-list" role="listbox" aria-label="Documentos para assinar">
                       <v-list-item
                         v-for="(doc, index) in documentsToSign"
                         :key="doc.id"
                         :active="index === currentDocumentIndex"
                         @click="currentDocumentIndex = index"
                         class="document-list-item"
+                        role="option"
+                        :aria-selected="index === currentDocumentIndex"
                       >
                         <template v-slot:prepend>
                           <v-icon
@@ -744,21 +658,6 @@ const typeOptions = computed(() => {
   }))
 })
 
-// Stats computeds
-const totalPending = computed(() => filteredTasks.value.length)
-
-const urgentCount = computed(() =>
-  filteredTasks.value.filter(t => getPriorityLevel(t) === 'urgent').length
-)
-
-const todayCount = computed(() =>
-  filteredTasks.value.filter(t => dayjs(t.createdAt).isSame(dayjs(), 'day')).length
-)
-
-const documentsCount = computed(() => {
-  return filteredTasks.value.reduce((sum, task) => sum + getDocumentsToSign(task).length, 0)
-})
-
 // Computed para documentos da tarefa selecionada
 const documentsToSign = computed(() => {
   if (!selectedTask.value) return []
@@ -804,7 +703,7 @@ const urgencyOptions = [
 ]
 
 const passwordRules = [
-  v => !!v || 'Senha é obrigatória'
+  v => !!v || 'A senha é obrigatória'
 ]
 
 // Métodos auxiliares
@@ -1235,132 +1134,420 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-/* Stat Cards */
-.stat-card {
-  height: 100%;
-  border-radius: 12px !important;
-  transition: all 0.3s ease;
+/* Modern Page Header */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
 }
 
-.stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white !important;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
+}
+
+.refresh-btn {
+  text-transform: none;
+  font-weight: 500;
+  border-radius: 10px;
+  color: var(--color-primary-600) !important;
+}
+
+/* Modern Filters */
+.filters-card {
+  background: white;
+  border-radius: 14px;
+  border: 1px solid var(--color-neutral-200);
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.filters-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  color: var(--color-neutral-600);
+}
+
+.filters-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.filters-content {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-field {
+  flex: 1;
+  min-width: 200px;
+}
+
+.filter-field--small {
+  flex: 0 0 180px;
+}
+
+.filter-field :deep(.v-field) {
+  border-radius: 10px;
+}
+
+/* Modern Signature Cards */
+.signature-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .signature-card {
-  transition: all 0.3s ease;
+  display: flex;
+  background: white;
+  border-radius: 14px;
+  border: 1px solid var(--color-neutral-200);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .signature-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border-color: var(--color-primary-200);
 }
 
-.border-error {
-  border-left: 4px solid #f44336 !important;
+.signature-card--urgent {
+  border-left: 4px solid var(--color-error-500);
 }
 
-.border-warning {
-  border-left: 4px solid #ff9800 !important;
+.signature-card--high {
+  border-left: 4px solid var(--color-warning-500);
 }
 
-.gap-2 {
+.signature-card-priority {
+  width: 4px;
+  flex-shrink: 0;
+}
+
+.priority-urgent { background: var(--color-error-500); }
+.priority-high { background: var(--color-warning-500); }
+.priority-normal { background: var(--color-info-500); }
+
+.signature-card-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  flex: 1;
+}
+
+.signature-card-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.icon-urgent { background: linear-gradient(135deg, var(--color-error-400), var(--color-error-500)); }
+.icon-high { background: linear-gradient(135deg, var(--color-warning-400), var(--color-warning-500)); }
+.icon-normal { background: linear-gradient(135deg, var(--color-info-400), var(--color-info-500)); }
+
+.signature-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.signature-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.signature-card-title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+  margin: 0;
+}
+
+.signature-card-badges {
+  display: flex;
   gap: 8px;
 }
 
-/* ✨ Paginação */
-.pagination-section {
-  margin-top: 32px;
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
-.pagination-card {
-  border-radius: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
+.badge--code {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-700);
 }
 
-.pagination-info {
-  font-weight: 400;
-  color: rgba(0, 0, 0, 0.6);
+.badge--signature {
+  background: var(--color-error-50);
+  color: var(--color-error-600);
 }
 
-.pagination-controls {
-  flex-wrap: wrap;
-  gap: 16px;
+.signature-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
-.items-per-page-select :deep(.v-field) {
-  border-radius: 4px;
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.875rem;
+  color: var(--color-neutral-600);
 }
 
-.pagination-component :deep(.v-pagination__item) {
-  border-radius: 4px;
-  font-weight: 500;
-  min-width: 36px;
-  height: 36px;
+.meta-divider {
+  color: var(--color-neutral-400);
 }
 
-.pagination-component :deep(.v-pagination__item--is-active) {
-  background: #1976D2;
-  color: #fff;
-  box-shadow: none;
+.signature-card-submeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-/* Modern Task Cards - Redesigned */
-.signature-task-card {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  cursor: pointer;
-  border-radius: 8px !important;
+.submeta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8125rem;
+  color: var(--color-neutral-500);
 }
 
-.signature-task-card.border-urgent {
-  border-left: 4px solid #f44336 !important;
+.submeta-divider {
+  color: var(--color-neutral-400);
 }
 
-.signature-task-card.border-high {
-  border-left: 4px solid #ff9800 !important;
-}
-
-.text-truncate {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.text-truncate-2 {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  white-space: normal;
-}
-
-.documents-preview {
+.signature-card-docs {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
-.gap-1 {
+.doc-chip {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
+  padding: 4px 10px;
+  background: var(--color-neutral-100);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: var(--color-neutral-700);
 }
 
-.gap-2 {
+.doc-chip--more {
+  background: var(--color-primary-50);
+  color: var(--color-primary-600);
+}
+
+.signature-card-alert {
+  display: flex;
+  align-items: flex-start;
   gap: 8px;
+  padding: 10px 12px;
+  background: var(--color-info-50);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  color: var(--color-info-700);
 }
 
-.gap-4 {
+.signature-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding-left: 20px;
+  border-left: 1px solid var(--color-neutral-200);
+}
+
+.docs-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 24px;
+  border-radius: 12px;
+  background: var(--color-neutral-50);
+}
+
+.docs-count--urgent { background: var(--color-error-50); color: var(--color-error-600); }
+.docs-count--high { background: var(--color-warning-50); color: var(--color-warning-600); }
+.docs-count--normal { background: var(--color-info-50); color: var(--color-info-600); }
+
+.docs-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: 4px;
+}
+
+.docs-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.sign-btn {
+  text-transform: none;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 0 24px;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  background: white;
+  border-radius: 16px;
+  border: 1px solid var(--color-neutral-200);
+  text-align: center;
+}
+
+.empty-state-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-success-400), var(--color-success-500));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.empty-state-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+  margin: 0 0 8px 0;
+}
+
+.empty-state-text {
+  font-size: 0.9375rem;
+  color: var(--color-neutral-500);
+  margin: 0;
+}
+
+/* Loading State - Skeleton */
+.loading-state {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
+  padding: 0;
 }
 
-.cursor-pointer {
-  cursor: pointer;
+.skeleton-signatures {
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
 }
 
-.transition-swing {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* Focus States para cards */
+.signature-card:focus {
+  outline: 2px solid var(--color-primary-300);
+  outline-offset: 2px;
+}
+
+.signature-card:focus-visible {
+  outline: 2px solid var(--color-primary-400);
+  outline-offset: 2px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .header-content {
+    flex-direction: column;
+  }
+
+  .filters-content {
+    flex-direction: column;
+  }
+
+  .filter-field,
+  .filter-field--small {
+    flex: 1;
+    min-width: 100%;
+  }
+
+  .signature-card-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .signature-card-actions {
+    flex-direction: row;
+    width: 100%;
+    padding-left: 0;
+    padding-top: 16px;
+    border-left: none;
+    border-top: 1px solid var(--color-neutral-200);
+    justify-content: space-between;
+  }
 }
 
 /* Fullscreen Signature Dialog - Phase 3 */

@@ -1,30 +1,33 @@
 <template>
-  <v-card>
-    <v-card-title>
-      <v-icon start color="primary">mdi-form-textbox</v-icon>
-      Entrada de Dados
-    </v-card-title>
-    
-    <v-divider />
-    
-    <v-card-text>
-      <!-- Instruções da etapa -->
-      <v-alert
-        v-if="step.instructions"
-        type="info"
-        variant="tonal"
-        class="mb-4"
-      >
-        <div v-html="step.instructions"></div>
-      </v-alert>
+  <v-card class="step-execution-card">
+    <!-- Header moderno -->
+    <div class="step-card-header">
+      <div class="header-icon">
+        <v-icon size="24" color="white">mdi-form-textbox</v-icon>
+      </div>
+      <div class="header-content">
+        <h3 class="header-title">Entrada de Dados</h3>
+        <p class="header-subtitle">Preencha os campos abaixo para continuar</p>
+      </div>
+    </div>
 
-      <!-- Formulário dinâmico -->
-      <v-form ref="inputForm" v-model="formValid">
+    <!-- Instruções da etapa -->
+    <div v-if="step.instructions" class="step-instructions">
+      <div class="instructions-icon">
+        <v-icon size="18" color="info">mdi-information-outline</v-icon>
+      </div>
+      <div class="instructions-content" v-html="step.instructions"></div>
+    </div>
+
+    <!-- Formulário dinâmico -->
+    <v-form ref="inputForm" v-model="formValid" class="step-form">
+      <div class="form-fields-container">
         <v-row>
           <v-col
             v-for="field in visibleFields"
             :key="field.name"
-            :cols="getFieldCols(field)"
+            :cols="getFieldCols(field).cols || 12"
+            :md="getFieldCols(field).md || getFieldCols(field)"
           >
             <!-- Campo de Texto -->
             <v-text-field
@@ -36,6 +39,9 @@
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
               persistent-hint
+              variant="outlined"
+              prepend-inner-icon="mdi-text"
+              class="modern-field"
             />
 
             <!-- Campo Numérico -->
@@ -49,6 +55,9 @@
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
               persistent-hint
+              variant="outlined"
+              prepend-inner-icon="mdi-numeric"
+              class="modern-field"
             />
 
             <!-- Campo de Data -->
@@ -61,6 +70,9 @@
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
               persistent-hint
+              variant="outlined"
+              prepend-inner-icon="mdi-calendar"
+              class="modern-field"
             />
 
             <!-- Campo de Email -->
@@ -74,6 +86,9 @@
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
               persistent-hint
+              variant="outlined"
+              prepend-inner-icon="mdi-email-outline"
+              class="modern-field"
             />
 
             <!-- Campo de CPF -->
@@ -87,6 +102,9 @@
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
               persistent-hint
+              variant="outlined"
+              prepend-inner-icon="mdi-card-account-details-outline"
+              class="modern-field"
             />
 
             <!-- Campo de CNPJ -->
@@ -100,6 +118,9 @@
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
               persistent-hint
+              variant="outlined"
+              prepend-inner-icon="mdi-domain"
+              class="modern-field"
             />
 
             <!-- Campo de Telefone -->
@@ -113,6 +134,9 @@
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
               persistent-hint
+              variant="outlined"
+              prepend-inner-icon="mdi-phone-outline"
+              class="modern-field"
             />
 
             <!-- Campo de Moeda -->
@@ -126,6 +150,9 @@
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
               persistent-hint
+              variant="outlined"
+              prepend-inner-icon="mdi-currency-brl"
+              class="modern-field"
             />
 
             <!-- Dropdown -->
@@ -138,24 +165,32 @@
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
               persistent-hint
+              variant="outlined"
+              prepend-inner-icon="mdi-format-list-bulleted"
+              class="modern-field"
             />
 
             <!-- Checkbox -->
-            <div v-else-if="field.type === 'CHECKBOX'">
-              <p class="text-subtitle-2 mb-2">
+            <div v-else-if="field.type === 'CHECKBOX'" class="checkbox-field-container">
+              <label class="checkbox-field-label">
                 {{ getFieldLabel(field) }}
-                <span v-if="isFieldRequired(field)" class="text-error">*</span>
-              </p>
-              <v-checkbox
-                v-for="option in getFieldOptions(field)"
-                :key="option.value"
-                v-model="formData[field.name]"
-                :label="option.label"
-                :value="option.value"
-                multiple
-                hide-details
-              />
-              <p v-if="getFieldHint(field)" class="text-caption text-grey mt-1">
+                <span v-if="isFieldRequired(field)" class="required-mark">*</span>
+              </label>
+              <div class="checkbox-options">
+                <v-checkbox
+                  v-for="option in getFieldOptions(field)"
+                  :key="option.value"
+                  v-model="formData[field.name]"
+                  :label="option.label"
+                  :value="option.value"
+                  multiple
+                  hide-details
+                  density="comfortable"
+                  color="primary"
+                  class="checkbox-option"
+                />
+              </div>
+              <p v-if="getFieldHint(field)" class="field-hint">
                 {{ getFieldHint(field) }}
               </p>
             </div>
@@ -171,19 +206,22 @@
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
               persistent-hint
+              variant="outlined"
+              prepend-inner-icon="mdi-text-long"
+              class="modern-field"
             />
           </v-col>
         </v-row>
-      </v-form>
-    </v-card-text>
+      </div>
+    </v-form>
 
-    <v-divider />
-
-    <v-card-actions>
-      <v-spacer />
+    <!-- Actions modernas -->
+    <div class="step-actions">
       <v-btn
         variant="text"
+        color="neutral"
         @click="$emit('cancel')"
+        class="action-btn-cancel"
       >
         Cancelar
       </v-btn>
@@ -193,11 +231,12 @@
         :loading="loading"
         :disabled="!formValid"
         @click="executeStep"
+        class="action-btn-submit"
       >
         <v-icon start>mdi-check</v-icon>
-        Concluir
+        Concluir Etapa
       </v-btn>
-    </v-card-actions>
+    </div>
   </v-card>
 </template>
 
@@ -484,3 +523,145 @@ onMounted(() => {
   prefillData()
 })
 </script>
+
+<style lang="scss" scoped>
+.step-execution-card {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--color-neutral-200);
+}
+
+// Header moderno
+.step-card-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+
+  .header-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .header-content {
+    flex: 1;
+  }
+
+  .header-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: white;
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  .header-subtitle {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.85);
+    margin: 4px 0 0 0;
+  }
+}
+
+// Instruções
+.step-instructions {
+  display: flex;
+  gap: 12px;
+  padding: 16px 24px;
+  background: var(--color-info-50);
+  border-bottom: 1px solid var(--color-info-100);
+
+  .instructions-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .instructions-content {
+    font-size: 0.875rem;
+    color: var(--color-info-700);
+    line-height: 1.5;
+
+    :deep(p) {
+      margin: 0;
+    }
+
+    :deep(ul), :deep(ol) {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+  }
+}
+
+// Formulário
+.step-form {
+  padding: 24px;
+}
+
+.form-fields-container {
+  .modern-field {
+    margin-bottom: 8px;
+  }
+}
+
+// Checkbox customizado
+.checkbox-field-container {
+  padding: 16px;
+  background: var(--color-neutral-50);
+  border-radius: 12px;
+  border: 1px solid var(--color-neutral-200);
+
+  .checkbox-field-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-neutral-700);
+    margin-bottom: 12px;
+
+    .required-mark {
+      color: var(--color-error-500);
+      margin-left: 4px;
+    }
+  }
+
+  .checkbox-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .checkbox-option {
+    flex: 0 0 auto;
+    min-width: 150px;
+  }
+
+  .field-hint {
+    font-size: 0.75rem;
+    color: var(--color-neutral-500);
+    margin-top: 8px;
+    padding-left: 2px;
+  }
+}
+
+// Ações
+.step-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  background: var(--color-neutral-50);
+  border-top: 1px solid var(--color-neutral-200);
+
+  .action-btn-cancel {
+    color: var(--color-neutral-600);
+  }
+
+  .action-btn-submit {
+    min-width: 160px;
+  }
+}
+</style>

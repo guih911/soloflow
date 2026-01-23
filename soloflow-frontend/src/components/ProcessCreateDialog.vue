@@ -3,147 +3,190 @@
     v-model="dialog"
     max-width="800"
     persistent
+    aria-labelledby="process-create-title"
   >
     <template v-slot:activator="{ props }">
       <v-btn
         v-bind="props"
         color="primary"
         prepend-icon="mdi-plus"
+        aria-label="Criar novo processo"
       >
         Novo Processo
       </v-btn>
     </template>
 
-    <v-card>
-      <v-stepper v-model="step">
-        <v-stepper-header>
-          <v-stepper-item
-            :complete="step > 1"
-            :value="1"
-            title="Tipo de Processo"
-          />
-          <v-divider />
-          <v-stepper-item
-            :complete="step > 2"
-            :value="2"
-            title="Informações Básicas"
-          />
-          <v-divider v-if="hasFormFields" />
-          <v-stepper-item
-            v-if="hasFormFields"
-            :value="3"
-            title="Formulário"
-          />
+    <v-card class="process-create-card" role="dialog" aria-modal="true">
+      <!-- Modern Header -->
+      <div class="dialog-header">
+        <div class="header-icon" aria-hidden="true">
+          <v-icon size="28" color="white">mdi-plus-circle</v-icon>
+        </div>
+        <div class="header-text">
+          <h2 id="process-create-title" class="header-title">Novo Processo</h2>
+          <p class="header-subtitle">Crie um novo processo em poucos passos</p>
+        </div>
+        <v-btn icon variant="text" class="close-btn" @click="close">
+          <v-icon color="white">mdi-close</v-icon>
+        </v-btn>
+      </div>
+
+      <!-- Progress Steps -->
+      <div class="stepper-progress">
+        <div
+          v-for="(s, index) in stepsList"
+          :key="index"
+          class="progress-step"
+          :class="{
+            'progress-step--active': step === index + 1,
+            'progress-step--completed': step > index + 1
+          }"
+        >
+          <div class="step-indicator">
+            <v-icon v-if="step > index + 1" size="16" color="white">mdi-check</v-icon>
+            <span v-else>{{ index + 1 }}</span>
+          </div>
+          <span class="step-label">{{ s }}</span>
+        </div>
+      </div>
+
+      <v-stepper v-model="step" class="modern-stepper" flat>
+        <v-stepper-header class="d-none">
+          <v-stepper-item :complete="step > 1" :value="1" title="Tipo" />
+          <v-stepper-item :complete="step > 2" :value="2" title="Info" />
+          <v-stepper-item v-if="hasFormFields" :value="3" title="Formulário" />
         </v-stepper-header>
 
         <v-stepper-window>
           <!-- Step 1: Selecionar Tipo de Processo -->
           <v-stepper-window-item :value="1">
-            <v-card-text>
-              <h3 class="text-h6 mb-4">Selecione o tipo de processo</h3>
-              
+            <div class="step-content">
               <v-text-field
                 v-model="searchType"
-                label="Buscar tipo de processo"
+                placeholder="Buscar tipo de processo..."
                 prepend-inner-icon="mdi-magnify"
+                variant="outlined"
+                density="comfortable"
                 clearable
-                class="mb-4"
+                hide-details
+                class="search-field mb-6"
+                aria-label="Buscar tipo de processo"
               />
 
-              <v-radio-group v-model="selectedProcessTypeId">
-                <v-card
+              <div class="process-types-list" role="listbox" aria-label="Tipos de processo disponíveis">
+                <div
                   v-for="processType in filteredProcessTypes"
                   :key="processType.id"
-                  class="mb-3"
-                  :color="selectedProcessTypeId === processType.id ? 'primary' : ''"
-                  :variant="selectedProcessTypeId === processType.id ? 'tonal' : 'outlined'"
+                  class="process-type-card"
+                  :class="{ 'process-type-card--selected': selectedProcessTypeId === processType.id }"
+                  role="option"
+                  :aria-selected="selectedProcessTypeId === processType.id"
+                  tabindex="0"
                   @click="selectedProcessTypeId = processType.id"
+                  @keydown.enter="selectedProcessTypeId = processType.id"
+                  @keydown.space.prevent="selectedProcessTypeId = processType.id"
                 >
-                  <v-card-text>
-                    <v-radio
-                      :label="processType.name"
-                      :value="processType.id"
-                      hide-details
-                    />
-                    <p v-if="processType.description" class="text-body-2 text-grey mt-2 ml-8">
+                  <div class="type-card-radio">
+                    <div class="radio-indicator">
+                      <v-icon v-if="selectedProcessTypeId === processType.id" size="14" color="white">
+                        mdi-check
+                      </v-icon>
+                    </div>
+                  </div>
+                  <div class="type-card-content">
+                    <h4 class="type-card-title">{{ processType.name }}</h4>
+                    <p v-if="processType.description" class="type-card-description">
                       {{ processType.description }}
                     </p>
-                    <div class="mt-2 ml-8">
-                      <v-chip size="small" class="mr-2">
-                        <v-icon start size="16">mdi-debug-step-over</v-icon>
+                    <div class="type-card-meta">
+                      <span class="meta-badge">
+                        <v-icon size="14">mdi-debug-step-over</v-icon>
                         {{ processType.steps?.length || 0 }} etapas
-                      </v-chip>
-                      <v-chip v-if="processType.formFields?.length > 0" size="small">
-                        <v-icon start size="16">mdi-form-textbox</v-icon>
+                      </span>
+                      <span v-if="processType.formFields?.length > 0" class="meta-badge">
+                        <v-icon size="14">mdi-form-textbox</v-icon>
                         {{ processType.formFields.length }} campos
-                      </v-chip>
+                      </span>
                     </div>
-                  </v-card-text>
-                </v-card>
-              </v-radio-group>
+                  </div>
+                </div>
+              </div>
 
-              <v-alert
-                v-if="filteredProcessTypes.length === 0"
-                type="info"
-                variant="tonal"
-                text="Nenhum tipo de processo encontrado"
-              />
-            </v-card-text>
+              <div v-if="filteredProcessTypes.length === 0" class="empty-state">
+                <v-icon size="48" color="grey-lighten-1">mdi-file-search-outline</v-icon>
+                <p class="empty-text">Nenhum tipo de processo encontrado</p>
+              </div>
+            </div>
 
-            <v-card-actions>
-              <v-spacer />
-              <v-btn variant="text" @click="close">Cancelar</v-btn>
+            <div class="step-actions">
+              <v-btn variant="text" color="grey" @click="close">
+                Cancelar
+              </v-btn>
               <v-btn
                 color="primary"
+                variant="flat"
                 :disabled="!selectedProcessTypeId"
                 @click="nextStep"
+                append-icon="mdi-arrow-right"
               >
                 Próximo
               </v-btn>
-            </v-card-actions>
+            </div>
           </v-stepper-window-item>
 
           <!-- Step 2: Informações Básicas -->
           <v-stepper-window-item :value="2">
-            <v-card-text>
-              <h3 class="text-h6 mb-4">Informações do processo</h3>
-              
-              <v-text-field
-                v-model="processData.title"
-                label="Título do processo"
-                hint="Deixe vazio para usar o padrão"
-                persistent-hint
-                class="mb-4"
-              />
+            <div class="step-content">
+              <div class="form-section">
+                <label class="form-label" id="title-label">Título do processo</label>
+                <v-text-field
+                  v-model="processData.title"
+                  placeholder="Ex: Solicitação de compra de materiais"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details="auto"
+                  class="modern-field"
+                  aria-labelledby="title-label"
+                  aria-describedby="title-hint"
+                />
+                <span id="title-hint" class="field-hint">Deixe vazio para usar o título padrão do tipo de processo</span>
+              </div>
 
-              <v-textarea
-                v-model="processData.description"
-                label="Descrição"
-                rows="3"
-              />
-            </v-card-text>
+              <div class="form-section">
+                <label class="form-label" id="description-label">Descrição</label>
+                <v-textarea
+                  v-model="processData.description"
+                  placeholder="Descreva brevemente o objetivo deste processo..."
+                  variant="outlined"
+                  rows="3"
+                  hide-details
+                  class="modern-field"
+                  aria-labelledby="description-label"
+                />
+              </div>
+            </div>
 
-            <v-card-actions>
-              <v-btn variant="text" @click="step--">Voltar</v-btn>
-              <v-spacer />
-              <v-btn variant="text" @click="close">Cancelar</v-btn>
+            <div class="step-actions">
+              <v-btn variant="text" color="grey" prepend-icon="mdi-arrow-left" @click="step--">
+                Voltar
+              </v-btn>
               <v-btn
                 color="primary"
+                variant="flat"
                 @click="hasFormFields ? nextStep() : createProcess()"
                 :loading="creating"
+                :append-icon="hasFormFields ? 'mdi-arrow-right' : 'mdi-check'"
               >
                 {{ hasFormFields ? 'Próximo' : 'Criar Processo' }}
               </v-btn>
-            </v-card-actions>
+            </div>
           </v-stepper-window-item>
 
           <!-- Step 3: Formulário Dinâmico -->
           <v-stepper-window-item v-if="hasFormFields" :value="3">
-            <v-card-text>
-              <h3 class="text-h6 mb-4">Preencha os dados do formulário</h3>
-              
+            <div class="step-content">
               <v-form ref="dynamicForm" v-model="formValid">
-                <v-row>
+                <v-row class="form-grid">
                   <v-col
                     v-for="field in selectedProcessType?.formFields"
                     :key="field.id"
@@ -295,21 +338,23 @@
                   </v-col>
                 </v-row>
               </v-form>
-            </v-card-text>
+            </div>
 
-            <v-card-actions>
-              <v-btn variant="text" @click="step--">Voltar</v-btn>
-              <v-spacer />
-              <v-btn variant="text" @click="close">Cancelar</v-btn>
+            <div class="step-actions">
+              <v-btn variant="text" color="grey" prepend-icon="mdi-arrow-left" @click="step--">
+                Voltar
+              </v-btn>
               <v-btn
                 color="primary"
+                variant="flat"
                 @click="createProcess"
                 :loading="creating"
                 :disabled="!formValid"
+                prepend-icon="mdi-check"
               >
                 Criar Processo
               </v-btn>
-            </v-card-actions>
+            </div>
           </v-stepper-window-item>
         </v-stepper-window>
       </v-stepper>
@@ -348,6 +393,13 @@ const formData = ref({})
 
 // Computed
 const processTypes = computed(() => processTypeStore.processTypes)
+
+// Lista de steps para o indicador
+const stepsList = computed(() => {
+  const steps = ['Tipo de Processo', 'Informações']
+  if (hasFormFields.value) steps.push('Formulário')
+  return steps
+})
 
 const filteredProcessTypes = computed(() => {
   if (!searchType.value) return processTypes.value
@@ -546,3 +598,353 @@ watch(dialog, (newVal) => {
   }
 })
 </script>
+
+<style scoped>
+.process-create-card {
+  border-radius: 20px !important;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Dialog Header */
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  padding: 24px;
+  position: relative;
+}
+
+.header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.header-text {
+  flex: 1;
+}
+
+.header-title {
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+}
+
+.header-subtitle {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 4px 0 0 0;
+}
+
+.close-btn {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+}
+
+/* Stepper Progress */
+.stepper-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 24px;
+  background: var(--color-neutral-50);
+  border-bottom: 1px solid var(--color-neutral-200);
+}
+
+.progress-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: transparent;
+  transition: all 0.2s ease;
+}
+
+.progress-step--active {
+  background: var(--color-primary-50);
+}
+
+.progress-step--completed .step-indicator {
+  background: var(--color-success-500);
+}
+
+.step-indicator {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-neutral-300);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.progress-step--active .step-indicator {
+  background: var(--color-primary-500);
+}
+
+.step-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-neutral-500);
+}
+
+.progress-step--active .step-label {
+  color: var(--color-primary-600);
+}
+
+.progress-step--completed .step-label {
+  color: var(--color-success-600);
+}
+
+/* Modern Stepper */
+.modern-stepper {
+  background: transparent !important;
+}
+
+.modern-stepper :deep(.v-stepper-header) {
+  display: none !important;
+}
+
+.modern-stepper :deep(.v-stepper-window) {
+  margin: 0;
+}
+
+/* Step Content */
+.step-content {
+  padding: 24px;
+  min-height: 300px;
+}
+
+/* Search Field */
+.search-field :deep(.v-field) {
+  border-radius: 12px;
+  background: var(--color-neutral-50);
+}
+
+/* Process Types List */
+.process-types-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.process-type-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  border: 2px solid var(--color-neutral-200);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.process-type-card:hover {
+  border-color: var(--color-primary-300);
+  background: var(--color-primary-50);
+}
+
+.process-type-card--selected {
+  border-color: var(--color-primary-500);
+  background: var(--color-primary-50);
+}
+
+.process-type-card:focus {
+  outline: 2px solid var(--color-primary-300);
+  outline-offset: 2px;
+}
+
+.process-type-card:focus-visible {
+  outline: 2px solid var(--color-primary-400);
+  outline-offset: 2px;
+}
+
+.type-card-radio {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.radio-indicator {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--color-neutral-300);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.process-type-card--selected .radio-indicator {
+  background: var(--color-primary-500);
+  border-color: var(--color-primary-500);
+}
+
+.type-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.type-card-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+  margin: 0 0 4px 0;
+}
+
+.type-card-description {
+  font-size: 0.8125rem;
+  color: var(--color-neutral-500);
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
+
+.type-card-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--color-neutral-100);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: var(--color-neutral-600);
+}
+
+.process-type-card--selected .meta-badge {
+  background: var(--color-primary-100);
+  color: var(--color-primary-700);
+}
+
+/* Form Section */
+.form-section {
+  margin-bottom: 24px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+  margin-bottom: 8px;
+}
+
+.field-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-neutral-500);
+  margin-top: 6px;
+}
+
+.modern-field :deep(.v-field) {
+  border-radius: 10px;
+}
+
+.form-grid {
+  gap: 16px;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.empty-text {
+  font-size: 0.9375rem;
+  color: var(--color-neutral-500);
+  margin-top: 12px;
+}
+
+/* Step Actions */
+.step-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--color-neutral-50);
+  border-top: 1px solid var(--color-neutral-200);
+}
+
+.step-actions :deep(.v-btn) {
+  text-transform: none;
+  font-weight: 500;
+  border-radius: 10px;
+}
+
+/* Custom Scrollbar */
+.process-types-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.process-types-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.process-types-list::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-300);
+  border-radius: 3px;
+}
+
+.process-types-list::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neutral-400);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .dialog-header {
+    padding: 20px;
+  }
+
+  .header-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .stepper-progress {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 16px;
+  }
+
+  .progress-step {
+    padding: 6px 12px;
+  }
+
+  .step-label {
+    display: none;
+  }
+
+  .step-content {
+    padding: 16px;
+  }
+}
+</style>
