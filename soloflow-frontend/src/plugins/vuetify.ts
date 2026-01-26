@@ -134,21 +134,25 @@ export default createVuetify({
       variant: 'outlined',
       density: 'comfortable',
       rounded: 'lg',
+      color: 'primary',
     },
     VSelect: {
       variant: 'outlined',
       density: 'comfortable',
       rounded: 'lg',
+      color: 'primary',
     },
     VAutocomplete: {
       variant: 'outlined',
       density: 'comfortable',
       rounded: 'lg',
+      color: 'primary',
     },
     VTextarea: {
       variant: 'outlined',
       density: 'comfortable',
       rounded: 'lg',
+      color: 'primary',
     },
     VChip: {
       rounded: 'lg',

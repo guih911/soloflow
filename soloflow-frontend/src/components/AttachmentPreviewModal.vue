@@ -168,7 +168,6 @@ async function loadPreview() {
   try {
     previewUrl.value = await getPreviewUrl(props.attachment.id)
   } catch (error) {
-    console.error('Error loading preview:', error)
     window.showSnackbar?.('Erro ao carregar visualização', 'error')
   } finally {
     loading.value = false
@@ -186,7 +185,6 @@ async function downloadFile() {
     )
     window.showSnackbar?.('Download iniciado', 'success')
   } catch (error) {
-    console.error('Error downloading:', error)
     window.showSnackbar?.('Erro ao baixar arquivo', 'error')
   } finally {
     downloading.value = false
@@ -204,7 +202,6 @@ async function openInNewTab() {
       URL.revokeObjectURL(url)
     }, 60000)
   } catch (error) {
-    console.error('Error opening in new tab:', error)
     window.showSnackbar?.('Erro ao abrir arquivo', 'error')
   }
 }

@@ -556,8 +556,8 @@ async function loadDashboardData() {
   try {
     await refreshTasks()
     await loadMyProcesses()
-  } catch (error) {
-    // Silent error
+  } catch {
+    // Erro ao carregar dados - usuário verá estado vazio ou desatualizado
   }
 }
 
@@ -1024,6 +1024,38 @@ watch(
 
   .new-process-btn {
     width: 100%;
+  }
+
+  /* Fix overflow in card headers on mobile */
+  .card-header {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .card-header__left {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .card-header__right {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .card-header__right .v-btn {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .card-title {
+    font-size: 0.9375rem;
+  }
+
+  .content-card {
+    overflow: hidden;
   }
 
   .task-item {

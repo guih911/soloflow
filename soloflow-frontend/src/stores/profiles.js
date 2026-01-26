@@ -65,7 +65,6 @@ export const useProfileStore = defineStore('profiles', () => {
         : []
       return profiles.value
     } catch (err) {
-      console.error('Error fetching profiles:', err)
       error.value = err.response?.data?.message || 'Erro ao carregar perfis'
       throw err
     } finally {
@@ -88,7 +87,6 @@ export const useProfileStore = defineStore('profiles', () => {
       }
       return currentProfile.value
     } catch (err) {
-      console.error('Error fetching profile:', err)
       error.value = err.response?.data?.message || 'Erro ao carregar perfil'
       throw err
     } finally {
@@ -116,7 +114,6 @@ export const useProfileStore = defineStore('profiles', () => {
       profiles.value.push(profile)
       return profile
     } catch (err) {
-      console.error('Error creating profile:', err)
       error.value = err.response?.data?.message || 'Erro ao criar perfil'
       throw err
     } finally {
@@ -150,7 +147,6 @@ export const useProfileStore = defineStore('profiles', () => {
       currentProfile.value = profile
       return profile
     } catch (err) {
-      console.error('Error updating profile:', err)
       error.value = err.response?.data?.message || 'Erro ao atualizar perfil'
       throw err
     } finally {
@@ -170,7 +166,6 @@ export const useProfileStore = defineStore('profiles', () => {
         assignments.value = []
       }
     } catch (err) {
-      console.error('Error deleting profile:', err)
       error.value = err.response?.data?.message || 'Erro ao remover perfil'
       throw err
     } finally {
@@ -187,7 +182,6 @@ export const useProfileStore = defineStore('profiles', () => {
       assignments.value = Array.isArray(response.data) ? response.data : []
       return assignments.value
     } catch (err) {
-      console.error('Error fetching assignments:', err)
       error.value = err.response?.data?.message || 'Erro ao carregar usuários do perfil'
       throw err
     } finally {
@@ -208,7 +202,6 @@ export const useProfileStore = defineStore('profiles', () => {
       await fetchAssignments(profileId)
       return assigned
     } catch (err) {
-      console.error('Error assigning user to profile:', err)
       error.value = err.response?.data?.message || 'Erro ao vincular usuário ao perfil'
       throw err
     } finally {
@@ -224,7 +217,6 @@ export const useProfileStore = defineStore('profiles', () => {
       await api.delete(`/profiles/${profileId}/assign/${userId}`)
       assignments.value = assignments.value.filter((item) => item.userId !== userId)
     } catch (err) {
-      console.error('Error removing assignment:', err)
       error.value = err.response?.data?.message || 'Erro ao remover usuário do perfil'
       throw err
     } finally {

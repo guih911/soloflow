@@ -75,9 +75,10 @@ export const useCompanyStore = defineStore('company', () => {
   async function createCompany(data) {
     loading.value = true
     error.value = null
-    
+
     try {
       const payload = normalizeCompanyPayload(data)
+      delete payload.isActive
       const response = await api.post('/companies', payload)
       companies.value.push(response.data)
       return response.data

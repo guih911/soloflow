@@ -543,7 +543,6 @@ function saveAssignment() {
     try {
       assignment.conditions = JSON.parse(conditionsText.value)
     } catch (error) {
-      console.error('Invalid conditions JSON:', error)
       assignment.conditions = null
     }
   } else {
@@ -555,7 +554,6 @@ function saveAssignment() {
     try {
       assignment.conditionalConfig = JSON.parse(conditionalConfigText.value)
     } catch (error) {
-      console.error('Invalid conditional config JSON:', error)
       assignment.conditionalConfig = null
     }
   }

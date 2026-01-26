@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSectorDto } from './dto/create-sector.dto';
 import { UpdateSectorDto } from './dto/update-sector.dto';
@@ -6,10 +6,11 @@ import { Sector } from '@prisma/client';
 
 @Injectable()
 export class SectorsService {
+  private readonly logger = new Logger(SectorsService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async create(createSectorDto: CreateSectorDto): Promise<Sector> {
-    console.log('Creating sector with data:', createSectorDto);
 
     // Verificar se a empresa existe e está ativa
     const company = await this.prisma.company.findUnique({
@@ -49,7 +50,7 @@ export class SectorsService {
         },
       });
     } catch (error) {
-      console.error('Error creating sector:', error);
+      this.logger.error('Erro ao criar setor', error.stack);
       throw new BadRequestException('Erro ao criar setor: ' + error.message);
     }
   }
@@ -58,8 +59,6 @@ export class SectorsService {
     if (!companyId) {
       throw new BadRequestException('ID da empresa é obrigatório');
     }
-
-    console.log('Finding sectors for company:', companyId);
 
     const sectors = await this.prisma.sector.findMany({
       where: {
@@ -160,7 +159,7 @@ export class SectorsService {
         },
       });
     } catch (error) {
-      console.error('Error updating sector:', error);
+      this.logger.error('Erro ao atualizar setor', error.stack);
       throw new BadRequestException('Erro ao atualizar setor: ' + error.message);
     }
   }

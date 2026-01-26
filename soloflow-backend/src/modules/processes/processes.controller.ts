@@ -134,13 +134,13 @@ export class ProcessesController {
   // Listar todos os processos da empresa
   @Get()
   findAll(@Request() req, @Query() filters: any) {
-    return this.processesService.findAll(req.user.companyId, req.user.id, filters);
+    return this.processesService.findAll(req.user.companyId, req.user.id, filters, req.user);
   }
 
   // Buscar processo específico
   @Get(':id')
   findOne(@Param('id') id: string, @Request() req) {
-    return this.processesService.findOne(id, req.user.id);
+    return this.processesService.findOne(id, req.user.id, req.user);
   }
 
   @Post(':id/cancel')
@@ -171,46 +171,16 @@ export class ProcessesController {
   }
   // Executar etapa
   @Post('execute-step')
-async executeStep(@Body() executeDto: ExecuteStepDto, @Request() req) {
-  console.log('🚀 ExecuteStep called with:', {
-    executeDto,
-    user: req.user.id,
-    userEmail: req.user.email,
-    timestamp: new Date().toISOString()
-  });
+  async executeStep(@Body() executeDto: ExecuteStepDto, @Request() req) {
+    if (!executeDto.stepExecutionId) {
+      throw new BadRequestException('stepExecutionId é obrigatório');
+    }
 
-  // ✅ VALIDAÇÃO ADICIONAL NO CONTROLLER
-  if (!executeDto.stepExecutionId) {
-    console.log('❌ Missing stepExecutionId');
-    throw new BadRequestException('stepExecutionId é obrigatório');
-  }
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(executeDto.stepExecutionId)) {
+      throw new BadRequestException('stepExecutionId deve ser um UUID válido');
+    }
 
-  // Verificar se stepExecutionId é um UUID válido
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(executeDto.stepExecutionId)) {
-    console.log('❌ Invalid stepExecutionId format:', executeDto.stepExecutionId);
-    throw new BadRequestException('stepExecutionId deve ser um UUID válido');
+    return this.processesService.executeStep(executeDto, req.user.id, req.user);
   }
-
-  try {
-    console.log('✅ Calling service with validated data');
-    const result = await this.processesService.executeStep(executeDto, req.user.id);
-    
-    console.log('✅ Step executed successfully:', {
-      stepExecutionId: executeDto.stepExecutionId,
-      action: executeDto.action,
-      resultId: result.id
-    });
-    
-    return result;
-  } catch (error) {
-    console.error('❌ Error in executeStep controller:', {
-      error: error.message,
-      stack: error.stack,
-      executeDto,
-      userId: req.user.id
-    });
-    throw error;
-  }
-}
 }

@@ -137,16 +137,20 @@
           <!-- User Menu -->
           <v-menu location="top">
             <template #activator="{ props }">
-              <div v-bind="props" class="user-menu-trigger" :class="{ 'user-menu-collapsed': !sidebarExpanded }">
-                <v-avatar size="36" color="primary" class="user-avatar">
-                  <span class="text-white text-sm font-semibold">{{ getUserInitials(user?.name) }}</span>
-                </v-avatar>
-                <div v-if="sidebarExpanded" class="user-info">
-                  <span class="user-name">{{ user?.name }}</span>
-                  <span class="user-email">{{ user?.email }}</span>
-                </div>
-                <v-icon v-if="sidebarExpanded" size="16" class="ml-auto text-slate-400">mdi-chevron-up</v-icon>
-              </div>
+              <v-tooltip :text="user?.name" location="top" :disabled="!sidebarExpanded">
+                <template #activator="{ props: tooltipProps }">
+                  <div v-bind="{ ...props, ...tooltipProps }" class="user-menu-trigger" :class="{ 'user-menu-collapsed': !sidebarExpanded }">
+                    <v-avatar size="36" color="primary" class="user-avatar">
+                      <span class="text-white text-sm font-semibold">{{ getUserInitials(user?.name) }}</span>
+                    </v-avatar>
+                    <div v-if="sidebarExpanded" class="user-info">
+                      <span class="user-name">{{ user?.name }}</span>
+                      <span class="user-email">{{ user?.email }}</span>
+                    </div>
+                    <v-icon v-if="sidebarExpanded" size="16" class="ml-auto text-slate-400">mdi-chevron-up</v-icon>
+                  </div>
+                </template>
+              </v-tooltip>
             </template>
             <v-list min-width="240" class="user-menu">
               <!-- User Info Header -->
@@ -498,6 +502,12 @@ const mainNavItems = computed(() => [
     route: 'AssinaturasPendentes',
     permission: null, // Available to all authenticated users
     badge: () => pendingSignatures.value
+  },
+  {
+    title: 'Relatórios',
+    icon: 'mdi-chart-bar',
+    route: 'Relatorios',
+    permission: { resource: 'reports', action: 'view' }
   }
 ])
 
@@ -562,7 +572,7 @@ async function markAllNotificationsAsRead() {
   try {
     await notificationsStore.markAllAsRead()
   } catch (e) {
-    console.error('Erro ao marcar notificações:', e)
+    window.showSnackbar?.('Erro ao marcar notificações como lidas', 'error')
   }
 }
 
@@ -577,7 +587,6 @@ async function openNotification(notification) {
       notificationsDialog.value = false
     }
   } catch (e) {
-    console.error('Erro ao abrir notificação:', e)
   }
 }
 
@@ -593,7 +602,6 @@ async function switchCompany(companyId) {
   try {
     await authStore.switchCompany(companyId)
   } catch (error) {
-    console.error('Erro ao trocar empresa:', error)
   }
 }
 
@@ -728,7 +736,6 @@ onMounted(async () => {
   document.addEventListener('click', handleClickOutsideSearch)
   try {
     await notificationsStore.fetchNotifications()
-    notificationsStore.startPolling(60000)
   } catch (e) {
     // Silent error
   }
@@ -736,7 +743,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutsideSearch)
-  notificationsStore.stopPolling()
 })
 
 watch(() => authStore.activeCompanyId, async (newId, oldId) => {
@@ -905,8 +911,10 @@ watch(isMobile, (value) => {
 .user-info {
   flex: 1;
   min-width: 0;
+  max-width: 140px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .company-name,

@@ -41,11 +41,9 @@ export const useProcessStore = defineStore('processes', () => {
       }
 
       const response = await api.post('/processes', cleanPayload)
-      
+
       // Adicionar à lista local
-      if (processes.value.length > 0) {
-        processes.value.unshift(response.data)
-      }
+      processes.value.unshift(response.data)
       
       return response.data
     } catch (err) {
@@ -106,8 +104,11 @@ export const useProcessStore = defineStore('processes', () => {
       }
 
       // Refetch do processo para ter formData atualizado
-      const updatedProcess = await api.get(`/processes/${processId}`)
-      currentProcess.value = updatedProcess.data
+      try {
+        const updatedProcess = await api.get(`/processes/${processId}`)
+        currentProcess.value = updatedProcess.data
+      } catch (refetchError) {
+      }
 
       // Se houve erros, reportar mas não falhar completamente
       if (uploadErrors.length > 0) {

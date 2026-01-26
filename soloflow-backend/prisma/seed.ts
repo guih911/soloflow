@@ -193,12 +193,15 @@ async function main() {
     { name: 'Coordenação', desc: 'Perfil para coordenação e gestão de processos' },
   ];
 
-  const allPermissions = [
+  // Permissões diferenciadas por perfil
+  const superAdminPermissions = [
+    { resource: '*', action: '*' }, // Wildcard - acesso total
     { resource: 'dashboard', action: 'view' },
     { resource: 'processes', action: 'view' },
     { resource: 'processes', action: 'create' },
     { resource: 'processes', action: 'edit' },
     { resource: 'processes', action: 'delete' },
+    { resource: 'processes', action: 'manage' },
     { resource: 'tasks', action: 'view' },
     { resource: 'tasks', action: 'execute' },
     { resource: 'tasks', action: 'reassign' },
@@ -225,12 +228,59 @@ async function main() {
     { resource: 'sectors', action: 'edit' },
     { resource: 'sectors', action: 'delete' },
     { resource: 'sectors', action: 'manage' },
+    { resource: 'settings', action: 'manage' },
     { resource: 'audit', action: 'view' },
     { resource: 'reports', action: 'view' },
     { resource: 'reports', action: 'export' },
     { resource: 'signatures', action: 'view' },
     { resource: 'signatures', action: 'sign' },
   ];
+
+  const coordenacaoPermissions = [
+    { resource: 'dashboard', action: 'view' },
+    { resource: 'processes', action: 'view' },
+    { resource: 'processes', action: 'create' },
+    { resource: 'processes', action: 'edit' },
+    { resource: 'processes', action: 'delete' },
+    { resource: 'processes', action: 'manage' },
+    { resource: 'tasks', action: 'view' },
+    { resource: 'tasks', action: 'execute' },
+    { resource: 'tasks', action: 'reassign' },
+    { resource: 'users', action: 'view' },
+    { resource: 'users', action: 'create' },
+    { resource: 'users', action: 'edit' },
+    { resource: 'profiles', action: 'view' },
+    { resource: 'process_types', action: 'view' },
+    { resource: 'process_types', action: 'create' },
+    { resource: 'process_types', action: 'edit' },
+    { resource: 'process_types', action: 'manage' },
+    { resource: 'sectors', action: 'view' },
+    { resource: 'audit', action: 'view' },
+    { resource: 'reports', action: 'view' },
+    { resource: 'reports', action: 'export' },
+    { resource: 'signatures', action: 'view' },
+    { resource: 'signatures', action: 'sign' },
+    { resource: 'settings', action: 'manage' },
+  ];
+
+  const analistaPermissions = [
+    { resource: 'dashboard', action: 'view' },
+    { resource: 'processes', action: 'view' },
+    { resource: 'processes', action: 'create' },
+    { resource: 'tasks', action: 'view' },
+    { resource: 'tasks', action: 'execute' },
+    { resource: 'users', action: 'view' },
+    { resource: 'sectors', action: 'view' },
+    { resource: 'reports', action: 'view' },
+    { resource: 'signatures', action: 'view' },
+    { resource: 'signatures', action: 'sign' },
+  ];
+
+  const permissionsByProfile: Record<string, typeof superAdminPermissions> = {
+    'Super Admin': superAdminPermissions,
+    'Coordenação': coordenacaoPermissions,
+    'Analista': analistaPermissions,
+  };
 
   const profilesMap: Record<string, string> = {};
 
@@ -247,8 +297,8 @@ async function main() {
     });
     profilesMap[pData.name] = profile.id;
 
-    // Todos os perfis recebem TODAS as permissões
-    for (const perm of allPermissions) {
+    const perms = permissionsByProfile[pData.name] || analistaPermissions;
+    for (const perm of perms) {
       await prisma.profile_permissions.create({
         data: {
           id: uuidv4(),
@@ -260,7 +310,7 @@ async function main() {
     }
   }
 
-  console.log(`   -> ✅ ${profilesData.length} perfis criados com ${allPermissions.length} permissões cada`);
+  console.log(`   -> ✅ ${profilesData.length} perfis criados com permissões diferenciadas`);
 
   // ============================================================================
   // 5. USUÁRIO ADMIN
@@ -302,6 +352,64 @@ async function main() {
       },
     });
   }
+
+  // ============================================================================
+  // 5.1 USUÁRIOS POR SETOR
+  // ============================================================================
+  console.log('👥 Criando Usuários por Setor...');
+
+  const userPassword = await bcrypt.hash('123456', 10);
+
+  const sectorUsersData = [
+    { name: 'Carlos Diretor', email: 'carlos@soloflow.com.br', sector: 'Diretoria', cpf: '111.111.111-11' },
+    { name: 'Ana Administrativa', email: 'ana@soloflow.com.br', sector: 'Administrativo', cpf: '222.222.222-22' },
+    { name: 'Roberto Financeiro', email: 'roberto@soloflow.com.br', sector: 'Financeiro', cpf: '333.333.333-33' },
+    { name: 'Juliana Compras', email: 'juliana@soloflow.com.br', sector: 'Compras', cpf: '444.444.444-44' },
+    { name: 'Fernanda RH', email: 'fernanda@soloflow.com.br', sector: 'Recursos Humanos', cpf: '555.555.555-55' },
+    { name: 'Lucas TI', email: 'lucas@soloflow.com.br', sector: 'Tecnologia da Informação', cpf: '666.666.666-66' },
+    { name: 'Marcos Jurídico', email: 'marcos@soloflow.com.br', sector: 'Jurídico', cpf: '777.777.777-77' },
+    { name: 'Patricia Operacional', email: 'patricia@soloflow.com.br', sector: 'Operacional', cpf: '888.888.888-88' },
+  ];
+
+  const usersMap: Record<string, string> = {};
+
+  for (const userData of sectorUsersData) {
+    const user = await prisma.user.create({
+      data: {
+        id: uuidv4(),
+        name: userData.name,
+        email: userData.email,
+        password: userPassword,
+        isActive: true,
+        cpf: userData.cpf,
+      },
+    });
+
+    usersMap[userData.sector] = user.id;
+
+    // Vincula à empresa no setor correspondente
+    await prisma.userCompany.create({
+      data: {
+        userId: user.id,
+        companyId: company.id,
+        sectorId: sectorsMap[userData.sector],
+        role: UserRole.USER,
+        isDefault: true,
+      },
+    });
+
+    // Atribui perfil Analista
+    await prisma.user_profiles.create({
+      data: {
+        id: uuidv4(),
+        userId: user.id,
+        companyId: company.id,
+        profileId: profilesMap['Analista'],
+      },
+    });
+  }
+
+  console.log(`   -> ✅ ${sectorUsersData.length} usuários criados (1 por setor)`);
 
   // ============================================================================
   // 6. PROCESSOS PRINCIPAIS - OTIMIZADOS BPM
@@ -1737,8 +1845,8 @@ async function main() {
   console.log('\n🎉 Seed Concluído com Sucesso!');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('🔐 CREDENCIAIS DE ACESSO:');
-  console.log('   Email: admin@soloflow.com.br');
-  console.log('   Senha: admin123');
+  console.log('   Admin:  admin@soloflow.com.br / admin123');
+  console.log('   Demais: carlos|ana|roberto|juliana|fernanda|lucas|marcos|patricia@soloflow.com.br / 123456');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('📊 ESTATÍSTICAS:');
   console.log(`   Empresas: ${stats.companies}`);
@@ -1762,8 +1870,9 @@ async function main() {
   console.log(`   Logs de Auditoria: ${stats.auditLogs}`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('✅ CARACTERÍSTICAS IMPLEMENTADAS:');
+  console.log('   ✅ 9 usuários (1 admin + 8 analistas por setor)');
   console.log('   ✅ Usuário admin com 3 perfis (Super Admin, Analista, Coordenação)');
-  console.log('   ✅ Todos os perfis com permissões completas');
+  console.log('   ✅ Perfis diferenciados (Super Admin: *:*, Coordenação: gestão, Analista: operacional)');
   console.log('   ✅ 10 Processos otimizados com análise BPM profissional');
   console.log('   ✅ 2 Subprocessos vinculados (Pagamento e Aditivo)');
   console.log('   ✅ Campos de formulário em TODAS as etapas INPUT');

@@ -234,10 +234,11 @@
                     v-model="formData[field.name]"
                     :label="field.label"
                     :placeholder="field.placeholder || '000.000.000-00'"
+                    v-mask="'###.###.###-##'"
+                    maxlength="14"
                     :required="field.required"
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
-                    @input="handleCPFInput(field.name, $event.target.value)"
                     persistent-hint
                     variant="outlined"
                     prepend-inner-icon="mdi-card-account-details"
@@ -249,10 +250,11 @@
                     v-model="formData[field.name]"
                     :label="field.label"
                     :placeholder="field.placeholder || '00.000.000/0000-00'"
+                    v-mask="'##.###.###/####-##'"
+                    maxlength="18"
                     :required="field.required"
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
-                    @input="handleCNPJInput(field.name, $event.target.value)"
                     persistent-hint
                     variant="outlined"
                     prepend-inner-icon="mdi-domain"
@@ -263,12 +265,12 @@
                     v-else-if="field.type === 'PHONE'"
                     v-model="formData[field.name]"
                     :label="field.label"
-                    :placeholder="field.placeholder || 'Digite apenas números'"
+                    :placeholder="field.placeholder || '(00) 00000-0000'"
+                    v-mask="['(##) ####-####', '(##) #####-####']"
+                    maxlength="15"
                     :required="field.required"
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
-                    @blur="formatPhoneField(field.name)"
-                    @input="onPhoneInput(field.name, $event)"
                     persistent-hint
                     variant="outlined"
                     prepend-inner-icon="mdi-phone"
@@ -277,16 +279,16 @@
 
                   <v-text-field
                     v-else-if="field.type === 'CURRENCY'"
-                    v-model="formData[field.name]"
+                    :model-value="formData[field.name]"
+                    @update:model-value="handleCurrencyInput(field.name, $event)"
                     :label="field.label"
                     :placeholder="field.placeholder || 'R$ 0,00'"
                     :required="field.required"
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
-                    @input="handleCurrencyInput(field.name, $event.target.value)"
                     persistent-hint
                     variant="outlined"
-                    prepend-inner-icon="mdi-currency-usd"
+                    prepend-inner-icon="mdi-currency-brl"
                     class="mb-3"
                   />
 
@@ -354,10 +356,10 @@
                     </small>
                   </div>
 
-                  <!-- Campo de Tabela Dinâmica -->
+                  <!-- Campo de Lista Dinâmica -->
                   <div
                     v-else-if="field.type?.toString().toUpperCase() === 'TABLE'"
-                    class="table-field-container mb-4"
+                    class="mb-4"
                   >
                     <DynamicTableInput
                       :field="field"
@@ -576,9 +578,8 @@ import { useProcessStore } from '@/stores/processes'
 import { useProcessTypeStore } from '@/stores/processTypes'
 import { useAuthStore } from '@/stores/auth'
 import DynamicTableInput from '@/components/DynamicTableInput.vue'
-import { 
-  formatCPF, formatCNPJ, formatCurrency, 
-  unformatCPF, unformatCNPJ, unformatCurrency,
+import {
+  formatCurrency,
   validateCPF, validateCNPJ, validateEmail, validateNumber, validatePhone
 } from '@/utils/formatters'
 
@@ -715,9 +716,7 @@ async function createProcessWithFiles() {
           try {
             // Upload único por campo
             const uploadedFile = await processStore.uploadProcessFieldFile(createdProcess.id, field.name, file)
-            console.log(`✅ Arquivo enviado para campo ${field.name}:`, uploadedFile)
           } catch (uploadError) {
-            console.error(`Erro ao fazer upload do campo ${field.name}:`, uploadError)
             window.showSnackbar?.(`Aviso: Erro ao fazer upload de ${field.label}`, 'warning')
           }
         }
@@ -731,7 +730,6 @@ async function createProcessWithFiles() {
     }, 500)
 
   } catch (error) {
-    console.error('Erro ao criar processo:', error)
     window.showSnackbar?.(error.message || 'Erro ao criar processo', 'error')
   } finally {
     creating.value = false
@@ -810,43 +808,7 @@ function getFieldRules(field) {
   return rules
 }
 
-// Funções para formatação de telefone
-function formatPhone(value) {
-  if (!value) return ''
-  // Remove tudo que não é número
-  const digits = value.replace(/\D/g, '')
 
-  if (digits.length === 0) return ''
-
-  // Formata de acordo com a quantidade de dígitos
-  if (digits.length <= 2) {
-    return `(${digits}`
-  } else if (digits.length <= 6) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
-  } else if (digits.length <= 10) {
-    // Telefone fixo: (XX) XXXX-XXXX
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-  } else {
-    // Celular: (XX) XXXXX-XXXX
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`
-  }
-}
-
-function formatPhoneField(fieldName) {
-  const value = formData.value[fieldName]
-  if (value) {
-    formData.value[fieldName] = formatPhone(value)
-  }
-}
-
-function onPhoneInput(fieldName, event) {
-  // Permite que o usuário digite livremente, mas remove caracteres não numéricos
-  // A formatação acontece no blur
-  const value = event.target?.value || formData.value[fieldName] || ''
-  // Mantém apenas números enquanto digita (máximo 11 dígitos)
-  const digits = value.replace(/\D/g, '').slice(0, 11)
-  formData.value[fieldName] = digits
-}
 
 // Métodos de navegação (mantidos)
 function goBack() {
@@ -920,7 +882,6 @@ async function handleFileChange(fieldName, file) {
   }
 
   // Upload será feito no submit
-  console.log('File selected for field', fieldName, ':', file)
 }
 
 // ✅ Novas funções para o design de upload profissional
@@ -969,7 +930,6 @@ function validateAndSetFile(fieldName, file, field) {
 
   // Arquivo válido
   fileInputs.value[fieldName] = file
-  console.log('File validated and set for field', fieldName, ':', file)
 }
 
 function removeFile(fieldName) {
@@ -1065,41 +1025,38 @@ function initializeFormData(processType) {
       } else if (field.type === 'TABLE') {
         // Criar novo array único para cada tabela para evitar compartilhamento de referências
         formData.value[field.name] = []
-        console.log(`✅ Inicializado campo TABLE: ${field.name} com array vazio`)
       }
     })
   }
 }
 
 // Watchers (mantidos)
-watch(() => preselectedType.value, async (newTypeId) => {
-  if (newTypeId && processTypeStore.processTypes.length > 0) {
-    // Buscar em TODOS os tipos do store (não nos filtrados)
-    const processType = processTypeStore.processTypes.find(pt => String(pt.id) === String(newTypeId))
-    if (processType) {
-      console.log('✨ Pre-selecting process type:', processType.name)
-      selectedProcessTypeId.value = processType.id
-      initializeFormData(processType)
+watch(
+  [() => preselectedType.value, () => processTypeStore.processTypes.length],
+  ([newTypeId, typesLength]) => {
+    if (newTypeId && typesLength > 0 && !selectedProcessTypeId.value) {
+      // Buscar em TODOS os tipos do store (não nos filtrados)
+      const processType = processTypeStore.processTypes.find(pt => String(pt.id) === String(newTypeId))
+      if (processType) {
+        selectedProcessTypeId.value = processType.id
+        initializeFormData(processType)
+      }
     }
-  }
-}, { immediate: true })
+  },
+  { immediate: true }
+)
 
-// Métodos de formatação para campos
-function handleCPFInput(fieldName, value) {
-  formData.value[fieldName] = formatCPF(value)
-}
-
-function handleCNPJInput(fieldName, value) {
-  formData.value[fieldName] = formatCNPJ(value)
-}
-
+// Formatação de moeda (recebe valor diretamente do @update:model-value)
 function handleCurrencyInput(fieldName, value) {
+  if (!value) {
+    formData.value[fieldName] = ''
+    return
+  }
   formData.value[fieldName] = formatCurrency(value)
 }
 
 // Lifecycle (mantido)
 onMounted(async () => {
-  console.log('🚀 CreateProcess mounted, typeId:', preselectedType.value)
   
   if (processTypeStore.processTypes.length === 0) {
     await processTypeStore.fetchProcessTypes()
@@ -1156,13 +1113,6 @@ onMounted(async () => {
   border: 1px solid var(--color-neutral-200);
 }
 
-/* Campo de tabela dinâmica */
-.table-field-container {
-  background: var(--color-neutral-50);
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid var(--color-neutral-200);
-}
 
 /* Modern Page Header with Gradient */
 .page-header {

@@ -163,4 +163,142 @@ export class CacheService {
     await this.delPattern('profiles:*');
     this.logger.warn(`Profile ${profileId} modified - invalidated all user caches`);
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // RATE LIMITING - Controle de requisições distribuído com Redis
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Gera chave de rate limit
+   */
+  getRateLimitKey(clientIp: string, path: string): string {
+    return `ratelimit:${clientIp}:${path}`;
+  }
+
+  /**
+   * Incrementa contador de rate limit e retorna o estado atual
+   * Usa operação atômica para garantir consistência em ambiente distribuído
+   */
+  async incrementRateLimit(
+    clientIp: string,
+    path: string,
+    windowMs: number,
+  ): Promise<{ count: number; resetTime: number }> {
+    const key = this.getRateLimitKey(clientIp, path);
+    const now = Date.now();
+    const ttlSeconds = Math.ceil(windowMs / 1000);
+
+    try {
+      // Tentar acessar o store Redis diretamente para operações atômicas
+      const stores = (this.cacheManager as any).stores;
+      const redisClient = stores?.[0]?.client;
+
+      if (redisClient && typeof redisClient.multi === 'function') {
+        // Usar transação Redis para operação atômica
+        return await this.incrementWithRedis(redisClient, key, now, windowMs, ttlSeconds);
+      }
+
+      // Fallback para cache-manager padrão (menos eficiente, mas funcional)
+      return await this.incrementWithCacheManager(key, now, windowMs, ttlSeconds);
+    } catch (error) {
+      this.logger.error(`Rate limit error for ${key}:`, error.message);
+      // Em caso de erro, permitir a requisição (fail-open para não bloquear usuários)
+      return { count: 1, resetTime: now + windowMs };
+    }
+  }
+
+  /**
+   * Incrementa usando cliente Redis diretamente (mais eficiente)
+   */
+  private async incrementWithRedis(
+    redisClient: any,
+    key: string,
+    now: number,
+    windowMs: number,
+    ttlSeconds: number,
+  ): Promise<{ count: number; resetTime: number }> {
+    const dataKey = `${key}:data`;
+
+    // Usar MULTI/EXEC para operação atômica
+    const result = await redisClient
+      .multi()
+      .hIncrBy(dataKey, 'count', 1)
+      .hGet(dataKey, 'resetTime')
+      .expire(dataKey, ttlSeconds)
+      .exec();
+
+    const count = result[0] || 1;
+    let resetTime = parseInt(result[1]) || 0;
+
+    // Se não existe resetTime ou já expirou, definir novo
+    if (!resetTime || now > resetTime) {
+      resetTime = now + windowMs;
+      await redisClient.hSet(dataKey, 'resetTime', resetTime.toString());
+      await redisClient.hSet(dataKey, 'count', '1');
+      return { count: 1, resetTime };
+    }
+
+    return { count, resetTime };
+  }
+
+  /**
+   * Incrementa usando cache-manager (fallback)
+   */
+  private async incrementWithCacheManager(
+    key: string,
+    now: number,
+    windowMs: number,
+    ttlSeconds: number,
+  ): Promise<{ count: number; resetTime: number }> {
+    const cached = await this.get<{ count: number; resetTime: number }>(key);
+
+    if (!cached || now > cached.resetTime) {
+      // Nova janela de tempo
+      const data = { count: 1, resetTime: now + windowMs };
+      await this.set(key, data, ttlSeconds * 1000);
+      return data;
+    }
+
+    // Incrementar contador
+    cached.count++;
+    await this.set(key, cached, ttlSeconds * 1000);
+    return cached;
+  }
+
+  /**
+   * Obtém o estado atual do rate limit sem incrementar
+   */
+  async getRateLimitState(
+    clientIp: string,
+    path: string,
+  ): Promise<{ count: number; resetTime: number } | null> {
+    const key = this.getRateLimitKey(clientIp, path);
+    return await this.get<{ count: number; resetTime: number }>(key);
+  }
+
+  /**
+   * Reseta o rate limit para um cliente/path específico
+   */
+  async resetRateLimit(clientIp: string, path: string): Promise<void> {
+    const key = this.getRateLimitKey(clientIp, path);
+    await this.del(key);
+    await this.del(`${key}:data`);
+  }
+
+  /**
+   * Verifica se o Redis está disponível
+   */
+  async isRedisAvailable(): Promise<boolean> {
+    try {
+      const stores = (this.cacheManager as any).stores;
+      const redisClient = stores?.[0]?.client;
+      if (redisClient && typeof redisClient.ping === 'function') {
+        await redisClient.ping();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
 }

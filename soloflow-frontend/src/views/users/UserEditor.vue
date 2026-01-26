@@ -161,7 +161,7 @@
                   variant="outlined"
                   density="comfortable"
                   prepend-inner-icon="mdi-lock-outline"
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Mínimo 8 caracteres"
                   hint="O usuário poderá alterar a senha após o primeiro login"
                   persistent-hint
                   counter
@@ -460,7 +460,7 @@ const emailRules = [
 
 const passwordRules = [
   v => !!v || 'A senha é obrigatória',
-  v => (v && v.length >= 6) || 'A senha deve ter no mínimo 6 caracteres'
+  v => (v && v.length >= 8) || 'A senha deve ter no mínimo 8 caracteres'
 ]
 
 const cpfRules = [
@@ -651,7 +651,6 @@ async function loadData() {
       }
     }
   } catch (error) {
-    console.error('Error loading data:', error)
     window.showSnackbar?.('Erro ao carregar dados', 'error')
   } finally {
     loading.value = false
@@ -695,7 +694,6 @@ async function loadUser() {
       form.value?.validate()
     })
   } catch (error) {
-    console.error('Error loading user:', error)
     window.showSnackbar?.('Erro ao carregar usuário', 'error')
     router.push('/usuarios')
   }
@@ -758,7 +756,6 @@ async function save() {
 
     router.push('/usuarios')
   } catch (error) {
-    console.error('Error saving user:', error)
     const errorMessage = error.response?.data?.message || error.message || 'Erro ao salvar usuário'
     window.showSnackbar(errorMessage, 'error')
   } finally {

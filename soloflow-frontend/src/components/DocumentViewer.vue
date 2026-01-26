@@ -455,7 +455,6 @@ async function loadCompanyUsers() {
     const response = await api.get('/users', { params: { companyId: props.process.companyId } })
     companyUsers.value = response.data?.data || response.data || []
   } catch (e) {
-    console.error('Erro ao carregar usuários da empresa:', e)
     companyUsers.value = []
   }
 }
@@ -533,7 +532,6 @@ const allDocuments = computed(() => {
                 : subTask.signatures
               signedByUserIds = signatures.map(sig => sig.signerId || sig.userId)
             } catch (e) {
-              console.error('Erro ao parsear signatures da sub-tarefa:', e)
             }
           }
 
@@ -563,7 +561,6 @@ const allDocuments = computed(() => {
 
               canSign = subTaskSignerIds.includes(currentUserId) && !signedByUserIds.includes(currentUserId)
             } catch (e) {
-              console.error('Erro ao parsear signers da sub-tarefa:', e)
             }
           }
 
@@ -880,7 +877,6 @@ async function downloadDocument(doc) {
 
     window.showSnackbar?.(`Download de "${doc.originalName}" iniciado`, 'success')
   } catch (error) {
-    console.error('Error downloading document:', error)
     window.showSnackbar?.('Erro ao baixar documento', 'error')
   }
 }
@@ -892,7 +888,6 @@ async function refreshDocuments() {
     await new Promise(resolve => setTimeout(resolve, 500))
     window.showSnackbar?.('Documentos atualizados', 'success')
   } catch (error) {
-    console.error('Error refreshing documents:', error)
     window.showSnackbar?.('Erro ao atualizar documentos', 'error')
   } finally {
     refreshing.value = false
@@ -941,11 +936,22 @@ function getSignerInitials(name) {
    Inspired by: Linear, Notion, Monday.com, Asana
    ============================================================================= */
 
+/* Fix overflow when used inside v-navigation-drawer */
+.drawer-viewer {
+  height: 100%;
+  max-height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .docs-drawer {
-  height: 100vh;
+  height: 100%;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
   background: var(--color-surface, #fff);
+  overflow: hidden;
 }
 
 /* Header */

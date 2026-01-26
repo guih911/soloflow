@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import * as path from 'path';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -18,6 +19,8 @@ import { ChildProcessesModule } from './modules/child-processes/child-processes.
 import { SubTasksModule } from './modules/sub-tasks/sub-tasks.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { LgpdModule } from './modules/lgpd/lgpd.module';
+import { MailerModule } from './modules/mailer/mailer.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -25,7 +28,9 @@ import { LgpdModule } from './modules/lgpd/lgpd.module';
       isGlobal: true,
        envFilePath: path.resolve(__dirname, '..', '.env'),
     }),
+    EventEmitterModule.forRoot(),
     PrismaModule,
+    MailerModule,
     StorageModule,
     CacheModule,
     LgpdModule, // Módulo LGPD - Conformidade com Lei de Proteção de Dados
@@ -42,6 +47,7 @@ import { LgpdModule } from './modules/lgpd/lgpd.module';
     NotificationsModule,
     ChildProcessesModule,
     SubTasksModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}

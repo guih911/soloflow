@@ -18,18 +18,6 @@ declare module '*.css' {
 
 declare module 'vuetify/styles'
 
-declare module 'v-mask' {
-  import type { Directive } from 'vue'
-
-  interface VueMaskPlugin {
-    VueMaskDirective: Directive
-  }
-
-  const plugin: VueMaskPlugin
-  export default plugin
-  export const VueMaskDirective: Directive
-}
-
 declare module './router' {
   import type { Router } from 'vue-router'
   const router: Router

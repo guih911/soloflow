@@ -144,8 +144,8 @@
               <div class="section-value permissions-list">
                 <template v-if="summarizeScreens(profile).length > 0">
                   <v-tooltip
-                    v-for="summary in summarizeScreens(profile).slice(0, 2)"
-                    :key="summary"
+                    v-for="(summary, idx) in summarizeScreens(profile).slice(0, 2)"
+                    :key="idx"
                     :text="summary"
                     location="top"
                   >
@@ -187,8 +187,8 @@
               <div class="section-value permissions-list">
                 <template v-if="summarizeProcessTypes(profile).length > 0">
                   <v-chip
-                    v-for="summary in summarizeProcessTypes(profile).slice(0, 3)"
-                    :key="summary"
+                    v-for="(summary, idx) in summarizeProcessTypes(profile).slice(0, 3)"
+                    :key="idx"
                     size="small"
                     variant="tonal"
                     color="green"
@@ -307,7 +307,6 @@ onMounted(async () => {
       companyStore.fetchCompanies(),
     ])
   } catch (error) {
-    console.error('Erro ao carregar perfis:', error)
     window.showSnackbar?.('Erro ao carregar perfis', 'error')
   }
 })

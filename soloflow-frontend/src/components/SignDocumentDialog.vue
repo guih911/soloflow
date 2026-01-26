@@ -13,7 +13,7 @@
         <p class="header-subtitle">Confirme sua identidade para assinar digitalmente</p>
       </div>
 
-      <v-form ref="signForm" v-model="signValid" @submit.prevent="handleSign">
+      <v-form ref="signForm" v-model="signValid" @submit.prevent="handleSubmit">
         <v-card-text class="dialog-content">
           <!-- Document Info Card -->
           <div class="document-card">
@@ -26,26 +26,78 @@
             </div>
           </div>
 
-          <!-- Password Field -->
-          <div class="password-section">
-            <label class="field-label" id="password-label">Digite sua senha para confirmar</label>
-            <v-text-field
-              v-model="signData.userPassword"
-              type="password"
-              placeholder="••••••••"
-              prepend-inner-icon="mdi-lock-outline"
-              :rules="[v => !!v || 'A senha é obrigatória']"
-              required
-              variant="outlined"
-              density="comfortable"
-              class="password-field"
-              autofocus
-              hide-details="auto"
-              aria-required="true"
-              aria-labelledby="password-label"
-              @keyup.enter="handleSign"
-            />
-          </div>
+          <!-- Etapa 1: Senha -->
+          <template v-if="otpStep === 'password'">
+            <div class="password-section">
+              <label class="field-label" id="password-label">Digite sua senha para confirmar</label>
+              <v-text-field
+                v-model="signData.userPassword"
+                type="password"
+                placeholder="••••••••"
+                prepend-inner-icon="mdi-lock-outline"
+                :rules="[v => !!v || 'A senha é obrigatória']"
+                required
+                variant="outlined"
+                density="comfortable"
+                class="password-field"
+                autofocus
+                hide-details="auto"
+                aria-required="true"
+                aria-labelledby="password-label"
+                @keyup.enter="handleSubmit"
+              />
+            </div>
+          </template>
+
+          <!-- Etapa 2: Código OTP -->
+          <template v-if="otpStep === 'otp'">
+            <v-alert
+              type="info"
+              variant="tonal"
+              density="compact"
+              class="mb-4"
+            >
+              <div class="text-body-2">
+                Um código de 6 dígitos foi enviado para o seu e-mail.
+              </div>
+            </v-alert>
+
+            <div class="password-section">
+              <label class="field-label">Código de verificação</label>
+              <v-text-field
+                v-model="otpCode"
+                placeholder="000000"
+                prepend-inner-icon="mdi-numeric"
+                variant="outlined"
+                density="comfortable"
+                maxlength="6"
+                class="password-field"
+                autofocus
+                hide-details="auto"
+                :rules="[v => !!v || 'Código obrigatório', v => v?.length === 6 || '6 dígitos']"
+                @keyup.enter="handleSubmit"
+              />
+            </div>
+
+            <!-- Countdown + Reenviar -->
+            <div class="d-flex align-center justify-space-between mb-3 mt-2">
+              <span class="text-caption" :class="otpCountdown <= 60 ? 'text-error' : 'text-grey'">
+                <v-icon size="14" class="mr-1">mdi-timer-outline</v-icon>
+                {{ formatCountdown(otpCountdown) }}
+              </span>
+              <v-btn
+                variant="text"
+                size="small"
+                color="primary"
+                :disabled="otpCountdown > 240 || loading"
+                @click="resendOtp"
+                class="text-none"
+              >
+                <v-icon start size="16">mdi-refresh</v-icon>
+                Reenviar
+              </v-btn>
+            </div>
+          </template>
 
           <!-- Error Alert -->
           <v-alert
@@ -63,25 +115,25 @@
           <!-- Info Alert -->
           <div class="info-box">
             <v-icon size="18" color="info">mdi-shield-check</v-icon>
-            <span>Seus dados (nome, CPF, e-mail e data/hora) serão registrados no documento.</span>
+            <span>Seus dados (nome, CPF, e-mail e data/hora) serão registrados no documento com autenticação em duas etapas.</span>
           </div>
         </v-card-text>
 
         <div class="dialog-actions">
-          <v-btn variant="text" color="grey" @click="close" :disabled="loading">
-            Cancelar
+          <v-btn variant="text" color="grey" @click="handleBack" :disabled="loading">
+            {{ otpStep === 'otp' ? 'Voltar' : 'Cancelar' }}
           </v-btn>
           <v-btn
             color="primary"
             variant="flat"
             size="large"
-            :disabled="!signValid"
+            :disabled="otpStep === 'password' ? !signValid : (!otpCode || otpCode.length !== 6 || otpCountdown <= 0)"
             :loading="loading"
-            prepend-icon="mdi-draw-pen"
-            @click="handleSign"
+            :prepend-icon="otpStep === 'password' ? 'mdi-email-fast' : 'mdi-draw-pen'"
+            @click="handleSubmit"
             class="sign-btn"
           >
-            Assinar Documento
+            {{ otpStep === 'password' ? 'Enviar Código' : 'Confirmar e Assinar' }}
           </v-btn>
         </div>
       </v-form>
@@ -116,7 +168,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useSignaturesStore } from '../stores/signatures'
 
 const props = defineProps({
@@ -137,6 +189,12 @@ const signValid = ref(false)
 const successDialog = ref(false)
 const errorMessage = ref('')
 
+// OTP state
+const otpStep = ref('password') // 'password' | 'otp'
+const otpCode = ref('')
+const otpCountdown = ref(0)
+let otpTimerInterval = null
+
 const signData = ref({
   attachmentId: '',
   stepExecutionId: '',
@@ -150,8 +208,10 @@ const loading = computed(() => signaturesStore.loading)
 
 watch(() => props.modelValue, (newVal) => {
   if (newVal) {
-    // Resetar form e erro
     errorMessage.value = ''
+    otpStep.value = 'password'
+    otpCode.value = ''
+    stopOtpTimer()
     signData.value = {
       attachmentId: props.attachment?.id || '',
       stepExecutionId: props.stepExecutionId || props.attachment?.stepExecutionId || props.attachment?.executionId || '',
@@ -163,6 +223,10 @@ watch(() => props.modelValue, (newVal) => {
   }
 })
 
+onBeforeUnmount(() => {
+  stopOtpTimer()
+})
+
 function formatFileSize(bytes) {
   if (!bytes) return 'N/A'
   if (bytes < 1024) return `${bytes} B`
@@ -170,13 +234,45 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
-async function handleSign() {
+function formatCountdown(seconds) {
+  const min = Math.floor(seconds / 60)
+  const sec = seconds % 60
+  return `${min}:${sec.toString().padStart(2, '0')}`
+}
+
+function startOtpTimer() {
+  stopOtpTimer()
+  otpCountdown.value = 300 // 5 minutos
+  otpTimerInterval = setInterval(() => {
+    otpCountdown.value--
+    if (otpCountdown.value <= 0) {
+      stopOtpTimer()
+    }
+  }, 1000)
+}
+
+function stopOtpTimer() {
+  if (otpTimerInterval) {
+    clearInterval(otpTimerInterval)
+    otpTimerInterval = null
+  }
+}
+
+async function handleSubmit() {
+  if (otpStep.value === 'password') {
+    await requestOtp()
+  } else {
+    await verifyAndSign()
+  }
+}
+
+async function requestOtp() {
   if (!signValid.value) return
 
   try {
     errorMessage.value = ''
-    let result
 
+    // Para sub-tarefas, usar fluxo legado (sem OTP)
     if (props.isSubTaskAttachment && props.subTaskId) {
       const subTaskSignData = {
         subTaskId: props.subTaskId,
@@ -185,18 +281,67 @@ async function handleSign() {
         location: signData.value.location,
         contactInfo: signData.value.contactInfo
       }
-      result = await signaturesStore.signSubTaskDocument(subTaskSignData)
-    } else {
-      result = await signaturesStore.signDocument(signData.value)
+      await signaturesStore.signSubTaskDocument(subTaskSignData)
+      successDialog.value = true
+      return
     }
 
+    // Solicitar OTP
+    await signaturesStore.requestOtp(signData.value.attachmentId, signData.value.userPassword)
+
+    otpStep.value = 'otp'
+    otpCode.value = ''
+    startOtpTimer()
+  } catch (error) {
+    errorMessage.value = error.response?.data?.message || 'Erro ao solicitar código. Verifique sua senha.'
+  }
+}
+
+async function resendOtp() {
+  try {
+    errorMessage.value = ''
+    await signaturesStore.requestOtp(signData.value.attachmentId, signData.value.userPassword)
+    otpCode.value = ''
+    startOtpTimer()
+  } catch (error) {
+    errorMessage.value = error.response?.data?.message || 'Erro ao reenviar código.'
+  }
+}
+
+async function verifyAndSign() {
+  if (!otpCode.value || otpCode.value.length !== 6) return
+
+  try {
+    errorMessage.value = ''
+
+    const payload = {
+      attachmentId: signData.value.attachmentId,
+      otpCode: otpCode.value,
+      stepExecutionId: signData.value.stepExecutionId,
+      contactInfo: signData.value.contactInfo || null,
+    }
+
+    await signaturesStore.verifyOtpAndSign(payload)
+    stopOtpTimer()
     successDialog.value = true
   } catch (error) {
-    errorMessage.value = error.response?.data?.message || 'Erro ao assinar documento. Verifique sua senha e tente novamente.'
+    errorMessage.value = error.response?.data?.message || 'Código inválido ou expirado.'
+  }
+}
+
+function handleBack() {
+  if (otpStep.value === 'otp') {
+    otpStep.value = 'password'
+    otpCode.value = ''
+    stopOtpTimer()
+    errorMessage.value = ''
+  } else {
+    close()
   }
 }
 
 function close() {
+  stopOtpTimer()
   emit('update:modelValue', false)
 }
 

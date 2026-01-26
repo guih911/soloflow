@@ -691,6 +691,19 @@
                         hide-details
                       />
                     </div>
+                    <!-- Opções para coluna tipo Lista -->
+                    <div v-if="column.type === 'DROPDOWN'" class="column-options mt-2">
+                      <v-text-field
+                        v-model="column.optionsText"
+                        label="Opções (separadas por vírgula)"
+                        placeholder="Opção 1, Opção 2, Opção 3"
+                        variant="outlined"
+                        density="compact"
+                        hide-details
+                        hint="Separe as opções por vírgula"
+                        @update:model-value="column.options = ($event || '').split(',').map(o => o.trim()).filter(Boolean)"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -914,7 +927,6 @@ const activeTab = ref('basic')
 
 // DEBUG: Log quando activeTab mudar
 watch(activeTab, (newVal, oldVal) => {
-  console.log('🔄 activeTab changed:', oldVal, '→', newVal)
   console.trace('Stack trace para identificar origem:')
 })
 
@@ -1034,7 +1046,6 @@ async function saveAllowedChildProcessTypes() {
     lastSavedChildProcessTypes.value = currentIds
     window.showSnackbar?.('Sub-processos atualizados!', 'success')
   } catch (err) {
-    console.error('Erro ao atualizar sub-processos:', err)
     window.showSnackbar?.('Erro ao atualizar', 'error')
   }
 }
@@ -1058,7 +1069,8 @@ const tableColumnTypes = [
   { title: 'Texto', value: 'TEXT' },
   { title: 'Número', value: 'NUMBER' },
   { title: 'Dinheiro', value: 'CURRENCY' },
-  { title: 'Data', value: 'DATE' }
+  { title: 'Data', value: 'DATE' },
+  { title: 'Lista', value: 'DROPDOWN' }
 ]
 
 function getFieldTypeColor(type) {
@@ -1202,7 +1214,6 @@ async function createChildType() {
       closeCreateChildTypeDialog()
     }
   } catch (err) {
-    console.error('Erro ao criar tipo:', err)
     window.showSnackbar?.(err.response?.data?.message || 'Erro ao criar tipo', 'error')
   } finally {
     savingChildType.value = false
@@ -1215,7 +1226,6 @@ async function loadAllProcessTypes() {
     await processTypeStore.fetchProcessTypes()
     allProcessTypes.value = processTypeStore.processTypes || []
   } catch (err) {
-    console.error('Erro ao carregar tipos:', err)
   } finally {
     loadingProcessTypes.value = false
   }
@@ -1477,7 +1487,6 @@ async function save() {
     }
     router.push({ name: 'TiposDeProcesso' })
   } catch (e) {
-    console.error('Save error:', e)
     window.showSnackbar?.(e.response?.data?.message || 'Erro ao salvar', 'error')
   } finally {
     saving.value = false
@@ -1555,20 +1564,16 @@ function onStepDrop(event, dropIndex) {
 }
 
 onMounted(async () => {
-  console.log('🚀 ProcessTypeEditor onMounted - activeTab:', activeTab.value)
   try {
     ignoreNextAllowedChildProcessTypesChange.value = true
 
-    console.log('📥 Carregando dados iniciais...')
     await Promise.all([
       sectorStore.fetchSectors?.(),
       userStore.fetchUsers?.(),
       loadAllProcessTypes()
     ])
-    console.log('✅ Dados iniciais carregados - activeTab:', activeTab.value)
 
     if (isEditing.value) {
-      console.log('📝 Modo edição - carregando tipo de processo...')
       await processTypeStore.fetchProcessType(route.params.id)
       const current = processTypeStore.currentProcessType
       if (current) {
@@ -1586,14 +1591,11 @@ onMounted(async () => {
         }
         // Inicializa o valor salvo para evitar saves desnecessários
         lastSavedChildProcessTypes.value = childTypes.sort().join(',')
-        console.log('✅ FormData carregado - activeTab:', activeTab.value)
       }
     }
   } catch (e) {
-    console.error('❌ Erro no onMounted:', e)
     window.showSnackbar?.('Erro ao carregar dados', 'error')
   }
-  console.log('🏁 onMounted finalizado - activeTab:', activeTab.value)
 })
 </script>
 

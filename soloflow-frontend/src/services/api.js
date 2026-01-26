@@ -9,18 +9,34 @@ const api = axios.create({
 // Flag para evitar múltiplas tentativas de refresh simultâneas
 let isRefreshing = false
 let failedQueue = []
-// Flag para evitar múltiplos toasts de sessão expirada
+// Flag para evitar múltiplos redirects de sessão expirada
 let sessionExpiredHandled = false
+let sessionExpiredTimer = null
+// Timeout para reset de isRefreshing em caso de erro inesperado
+let refreshTimeoutTimer = null
+const REFRESH_TIMEOUT_MS = 15000 // 15 segundos máximo para refresh
 
 const processQueue = (error, token = null) => {
-  failedQueue.forEach(prom => {
+  // Processar todas as promises pendentes
+  const queue = [...failedQueue]
+  failedQueue = []
+
+  queue.forEach(prom => {
     if (error) {
       prom.reject(error)
     } else {
       prom.resolve(token)
     }
   })
-  failedQueue = []
+}
+
+// Reset seguro do estado de refresh
+const resetRefreshState = () => {
+  if (refreshTimeoutTimer) {
+    clearTimeout(refreshTimeoutTimer)
+    refreshTimeoutTimer = null
+  }
+  isRefreshing = false
 }
 
 // Função para limpar sessão e redirecionar para login
@@ -29,6 +45,12 @@ function clearSessionAndRedirect() {
     return
   }
   sessionExpiredHandled = true
+
+  // Limpar timer anterior se existir
+  if (sessionExpiredTimer) {
+    clearTimeout(sessionExpiredTimer)
+    sessionExpiredTimer = null
+  }
 
   localStorage.removeItem('token')
   localStorage.removeItem('user')
@@ -42,14 +64,21 @@ function clearSessionAndRedirect() {
   if (router.currentRoute.value.path !== '/entrar') {
     window.showSnackbar?.('Sua sessão expirou. Faça login novamente.', 'warning')
     router.push('/entrar').then(() => {
-      // Reset da flag após redirecionamento bem-sucedido
-      setTimeout(() => {
+      // Reset da flag após navegação concluída com debounce seguro
+      sessionExpiredTimer = setTimeout(() => {
         sessionExpiredHandled = false
-      }, 1000)
+        sessionExpiredTimer = null
+      }, 3000)
+    }).catch(() => {
+      // Se navegação falhar, resetar flag para permitir nova tentativa
+      sessionExpiredHandled = false
     })
   } else {
-    // Reset da flag se já estava na página de login
-    sessionExpiredHandled = false
+    // Já na página de login, resetar flag com delay para evitar loops
+    sessionExpiredTimer = setTimeout(() => {
+      sessionExpiredHandled = false
+      sessionExpiredTimer = null
+    }, 3000)
   }
 }
 
@@ -95,6 +124,17 @@ api.interceptors.response.use(
       originalRequest._retry = true
       isRefreshing = true
 
+      // Timeout de segurança para reset do estado de refresh
+      // Evita que isRefreshing fique true indefinidamente em caso de erro inesperado
+      refreshTimeoutTimer = setTimeout(() => {
+        if (isRefreshing) {
+          const timeoutError = new Error('Timeout ao renovar sessão')
+          processQueue(timeoutError, null)
+          resetRefreshState()
+          clearSessionAndRedirect()
+        }
+      }, REFRESH_TIMEOUT_MS)
+
       try {
         const response = await axios.post(
           `${api.defaults.baseURL}/auth/refresh`,
@@ -102,7 +142,8 @@ api.interceptors.response.use(
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem('token')}`
-            }
+            },
+            timeout: 10000 // 10 segundos de timeout para a requisição
           }
         )
 
@@ -142,13 +183,16 @@ api.interceptors.response.use(
           // Refazer requisição original com novo token
           originalRequest.headers.Authorization = `Bearer ${access_token}`
           return api(originalRequest)
+        } else {
+          // Token não retornado - tratar como erro
+          throw new Error('Token não retornado pelo servidor')
         }
       } catch (refreshError) {
         processQueue(refreshError, null)
         clearSessionAndRedirect()
         return Promise.reject(refreshError)
       } finally {
-        isRefreshing = false
+        resetRefreshState()
       }
     }
 

@@ -422,7 +422,6 @@ const allAttachments = computed(() => {
             }
           }
         } catch (error) {
-          console.error('Error parsing step metadata:', error)
         }
       }
     })
@@ -599,7 +598,6 @@ async function openInNewTab(attachment) {
       URL.revokeObjectURL(url)
     }, 60000)
   } catch (error) {
-    console.error('Error opening attachment:', error)
     window.showSnackbar?.('Erro ao abrir arquivo', 'error')
   }
 }
@@ -622,7 +620,6 @@ async function downloadAttachment(attachment) {
 
     window.showSnackbar?.(`Download de "${attachment.originalName}" iniciado`, 'success')
   } catch (error) {
-    console.error('Error downloading attachment:', error)
     window.showSnackbar?.('Erro ao baixar arquivo', 'error')
   } finally {
     downloadingItem.value = ''
@@ -641,7 +638,6 @@ async function downloadGroupAttachments(attachments) {
     
     window.showSnackbar?.(`${attachments.length} arquivo(s) baixado(s)`, 'success')
   } catch (error) {
-    console.error('Error downloading group:', error)
     window.showSnackbar?.('Erro ao baixar arquivos', 'error')
   } finally {
     downloadingGroup.value = ''
@@ -660,7 +656,6 @@ async function downloadAllAttachments() {
     
     window.showSnackbar?.(`${filteredAttachments.value.length} arquivo(s) baixado(s)`, 'success')
   } catch (error) {
-    console.error('Error downloading all:', error)
     window.showSnackbar?.('Erro ao baixar arquivos', 'error')
   } finally {
     downloadingAll.value = false

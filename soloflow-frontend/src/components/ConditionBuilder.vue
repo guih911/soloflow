@@ -867,7 +867,6 @@ function runConditionTest() {
     const result = evaluateCondition(conditionData.value, { [conditionData.value.field]: testValue.value })
     testResult.value = result
   } catch (error) {
-    console.error('Error testing condition:', error)
     testResult.value = false
   }
 }

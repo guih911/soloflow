@@ -1,5 +1,5 @@
 // src/modules/users/users.service.ts
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserCompanyDto, UserCompanyAssignmentDto } from './dto/create-user-company.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -12,6 +12,8 @@ import { CryptoService } from '../lgpd/crypto.service';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private prisma: PrismaService,
     private cryptoService: CryptoService,
@@ -59,7 +61,6 @@ export class UsersService {
   }
 
   async create(createUserDto: CreateUserCompanyDto, assignedBy?: string): Promise<any> {
-    console.log('Creating user with data:', createUserDto);
 
     // ✅ VALIDAÇÃO 1: Email único (obrigatório)
     const existingUser = await this.prisma.user.findUnique({
@@ -164,8 +165,6 @@ export class UsersService {
           },
         });
 
-        console.log('User created:', user);
-
         for (const companyAssignment of companiesToAssign) {
           const userCompany = await tx.userCompany.create({
             data: {
@@ -180,8 +179,6 @@ export class UsersService {
               sector: true,
             },
           });
-
-          console.log('UserCompany created:', userCompany);
 
           if (companyAssignment.profileId) {
             await this.upsertUserProfile(tx, {
@@ -198,8 +195,8 @@ export class UsersService {
 
       return this.findOne(user.id);
     } catch (error) {
-      console.error('Error creating user:', error);
-      throw new BadRequestException('Erro ao criar usu�rio: ' + error.message);
+      this.logger.error('Erro ao criar usuário', error.stack);
+      throw new BadRequestException('Erro ao criar usuário: ' + error.message);
     }
   }
 
@@ -244,33 +241,36 @@ export class UsersService {
       orderBy: { user: { name: 'asc' } },
     });
 
-    return userCompanies.map(uc => ({
-      id: uc.user.id,
-      name: uc.user.name,
-      email: uc.user.email,
-      cpf: uc.user.cpf ? this.cryptoService.decryptCPF(uc.user.cpf) : null, // CPF descriptografado (LGPD)
-      cpfMasked: uc.user.cpf ? this.cryptoService.maskCPF(this.cryptoService.decryptCPF(uc.user.cpf)) : null, // CPF mascarado
-      role: uc.role, // Role na empresa atual
-      sector: uc.sector,
-      isActive: uc.user.isActive,
-      createdAt: uc.user.createdAt,
-      // Todas as empresas do usuário
-      companies: uc.user.userCompanies.map(userComp => {
-        const profileAssignment = uc.user.user_profiles?.find(pa => pa.companyId === userComp.company.id);
-        return {
-          companyId: userComp.company.id,
-          companyName: userComp.company.name,
-          role: userComp.role,
-          sector: userComp.sector,
-          isDefault: userComp.isDefault,
-          profileId: profileAssignment?.profileId || null,
-          profileName: profileAssignment?.profiles?.name || null,
-        };
-      }),
-    }));
+    return userCompanies.map(uc => {
+      // LGPD: Em listagens, retornar apenas CPF mascarado (nunca o CPF completo)
+      const decryptedCPF = uc.user.cpf ? this.cryptoService.decryptCPF(uc.user.cpf) : null;
+      return {
+        id: uc.user.id,
+        name: uc.user.name,
+        email: uc.user.email,
+        cpf: decryptedCPF ? this.cryptoService.maskCPF(decryptedCPF) : null, // CPF mascarado (LGPD)
+        role: uc.role, // Role na empresa atual
+        sector: uc.sector,
+        isActive: uc.user.isActive,
+        createdAt: uc.user.createdAt,
+        // Todas as empresas do usuário
+        companies: uc.user.userCompanies.map(userComp => {
+          const profileAssignment = uc.user.user_profiles?.find(pa => pa.companyId === userComp.company.id);
+          return {
+            companyId: userComp.company.id,
+            companyName: userComp.company.name,
+            role: userComp.role,
+            sector: userComp.sector,
+            isDefault: userComp.isDefault,
+            profileId: profileAssignment?.profileId || null,
+            profileName: profileAssignment?.profiles?.name || null,
+          };
+        }),
+      };
+    });
   }
 
-  async findOne(id: string, companyId?: string): Promise<any> {
+  async findOne(id: string, companyId?: string, requestingUserId?: string): Promise<any> {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
@@ -295,12 +295,15 @@ export class UsersService {
 
     const { password, cpf, cpfHash, ...result } = user;
 
-    // Descriptografar CPF para retorno (LGPD)
+    // Descriptografar CPF (LGPD)
     const decryptedCPF = cpf ? this.cryptoService.decryptCPF(cpf) : null;
+
+    // LGPD: CPF completo apenas quando o usuário está vendo seu próprio perfil
+    const isOwnProfile = requestingUserId === id;
 
     return {
       ...result,
-      cpf: decryptedCPF,
+      cpf: isOwnProfile ? decryptedCPF : (decryptedCPF ? this.cryptoService.maskCPF(decryptedCPF) : null),
       cpfMasked: decryptedCPF ? this.cryptoService.maskCPF(decryptedCPF) : null,
       companies: user.userCompanies.map((uc) => {
         const profileAssignment = user.user_profiles.find(pa => pa.companyId === uc.companyId);
@@ -422,8 +425,6 @@ export class UsersService {
             },
           });
 
-          console.log('UserCompany updated:', created);
-
           if (companyAssignment.profileId) {
             await this.upsertUserProfile(tx, {
               userId: id,
@@ -437,8 +438,8 @@ export class UsersService {
 
       return this.findOne(id);
     } catch (error) {
-      console.error('Error updating user companies:', error);
-      throw new BadRequestException('Erro ao atualizar empresas do usu�rio: ' + error.message);
+      this.logger.error('Erro ao atualizar empresas do usuário', error.stack);
+      throw new BadRequestException('Erro ao atualizar empresas do usuário: ' + error.message);
     }
   }
 

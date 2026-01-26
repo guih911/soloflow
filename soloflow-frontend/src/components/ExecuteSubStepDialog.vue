@@ -576,7 +576,6 @@ async function downloadAttachment() {
 
     window.showSnackbar?.('Download iniciado!', 'success')
   } catch (err) {
-    console.error('Erro ao baixar anexo:', err)
     window.showSnackbar?.('Erro ao baixar anexo', 'error')
   }
 }
@@ -597,7 +596,6 @@ async function loadSigners() {
     const response = await api.get('/users')
     availableSigners.value = response.data || []
   } catch (err) {
-    console.error('Erro ao carregar usuários:', err)
     availableSigners.value = []
   } finally {
     loadingSigners.value = false
@@ -693,7 +691,6 @@ async function uploadAttachment() {
     })
     return response.data
   } catch (err) {
-    console.error('Erro ao fazer upload:', err)
     throw err
   }
 }

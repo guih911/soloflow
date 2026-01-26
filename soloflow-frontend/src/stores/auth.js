@@ -9,6 +9,7 @@ import { useProcessTypeStore } from '@/stores/processTypes'
 import { useSectorStore } from '@/stores/sectors'
 import { useUserStore } from '@/stores/users'
 import { useCompanyStore } from '@/stores/company'
+import { useNotificationsStore } from '@/stores/notifications'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -20,24 +21,84 @@ export const useAuthStore = defineStore('auth', () => {
   const profileIds = ref([])
   const permissions = ref([])
   const processTypePermissions = ref([])
+  let sessionTimer = null
 
   // Computed
   const isAuthenticated = computed(() => !!token.value)
   const userRole = computed(() => activeCompany.value?.role || null)
   const activeCompanyId = computed(() => activeCompany.value?.companyId || null)
   const activeSectorId = computed(() => activeCompany.value?.sector?.id || null)
-  // ⚠️ REMOVIDO: Fallback de permissões por role
-  // O sistema agora é 100% baseado em Perfis de Acesso
-  // Se o usuário não tiver perfil com permissões, ele não terá acesso a nada
-  const fallbackPermissionMatrix = {
-    // Fallback removido - sistema agora é 100% baseado em perfis
-  }
-
-  // ⚠️ CORRIGIDO: Verificar apenas permissões, não mais roles
   const isAdmin = computed(() => hasPermission('*', '*'))
   const isManager = computed(() => hasPermission('users', 'manage'))
   const canManageUsers = computed(() => hasPermission('users', 'manage'))
   const canManageProcessTypes = computed(() => hasPermission('process_types', 'manage'))
+
+  function decodeTokenPayload(jwt) {
+    try {
+      const base64Url = jwt.split('.')[1]
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+      const json = decodeURIComponent(
+        atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+      )
+      return JSON.parse(json)
+    } catch {
+      return null
+    }
+  }
+
+  function startSessionTimer(jwt) {
+    stopSessionTimer()
+    const payload = decodeTokenPayload(jwt)
+    if (!payload?.exp) return
+
+    const expiresAt = payload.exp * 1000
+    const now = Date.now()
+    // Tentar refresh 60s antes de expirar
+    const refreshIn = expiresAt - now - 60000
+
+    if (refreshIn <= 0) {
+      // Token já expirou ou expira em menos de 60s
+      handleSessionExpired()
+      return
+    }
+
+    sessionTimer = setTimeout(async () => {
+      const success = await refreshToken()
+      if (!success) {
+        handleSessionExpired()
+      }
+    }, refreshIn)
+  }
+
+  function stopSessionTimer() {
+    if (sessionTimer) {
+      clearTimeout(sessionTimer)
+      sessionTimer = null
+    }
+  }
+
+  function handleSessionExpired() {
+    stopSessionTimer()
+    clearSession()
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    localStorage.removeItem('companies')
+    localStorage.removeItem('activeCompany')
+    localStorage.removeItem('profileIds')
+    localStorage.removeItem('permissions')
+    localStorage.removeItem('processTypePermissions')
+    delete api.defaults.headers.common['Authorization']
+
+    try {
+      const notificationsStore = useNotificationsStore()
+      notificationsStore.$reset()
+    } catch (e) { /* ignore */ }
+
+    if (router.currentRoute.value.path !== '/entrar') {
+      window.showSnackbar?.('Sua sessão expirou. Faça login novamente.', 'warning')
+      router.push('/entrar')
+    }
+  }
 
   function normalizePermissions(rawPermissions = []) {
     return rawPermissions
@@ -121,6 +182,8 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('processTypePermissions', JSON.stringify(processTypePermissions.value))
 
     api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
+
+    startSessionTimer(accessToken)
   }
 
   function clearSession() {
@@ -156,6 +219,15 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       applySession(access_token, userData)
+
+      // Iniciar WebSocket para notificações em tempo real
+      try {
+        const notificationsStore = useNotificationsStore()
+        notificationsStore.initWebSocket(access_token)
+        notificationsStore.fetchNotifications().catch(() => {})
+      } catch {
+        // WebSocket falhou - não bloquear login
+      }
 
       const savedRedirect = sessionStorage.getItem('redirectAfterLogin')
       sessionStorage.removeItem('redirectAfterLogin')
@@ -297,8 +369,8 @@ export const useAuthStore = defineStore('auth', () => {
 
       companyStore.companies = []
       companyStore.currentCompany = null
-    } catch (error) {
-      // Erro silencioso ao resetar stores
+    } catch {
+      // Erro ao resetar stores - continuar logout
     }
   }
 
@@ -322,6 +394,14 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout() {
+    stopSessionTimer()
+
+    // Desconectar WebSocket de notificações
+    try {
+      const notificationsStore = useNotificationsStore()
+      notificationsStore.$reset()
+    } catch (e) { /* ignore */ }
+
     clearSession()
 
     localStorage.removeItem('token')
@@ -361,6 +441,34 @@ export const useAuthStore = defineStore('auth', () => {
           return
         }
 
+        // Verificar se token já expirou
+        const payload = decodeTokenPayload(storedToken)
+        if (payload?.exp && payload.exp * 1000 < Date.now()) {
+          // Token expirado - tentar refresh silencioso
+          token.value = storedToken
+          api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
+          refreshToken().then((success) => {
+            if (!success) {
+              handleSessionExpired()
+            } else {
+              // Refresh ok - iniciar WebSocket
+              try {
+                const notificationsStore = useNotificationsStore()
+                notificationsStore.initWebSocket(token.value)
+                notificationsStore.fetchNotifications().catch(() => {})
+              } catch (wsErr) { /* ignore */ }
+            }
+          })
+          // Restaurar state enquanto tenta refresh
+          user.value = parsedUser
+          companies.value = parsedCompanies
+          activeCompany.value = parsedActiveCompany
+          profileIds.value = Array.isArray(storedProfiles) ? storedProfiles : []
+          permissions.value = normalizePermissions(storedPermissions)
+          processTypePermissions.value = normalizeProcessTypePermissions(storedProcessTypePermissions)
+          return
+        }
+
         token.value = storedToken
         user.value = parsedUser
         companies.value = parsedCompanies
@@ -371,10 +479,18 @@ export const useAuthStore = defineStore('auth', () => {
 
         api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
 
-        refreshToken().catch(() => {
-          // Erro silencioso - será tratado na próxima requisição
-        })
-      } catch (error) {
+        // Iniciar timer de sessão
+        startSessionTimer(storedToken)
+
+        // Iniciar WebSocket para notificações em tempo real
+        try {
+          const notificationsStore = useNotificationsStore()
+          notificationsStore.initWebSocket(storedToken)
+          notificationsStore.fetchNotifications().catch(() => {})
+        } catch {
+          // WebSocket falhou - não bloquear inicialização
+        }
+      } catch {
         logout()
       }
     }

@@ -66,7 +66,6 @@ export class ProcessTypesService {
   constructor(private prisma: PrismaService) {}
 
   async create(createProcessTypeDto: CreateProcessTypeDto): Promise<ProcessType> {
-    console.log('Creating process type with data:', createProcessTypeDto);
 
     const { steps, formFields, allowedChildProcessTypes, ...processTypeData } = createProcessTypeDto;
 
@@ -103,7 +102,6 @@ export class ProcessTypesService {
           },
         });
 
-        console.log('ProcessType created:', processType);
 
         // Criar versão inicial
         const version = await tx.processTypeVersion.create({
@@ -257,7 +255,6 @@ export class ProcessTypesService {
           });
         }
 
-        console.log(`✅ Tipo de processo vinculado a ${profilesWithPermission.length} perfil(is)`);
 
         const fullProcessType = await tx.processType.findUnique({
           where: { id: processType.id },
@@ -295,7 +292,6 @@ export class ProcessTypesService {
         return this.adaptProcessTypeResponse(fullProcessType);
       });
     } catch (error) {
-      console.error('Error creating process type:', error);
       throw new BadRequestException('Erro ao criar tipo de processo: ' + error.message);
     }
   }
@@ -305,7 +301,6 @@ export class ProcessTypesService {
       throw new BadRequestException('ID da empresa é obrigatório');
     }
 
-    console.log('Finding process types for company:', companyId);
 
     const processTypes = await this.prisma.processType.findMany({
       where: {
@@ -371,12 +366,8 @@ export class ProcessTypesService {
 
   // IMPLEMENTAÇÃO DO VERSIONAMENTO NO UPDATE
   async update(id: string, dto: UpdateProcessTypeWithVersioningDto): Promise<ProcessType> {
-    console.log('Updating process type with versioning:', id);
-    console.log('📥 DTO formFields:', JSON.stringify(dto.formFields, null, 2));
     
     // Log específico para campos TABLE
-    const tableFields = dto.formFields?.filter(f => f.type === 'TABLE') || [];
-    console.log('📊 TABLE fields received:', JSON.stringify(tableFields, null, 2));
 
     // Se está apenas atualizando campos simples sem steps/formFields, usar updateBasic
     const isSimpleUpdate = !dto.steps && !dto.formFields && (
@@ -390,7 +381,6 @@ export class ProcessTypesService {
     );
 
     if (isSimpleUpdate) {
-      console.log('Detected simple update (no steps/formFields), using updateBasic');
       return this.updateBasic(id, dto);
     }
 
@@ -675,12 +665,10 @@ export class ProcessTypesService {
           },
         });
 
-        console.log(`Process type updated. New version: ${newVersionNumber}`);
         return this.adaptProcessTypeResponse(updatedProcessType);
       });
 
     } catch (error) {
-      console.error('Error updating process type with versioning:', error);
       throw new BadRequestException('Erro ao atualizar tipo de processo: ' + error.message);
     }
   }
@@ -728,7 +716,6 @@ export class ProcessTypesService {
 
       return this.adaptProcessTypeResponse(updated);
     } catch (error) {
-      console.error('Error updating process type:', error);
       throw new BadRequestException('Erro ao atualizar tipo de processo: ' + error.message);
     }
   }
@@ -742,7 +729,6 @@ export class ProcessTypesService {
         data: { isActive: false },
       });
     } catch (error) {
-      console.error('Error removing process type:', error);
       throw new BadRequestException('Erro ao remover tipo de processo: ' + error.message);
     }
   }
@@ -773,7 +759,6 @@ export class ProcessTypesService {
 
       return this.adaptFormFieldResponse(created);
     } catch (error) {
-      console.error('Error adding form field:', error);
       throw new BadRequestException('Erro ao adicionar campo: ' + error.message);
     }
   }
@@ -802,7 +787,6 @@ export class ProcessTypesService {
 
       return this.adaptFormFieldResponse(updated);
     } catch (error) {
-      console.error('Error updating form field:', error);
       throw new BadRequestException('Erro ao atualizar campo: ' + error.message);
     }
   }
@@ -816,7 +800,6 @@ export class ProcessTypesService {
     try {
       await this.prisma.formFieldVersion.delete({ where: { id: fieldId } });
     } catch (error) {
-      console.error('Error removing form field:', error);
       throw new BadRequestException('Erro ao remover campo: ' + error.message);
     }
   }
@@ -890,7 +873,6 @@ export class ProcessTypesService {
 
       return this.adaptStepResponse(created);
     } catch (error) {
-      console.error('Error adding step:', error);
       throw new BadRequestException('Erro ao adicionar etapa: ' + error.message);
     }
   }
@@ -936,9 +918,6 @@ export class ProcessTypesService {
           : undefined;
       }
       
-      console.log(`📝 Updating step ${stepId}`);
-      console.log(`📋 reuseData to save:`, reuseDataToSave);
-      console.log(`📋 reviewSettings to save:`, reviewSettingsToSave);
       
       const updated = await this.prisma.stepVersion.update({
         where: { id: stepId },
@@ -969,13 +948,9 @@ export class ProcessTypesService {
         },
       });
 
-      console.log(`✅ Step updated in database`);
-      console.log(`📋 Saved reuseData:`, (updated as any).reuseData);
-      console.log(`📋 Saved reviewSettings:`, (updated as any).reviewSettings);
 
       return this.adaptStepResponse(updated);
     } catch (error) {
-      console.error('Error updating step:', error);
       throw new BadRequestException('Erro ao atualizar etapa: ' + error.message);
     }
   }
@@ -994,7 +969,6 @@ export class ProcessTypesService {
     try {
       await this.prisma.stepVersion.delete({ where: { id: stepId } });
     } catch (error) {
-      console.error('Error removing step:', error);
       throw new BadRequestException('Erro ao remover etapa: ' + error.message);
     }
   }
@@ -1028,8 +1002,6 @@ export class ProcessTypesService {
   }
     
   private adaptStepResponse(stepVersion: any): Step {
-    console.log('🔍 adaptStepResponse - stepVersion.reuseData:', stepVersion.reuseData);
-    console.log('🔍 adaptStepResponse - stepVersion.reviewSettings:', stepVersion.reviewSettings);
     
     const userAssignment = stepVersion.assignments?.find(a => a.type === 'USER');
     const sectorAssignment = stepVersion.assignments?.find(a => a.type === 'SECTOR');
@@ -1160,7 +1132,6 @@ export class ProcessTypesService {
   }
 
   private async validateSteps(steps: CreateStepDto[], companyId: string): Promise<void> {
-    console.log('Validating steps for company:', companyId);
 
     for (const step of steps) {
       // Responsável é opcional - se não tiver, a tarefa ficará disponível para qualquer um do setor/empresa
@@ -1205,6 +1176,5 @@ export class ProcessTypesService {
       }
     }
 
-    console.log('Steps validation passed');
   }
 }

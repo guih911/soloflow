@@ -533,7 +533,6 @@ function getFieldRules(field) {
           validations.customMessage || 'Formato inválido')
       }
     } catch (e) {
-      console.error('Erro ao parsear validações:', e)
     }
   }
 

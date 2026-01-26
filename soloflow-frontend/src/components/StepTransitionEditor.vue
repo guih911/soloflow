@@ -889,7 +889,6 @@ function saveTransition() {
     try {
       actions.processDataUpdates = JSON.parse(processDataUpdates.value)
     } catch (error) {
-      console.error('Invalid process data updates JSON:', error)
     }
   }
   
@@ -897,7 +896,6 @@ function saveTransition() {
     try {
       Object.assign(actions, JSON.parse(customActionsJson.value))
     } catch (error) {
-      console.error('Invalid custom actions JSON:', error)
     }
   }
   

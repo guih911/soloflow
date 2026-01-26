@@ -46,24 +46,6 @@
                     persistent-hint
                   />
                 </v-col>
-                <v-col cols="12" md="6">
-                  <v-text-field
-                    v-model="profileData.cpf"
-                    label="CPF"
-                    hint="Necessário para assinatura digital"
-                    persistent-hint
-                    v-mask="'###.###.###-##'"
-                  />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-text-field
-                    v-model="profileData.phone"
-                    label="Telefone (Opcional)"
-                    placeholder="Digite apenas números"
-                    @blur="formatPhoneField"
-                    @input="onPhoneInput"
-                  />
-                </v-col>
               </v-row>
             </v-card-text>
 
@@ -139,7 +121,7 @@
                 class="mt-3"
               >
                 <v-icon>mdi-information</v-icon>
-                A nova senha deve ter no mínimo 6 caracteres e conter pelo menos uma letra e um número.
+                A nova senha deve ter no mínimo 8 caracteres e conter pelo menos uma letra e um número.
               </v-alert>
             </v-card-text>
 
@@ -361,8 +343,6 @@ const passwordForm = ref(null)
 const profileData = ref({
   name: '',
   email: '',
-  cpf: '',
-  phone: ''
 })
 
 const originalProfileData = ref({})
@@ -411,7 +391,7 @@ const currentPasswordRules = [
 
 const newPasswordRules = [
   v => !!v || 'A nova senha é obrigatória',
-  v => v.length >= 6 || 'A nova senha deve ter no mínimo 6 caracteres',
+  v => v.length >= 8 || 'A nova senha deve ter no mínimo 8 caracteres',
   v => /(?=.*[a-zA-Z])(?=.*\d)/.test(v) || 'A nova senha deve conter pelo menos uma letra e um número'
 ]
 
@@ -426,44 +406,10 @@ watch(() => authStore.user, (newUser) => {
     profileData.value = {
       name: newUser.name,
       email: newUser.email,
-      cpf: newUser.cpf || '',
-      phone: newUser.phone || ''
-    }
-    // Formatar telefone se já existir
-    if (profileData.value.phone) {
-      profileData.value.phone = formatPhone(profileData.value.phone)
     }
     originalProfileData.value = { ...profileData.value }
   }
 }, { immediate: true })
-
-// Funções para formatação de telefone
-function formatPhone(value) {
-  if (!value) return ''
-  const digits = value.replace(/\D/g, '')
-  if (digits.length === 0) return ''
-  if (digits.length <= 2) {
-    return `(${digits}`
-  } else if (digits.length <= 6) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
-  } else if (digits.length <= 10) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-  } else {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`
-  }
-}
-
-function formatPhoneField() {
-  if (profileData.value.phone) {
-    profileData.value.phone = formatPhone(profileData.value.phone)
-  }
-}
-
-function onPhoneInput(event) {
-  const value = event.target?.value || profileData.value.phone || ''
-  const digits = value.replace(/\D/g, '').slice(0, 11)
-  profileData.value.phone = digits
-}
 
 // Métodos auxiliares
 function getUserInitials(name) {
@@ -502,7 +448,6 @@ async function updateProfile() {
     originalProfileData.value = { ...profileData.value }
     window.showSnackbar?.('Perfil atualizado com sucesso!', 'success')
   } catch (error) {
-    console.error('Error updating profile:', error)
     window.showSnackbar?.('Erro ao atualizar perfil', 'error')
   }
 }
@@ -528,7 +473,6 @@ async function changePassword() {
     resetPassword()
     window.showSnackbar?.('Senha alterada com sucesso!', 'success')
   } catch (error) {
-    console.error('Error changing password:', error)
     window.showSnackbar?.('Erro ao alterar senha', 'error')
   } finally {
     changingPassword.value = false
@@ -541,7 +485,6 @@ async function switchToCompany(companyId) {
     await authStore.switchCompany(companyId)
     window.showSnackbar?.('Empresa alterada com sucesso!', 'success')
   } catch (error) {
-    console.error('Error switching company:', error)
     window.showSnackbar?.('Erro ao alterar empresa', 'error')
   } finally {
     switchingCompany.value = null
@@ -562,7 +505,6 @@ async function loadUserStats() {
       }
     }
   } catch (error) {
-    console.error('Error loading user stats:', error)
     userStats.value = {
       pendingTasks: 0,
       completedTasks: 0,

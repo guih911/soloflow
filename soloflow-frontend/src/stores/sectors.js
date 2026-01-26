@@ -14,16 +14,13 @@ export const useSectorStore = defineStore('sectors', () => {
     error.value = null
     
     try {
-      console.log('Fetching sectors for company:', companyId)
       
       const params = companyId ? { companyId } : {}
       const response = await api.get('/sectors', { params })
       
-      console.log('Sectors fetched:', response.data)
       sectors.value = response.data
       return response.data
     } catch (err) {
-      console.error('Error fetching sectors:', err)
       error.value = err.response?.data?.message || 'Erro ao buscar setores'
       
       if (err.response?.status === 400) {
@@ -57,18 +54,15 @@ export const useSectorStore = defineStore('sectors', () => {
     error.value = null
     
     try {
-      console.log('Creating sector with data:', data)
       
       const response = await api.post('/sectors', data)
       
-      console.log('Sector created:', response.data)
       
       // Adicionar na lista local
       sectors.value.push(response.data)
       
       return response.data
     } catch (err) {
-      console.error('Error creating sector:', err)
       error.value = err.response?.data?.message || 'Erro ao criar setor'
       throw err
     } finally {
@@ -81,7 +75,6 @@ export const useSectorStore = defineStore('sectors', () => {
     error.value = null
     
     try {
-      console.log('Updating sector with data:', data)
       
       const response = await api.patch(`/sectors/${id}`, data)
       
@@ -93,7 +86,6 @@ export const useSectorStore = defineStore('sectors', () => {
       
       return response.data
     } catch (err) {
-      console.error('Error updating sector:', err)
       error.value = err.response?.data?.message || 'Erro ao atualizar setor'
       throw err
     } finally {

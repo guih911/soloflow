@@ -108,13 +108,8 @@ const selectedTable = ref(null)
 const tables = computed(() => {
   const result = []
   
-  console.log('🔍 ProcessTablesCard - process:', props.process)
-  console.log('🔍 ProcessTablesCard - formData:', props.process?.formData)
-  console.log('🔍 ProcessTablesCard - processType:', props.process?.processType)
-  console.log('🔍 ProcessTablesCard - formFields:', props.process?.processType?.formFields)
 
   if (!props.process?.formData) {
-    console.log('❌ No formData found')
     return result
   }
 
@@ -123,16 +118,12 @@ const tables = computed(() => {
   // Verificar se formFields está no processType ou diretamente no process
   const formFields = props.process?.processType?.formFields || props.process?.formFields || []
   
-  console.log('🔍 formFields to check:', formFields)
 
   // Encontrar campos do tipo TABLE
   formFields.forEach(field => {
-    console.log(`🔍 Checking field: ${field.name}, type: ${field.type}`)
     
     if (field.type === 'TABLE') {
       const data = formData[field.name]
-      console.log(`🔍 TABLE field "${field.name}" data:`, data)
-      console.log(`🔍 TABLE field "${field.name}" columns:`, field.tableColumns)
       
       // Verificar se é um array de objetos (linhas da tabela)
       if (Array.isArray(data) && data.length > 0) {
@@ -148,7 +139,6 @@ const tables = computed(() => {
     }
   })
 
-  console.log('✅ Tables found:', result)
   return result
 })
 
@@ -233,8 +223,6 @@ function getCellClass(value, type) {
 }
 
 onMounted(() => {
-  console.log('🚀 ProcessTablesCard mounted')
-  console.log('🚀 Props process:', props.process)
 })
 </script>
 

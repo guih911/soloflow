@@ -11,9 +11,12 @@ import {
   Query,
   Ip,
   Headers,
+  ForbiddenException,
 } from '@nestjs/common';
 import { LgpdService, LEGAL_DOCUMENT_VERSIONS } from './lgpd.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ScopeGuard } from '../auth/guards/scope.guard';
+import { CheckScope } from '../auth/decorators/check-scope.decorator';
 import { ConsentType } from '@prisma/client';
 
 // DTOs
@@ -170,9 +173,12 @@ export class LgpdController {
    * Lista solicitações de exclusão (admin)
    */
   @Get('deletion/requests')
-  @UseGuards(JwtAuthGuard)
-  async listDeletionRequests(@Query('status') status?: string) {
-    // TODO: Adicionar verificação de permissão de admin
+  @UseGuards(JwtAuthGuard, ScopeGuard)
+  @CheckScope({ resource: 'lgpd', action: 'manage' })
+  async listDeletionRequests(@Request() req, @Query('status') status?: string) {
+    if (req.user.role !== 'ADMIN') {
+      throw new ForbiddenException('Apenas administradores podem acessar este recurso');
+    }
     return this.lgpdService.listDeletionRequests(status);
   }
 
@@ -180,13 +186,16 @@ export class LgpdController {
    * Processa uma solicitação de exclusão (admin)
    */
   @Patch('deletion/process/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ScopeGuard)
+  @CheckScope({ resource: 'lgpd', action: 'manage' })
   async processDeletion(
     @Request() req,
     @Param('id') id: string,
     @Body() dto: ProcessDeletionDto,
   ) {
-    // TODO: Adicionar verificação de permissão de admin
+    if (req.user.role !== 'ADMIN') {
+      throw new ForbiddenException('Apenas administradores podem processar solicitações de exclusão');
+    }
     return this.lgpdService.processDataDeletion(
       id,
       req.user.id,
@@ -212,9 +221,12 @@ export class LgpdController {
    * Cria ou atualiza uma política de retenção (admin)
    */
   @Post('retention/policy')
-  @UseGuards(JwtAuthGuard)
-  async upsertRetentionPolicy(@Body() dto: RetentionPolicyDto) {
-    // TODO: Adicionar verificação de permissão de admin
+  @UseGuards(JwtAuthGuard, ScopeGuard)
+  @CheckScope({ resource: 'lgpd', action: 'manage' })
+  async upsertRetentionPolicy(@Request() req, @Body() dto: RetentionPolicyDto) {
+    if (req.user.role !== 'ADMIN') {
+      throw new ForbiddenException('Apenas administradores podem gerenciar políticas de retenção');
+    }
     return this.lgpdService.upsertRetentionPolicy(
       dto.entityType,
       dto.retentionDays,
@@ -226,9 +238,12 @@ export class LgpdController {
    * Executa a limpeza de dados baseada nas políticas (admin/cron)
    */
   @Post('retention/execute')
-  @UseGuards(JwtAuthGuard)
-  async executeRetention() {
-    // TODO: Adicionar verificação de permissão de admin
+  @UseGuards(JwtAuthGuard, ScopeGuard)
+  @CheckScope({ resource: 'lgpd', action: 'manage' })
+  async executeRetention(@Request() req) {
+    if (req.user.role !== 'ADMIN') {
+      throw new ForbiddenException('Apenas administradores podem executar limpeza de dados');
+    }
     return this.lgpdService.executeDataRetention();
   }
 }

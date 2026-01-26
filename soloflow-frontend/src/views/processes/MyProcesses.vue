@@ -366,7 +366,6 @@ async function loadData() {
       processStore.fetchMyCreatedProcesses(),
     ])
   } catch (error) {
-    console.error('Erro ao carregar processos do usuário:', error)
   } finally {
     normalizeProcesses()
     loading.value = false

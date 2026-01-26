@@ -29,7 +29,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
           actions = step.actions;
         }
       } catch (e) {
-        console.warn('Erro ao processar step.actions:', e);
         actions = [];
       }
     }
@@ -43,7 +42,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
           conditions = step.conditions;
         }
       } catch (e) {
-        console.warn('Erro ao processar step.conditions:', e);
         conditions = {};
       }
     }
@@ -57,7 +55,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         allowedFileTypes = step.allowedFileTypes;
       }
     } catch (e) {
-      console.warn('Erro ao processar step.allowedFileTypes:', e);
       allowedFileTypes = [];
     }
   }
@@ -71,7 +68,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         flowConditions = step.flowConditions;
       }
     } catch (e) {
-      console.warn('Erro ao processar step.flowConditions:', e);
       flowConditions = [];
     }
   }
@@ -85,7 +81,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         reuseData = step.reuseData;
       }
     } catch (e) {
-      console.warn('Erro ao processar step.reuseData:', e);
       reuseData = [];
     }
   }
@@ -99,7 +94,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         signatureRequirements = step.signatureRequirements;
       }
     } catch (e) {
-      console.warn('Erro ao processar step.signatureRequirements:', e);
       signatureRequirements = [];
     }
   }
@@ -113,7 +107,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         assignmentConditions = step.assignmentConditions;
       }
     } catch (e) {
-      console.warn('Erro ao processar step.assignmentConditions:', e);
       assignmentConditions = null;
     }
   }
@@ -233,42 +226,38 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
       // 🔧 FIX: Validar se temos companyId
       if (!companyId) {
-        console.error('❌ No active company ID found')
         throw new Error('ID da empresa não encontrado. Por favor, selecione uma empresa.')
       }
 
-      console.log('📥 Fetching process types for company:', companyId)
       
       // 🔧 FIX: Adicionar companyId como query parameter
       const response = await api.get('/process-types', {
         params: { companyId }
       })
       
-      console.log('📋 Raw response:', response.data)
       
       // 🔧 FIX: Normalizar resposta (pode vir com ou sem wrapper)
       let data = response.data
       if (data.success && Array.isArray(data.data)) {
         data = data.data
       } else if (!Array.isArray(data)) {
-        console.warn('⚠️ Unexpected response format:', data)
         data = []
       }
       
-      processTypes.value = data.map(pt => {
-        const normalized = normalizeProcessType(pt)
-        
-        normalized.steps = normalized.steps.map(normalizeStep)
-        normalized.formFields = normalized.formFields.map(normalizeFormField)
-        
-        return normalized
-      })
+      processTypes.value = data
+        .filter(pt => pt && typeof pt === 'object' && pt.id)
+        .map(pt => {
+          const normalized = normalizeProcessType(pt)
+
+          normalized.steps = normalized.steps.map(normalizeStep)
+          normalized.formFields = normalized.formFields.map(normalizeFormField)
+
+          return normalized
+        })
       
-      console.log('✅ Process types normalized:', processTypes.value.length)
       return processTypes.value
       
     } catch (err) {
-      console.error('❌ Error fetching process types:', err)
       
       // 🔧 FIX: Mensagens de erro mais específicas
       if (err.response?.status === 400) {
@@ -296,7 +285,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     error.value = null
     
     try {
-      console.log('📋 Fetching process type:', id)
       
       const response = await api.get(`/process-types/${id}`)
       
@@ -312,11 +300,9 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
       currentProcessType.value = normalized
       
-      console.log('✅ Process type fetched and normalized')
       return currentProcessType.value
       
     } catch (err) {
-      console.error('❌ Error fetching process type:', err)
       error.value = err.response?.data?.message || 'Erro ao buscar tipo de processo'
       throw err
     } finally {
@@ -329,7 +315,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     error.value = null
     
     try {
-      console.log('🚀 Creating process type:', data.name)
       
       const cleanData = {
         name: data.name?.trim(),
@@ -397,7 +382,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         throw new Error('Pelo menos uma etapa é obrigatória')
       }
       
-      console.log('📤 Sending clean data:', cleanData)
       
       const response = await api.post('/process-types', cleanData)
       
@@ -407,7 +391,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         created = created.data
       }
       
-      console.log('✅ Process type created:', created.id)
       
       created = normalizeProcessType(created)
       created.steps = created.steps.map(normalizeStep)
@@ -418,7 +401,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       return created
       
     } catch (err) {
-      console.error('❌ Error creating process type:', err)
       
       let errorMessage = 'Erro ao criar tipo de processo'
       if (err.response?.data?.message) {
@@ -439,7 +421,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
     error.value = null
     
     try {
-      console.log('🔧 Updating process type:', id)
       
       const cleanData = {
         name: data.name?.trim(),
@@ -525,7 +506,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
         updated = updated.data
       }
       
-      console.log('✅ Process type updated')
       
       updated = normalizeProcessType(updated)
       updated.steps = updated.steps.map(normalizeStep)
@@ -539,7 +519,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       return updated
       
     } catch (err) {
-      console.error('❌ Error updating process type:', err)
       error.value = err.response?.data?.message || 'Erro ao atualizar tipo de processo'
       throw err
     } finally {
@@ -585,11 +564,9 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
       const response = await api.post(`/process-types/${processTypeId}/steps`, cleanStepData)
       
-      console.log('✅ Step added')
       return normalizeStep(response.data)
       
     } catch (err) {
-      console.error('❌ Error adding step:', err)
       error.value = err.response?.data?.message || 'Erro ao adicionar etapa'
       throw err
     } finally {
@@ -616,11 +593,9 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       
       const response = await api.post(`/process-types/${processTypeId}/form-fields`, cleanFieldData)
       
-      console.log('✅ Form field added')
       return normalizeFormField(response.data)
       
     } catch (err) {
-      console.error('❌ Error adding form field:', err)
       error.value = err.response?.data?.message || 'Erro ao adicionar campo'
       throw err
     } finally {
@@ -661,7 +636,6 @@ export const useProcessTypeStore = defineStore('processTypes', () => {
       return await createProcessType(duplicateData)
       
     } catch (err) {
-      console.error('❌ Error duplicating process type:', err)
       throw err
     }
   }

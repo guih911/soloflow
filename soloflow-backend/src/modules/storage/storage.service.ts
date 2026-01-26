@@ -48,9 +48,16 @@ export class StorageService {
     this.bucketName = this.configService.get<string>('R2_BUCKET_NAME') || 'soloflow-attachments';
     this.publicUrl = this.configService.get<string>('R2_PUBLIC_URL') || '';
 
+    if (!accountId || !accessKeyId || !secretAccessKey) {
+      this.logger.warn(
+        'Credenciais R2 não configuradas (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY). ' +
+        'Uploads de arquivos não funcionarão corretamente.',
+      );
+    }
+
     this.s3Client = new S3Client({
       region: 'auto',
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      endpoint: `https://${accountId || 'undefined'}.r2.cloudflarestorage.com`,
       credentials: {
         accessKeyId: accessKeyId || '',
         secretAccessKey: secretAccessKey || '',

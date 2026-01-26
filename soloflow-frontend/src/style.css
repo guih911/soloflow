@@ -1,6 +1,6 @@
-* {
-  margin: 0;
-  padding: 0;
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -42,7 +42,7 @@ html {
    Accessibility & Focus States
    ============================================ */
 
-/* Focus visible para elementos interativos */
+/* Focus visible para elementos interativos (exceto inputs Vuetify) */
 :focus-visible {
   outline: 2px solid var(--color-primary-400, #3b82f6);
   outline-offset: 2px;
@@ -51,6 +51,17 @@ html {
 /* Remove outline padrão mas mantém para keyboard navigation */
 :focus:not(:focus-visible) {
   outline: none;
+}
+
+/* Vuetify inputs: o próprio Vuetify gerencia o focus state */
+.v-field input:focus-visible,
+.v-field textarea:focus-visible,
+.v-field input:focus,
+.v-field textarea:focus,
+.v-field:focus-visible,
+.v-input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* Estilos de focus para Vuetify components */
@@ -65,18 +76,6 @@ html {
 
 .v-list-item:focus-visible {
   background-color: var(--color-primary-50, #eff6ff);
-}
-
-.v-text-field .v-field:focus-within {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-}
-
-.v-select .v-field:focus-within {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-}
-
-.v-textarea .v-field:focus-within {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
 /* Skip link para acessibilidade */

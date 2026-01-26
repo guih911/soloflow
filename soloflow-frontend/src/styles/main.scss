@@ -5,15 +5,18 @@
 @use './design-tokens.scss' as *;
 
 // =============================================================================
-// RESET E BASE
+// RESET E BASE (sem interferir nos componentes Vuetify)
 // =============================================================================
 
 *,
 *::before,
 *::after {
+  box-sizing: border-box;
+}
+
+body, h1, h2, h3, h4, h5, h6, p, ul, ol, li, figure, figcaption, blockquote, dl, dd {
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
 }
 
 html {
@@ -240,9 +243,27 @@ p {
 // Compatível com Vuetify 3
 // =============================================================================
 
+// Prevenir outline/shadow nativo do browser nos inputs Vuetify
+.v-input, .v-field {
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.v-field input,
+.v-field textarea,
+.v-field select {
+  &:focus,
+  &:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+}
+
 // Campo base - melhorias visuais sutis
 .v-field {
   border-radius: 10px !important;
+  box-shadow: none !important;
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 
   // Estilo outlined padrão
@@ -254,12 +275,18 @@ p {
 
   // Estado focado
   &--focused {
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
   }
 
   // Estado de erro focado
   &--error.v-field--focused {
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+  }
+
+  // Remover outline nativo do input interno
+  input, textarea {
+    outline: none !important;
+    box-shadow: none !important;
   }
 }
 

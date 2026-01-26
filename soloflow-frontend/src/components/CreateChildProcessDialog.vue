@@ -436,7 +436,6 @@ async function loadProcessTypes() {
       }
     })
 
-    console.log('Tipos disponíveis após filtro:', Array.from(uniqueTypesMap.values()).map(pt => pt.name))
 
     availableProcessTypes.value = Array.from(uniqueTypesMap.values())
   } catch (err) {

@@ -223,7 +223,7 @@
               required
               prepend-icon="mdi-lock"
               variant="outlined"
-              hint="Mínimo 6 caracteres"
+              hint="Mínimo 8 caracteres"
               persistent-hint
               aria-required="true"
               autocomplete="new-password"
@@ -317,7 +317,7 @@ const headers = [
 // Regras de validação para reset de senha
 const passwordRules = [
   v => !!v || 'A senha é obrigatória',
-  v => (v && v.length >= 6) || 'A senha deve ter no mínimo 6 caracteres'
+  v => (v && v.length >= 8) || 'A senha deve ter no mínimo 8 caracteres'
 ]
 
 // Métodos auxiliares
@@ -383,7 +383,6 @@ async function resetPassword() {
     window.showSnackbar(`Senha de ${resettingUser.value.name} resetada com sucesso!`, 'success')
     closeResetPasswordDialog()
   } catch (error) {
-    console.error('Error resetting password:', error)
     const errorMessage = error.response?.data?.message || error.message || 'Erro ao resetar senha'
     window.showSnackbar(errorMessage, 'error')
   } finally {
@@ -395,7 +394,6 @@ onMounted(async () => {
   try {
     await userStore.fetchUsers()
   } catch (error) {
-    console.error('Error loading data:', error)
     window.showSnackbar?.('Erro ao carregar dados iniciais', 'error')
   }
 })

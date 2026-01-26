@@ -1,5 +1,5 @@
 import { IsString, IsEmail, IsEnum, Length, IsUUID, IsOptional, IsBoolean, IsArray, ValidateNested, Matches } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { UserRole } from '@prisma/client';
 
 export class UserCompanyAssignmentDto {
@@ -35,10 +35,18 @@ export class CreateUserCompanyDto {
   password: string;
 
   @IsString()
-  @Matches(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, {
-    message: 'CPF deve estar no formato XXX.XXX.XXX-XX'
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const digits = value.replace(/\D/g, '');
+    if (digits.length === 11) {
+      return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+    }
+    return value;
   })
-  cpf: string; // ✅ CPF obrigatório para assinatura digital
+  @Matches(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, {
+    message: 'CPF inválido. Informe 11 dígitos numéricos.'
+  })
+  cpf: string;
 
   @IsOptional()
   @IsEnum(UserRole)

@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Response } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService, R2_FOLDERS } from '../storage/storage.service';
@@ -55,6 +56,7 @@ export class ProcessesService {
   constructor(
     private prisma: PrismaService,
     private storageService: StorageService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async createInstance(
@@ -137,6 +139,35 @@ export class ProcessesService {
     // Criar assignments aqui causaria duplicatas, pois StepAssignment é vinculado ao StepVersion
     // (definição do tipo de processo), não à instância do processo.
     // FIM DA SEÇÃO ATUALIZADA
+
+    // Emitir evento de processo criado
+    const processTitle = createDto.title || createdInstance.code;
+    this.eventEmitter.emit('process.created', {
+      creatorId: userId,
+      companyId: userCompany.companyId,
+      processTitle,
+      processId: createdInstance.id,
+    });
+
+    // Emitir evento de tarefa atribuída para a primeira etapa
+    const firstStep = activeVersion.steps.find(s => s.order === 1);
+    if (firstStep) {
+      const assignments = await this.prisma.stepAssignment.findMany({
+        where: { stepVersionId: firstStep.id, isActive: true },
+        select: { userId: true, type: true },
+      });
+      for (const assignment of assignments) {
+        if (assignment.userId && assignment.userId !== userId) {
+          this.eventEmitter.emit('task.assigned', {
+            userId: assignment.userId,
+            companyId: userCompany.companyId,
+            processTitle,
+            stepName: firstStep.name,
+            processId: createdInstance.id,
+          });
+        }
+      }
+    }
 
     return this.findOne(createdInstance.id, userId);
   }
@@ -291,8 +322,18 @@ export class ProcessesService {
       },
     );
 
-    const attachments: Attachment[] = await Promise.all(attachmentPromises);
-    createdAttachments.push(...attachments);
+    const results = await Promise.allSettled(attachmentPromises);
+    const errors: string[] = [];
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        createdAttachments.push(result.value);
+      } else {
+        errors.push(result.reason?.message || 'Erro desconhecido no upload');
+      }
+    }
+    if (createdAttachments.length === 0 && errors.length > 0) {
+      throw new BadRequestException(`Falha no upload de todos os arquivos: ${errors.join(', ')}`);
+    }
 
     const currentFormData: Record<string, any> =
       (process.formData as Record<string, any>) || {};
@@ -514,7 +555,7 @@ export class ProcessesService {
     return defaultConfig;
   }
 
-  async findAll(companyId: string, userId: string, filters: any = {}) {
+  async findAll(companyId: string, userId: string, filters: any = {}, requestUser?: any) {
     const andConditions: Prisma.ProcessInstanceWhereInput[] = [];
 
     if (filters.status) {
@@ -531,6 +572,78 @@ export class ProcessesService {
           { code: { contains: filters.search } },
           { title: { contains: filters.search } },
           { description: { contains: filters.search } },
+        ],
+      });
+    }
+
+    // Controle de acesso: somente processos onde o usuário está envolvido
+    // Usuários com permissão processes:manage veem todos os processos
+    const userCompany = await this.prisma.userCompany.findFirst({
+      where: { userId, companyId },
+    });
+
+    const canManageProcesses = this.userHasPermission(requestUser, 'processes', 'manage');
+
+    if (!canManageProcesses) {
+      andConditions.push({
+        OR: [
+          // Criador do processo
+          { createdById: userId },
+          // Atribuído diretamente a uma etapa
+          {
+            stepExecutions: {
+              some: {
+                stepVersion: {
+                  assignments: {
+                    some: {
+                      type: 'USER',
+                      userId: userId,
+                      isActive: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          // Setor do usuário atribuído a uma etapa
+          ...(userCompany?.sectorId ? [{
+            stepExecutions: {
+              some: {
+                stepVersion: {
+                  assignments: {
+                    some: {
+                      type: 'SECTOR' as const,
+                      sectorId: userCompany.sectorId,
+                      isActive: true,
+                    },
+                  },
+                },
+              },
+            },
+          }] : []),
+          // Etapa atribuída ao criador (assignedToCreator) e user é o criador
+          {
+            AND: [
+              { createdById: userId },
+              {
+                stepExecutions: {
+                  some: {
+                    stepVersion: {
+                      assignedToCreator: true,
+                    },
+                  },
+                },
+              },
+            ],
+          },
+          // Usuário executou alguma etapa
+          {
+            stepExecutions: {
+              some: {
+                executorId: userId,
+              },
+            },
+          },
         ],
       });
     }
@@ -619,7 +732,7 @@ export class ProcessesService {
     });
   }
 
-  async findOne(processId: string, userId: string) {
+  async findOne(processId: string, userId: string, requestUser?: any) {
     const process = await this.prisma.processInstance.findUnique({
       where: { id: processId },
       include: {
@@ -744,7 +857,7 @@ export class ProcessesService {
 
     if (!process) throw new NotFoundException('Processo não encontrado');
 
-    await this.checkViewPermission(process, userId);
+    await this.checkViewPermission(process, userId, requestUser);
 
     // Parse allowedChildProcessTypes se for string JSON
     let allowedChildProcessTypes = process.processTypeVersion.processType.allowedChildProcessTypes;
@@ -906,6 +1019,14 @@ export class ProcessesService {
 
       // Sincronizar status do sub-processo se este processo for filho de outro
       await this.syncChildProcessStatusInTx(tx, process.id, ProcessStatus.CANCELLED);
+    });
+
+    // Emitir evento de processo cancelado
+    this.eventEmitter.emit('process.cancelled', {
+      creatorId: process.createdBy.id,
+      companyId: process.companyId,
+      processTitle: process.title || process.code,
+      processId: process.id,
     });
 
     return this.findOne(processId, user.id);
@@ -1416,6 +1537,7 @@ export class ProcessesService {
   async executeStep(
     executeDto: ExecuteStepDto,
     userId: string,
+    requestUser?: any,
   ): Promise<StepExecution> {
     const stepExecution = await this.prisma.stepExecution.findUnique({
       where: { id: executeDto.stepExecutionId },
@@ -1447,7 +1569,7 @@ export class ProcessesService {
       throw new NotFoundException('Execução de etapa não encontrada');
     }
 
-    await this.checkExecutePermission(stepExecution, userId);
+    await this.checkExecutePermission(stepExecution, userId, requestUser);
 
     // Permitir executar etapas PENDING ou IN_PROGRESS
     if (stepExecution.status !== StepExecutionStatus.IN_PROGRESS && stepExecution.status !== StepExecutionStatus.PENDING) {
@@ -1534,7 +1656,13 @@ export class ProcessesService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const allSteps = stepExecution.processInstance.processTypeVersion.steps;
+    const processTitle = stepExecution.processInstance.title || stepExecution.processInstance.code;
+    const processId = stepExecution.processInstanceId;
+    const companyId = stepExecution.processInstance.companyId;
+    const creatorId = stepExecution.processInstance.createdById;
+
+    const result = await this.prisma.$transaction(async (tx) => {
       let processedMetadata = executeDto.metadata || {};
 
       if (stepExecution.stepVersion.type === 'APPROVAL') {
@@ -1646,8 +1774,50 @@ export class ProcessesService {
         await this.syncChildProcessStatusInTx(tx, stepExecution.processInstanceId, finalStatus);
       }
 
-      return updatedExecution;
+      return { updatedExecution, shouldEnd, finalStatus, nextStep };
     });
+
+    // Emitir eventos após transação concluída
+    const currentStep = stepExecution.stepVersion;
+    this.eventEmitter.emit('step.completed', {
+      creatorId,
+      companyId,
+      processTitle,
+      processId,
+      stepName: currentStep.name,
+      currentStep: currentStep.order,
+      totalSteps: allSteps.length,
+    });
+
+    if (result.shouldEnd) {
+      if (result.finalStatus === ProcessStatus.COMPLETED) {
+        this.eventEmitter.emit('process.completed', { creatorId, companyId, processTitle, processId });
+      } else if (result.finalStatus === ProcessStatus.REJECTED) {
+        this.eventEmitter.emit('process.rejected', {
+          creatorId, companyId, processTitle, processId,
+          reason: executeDto.comment,
+        });
+      }
+    } else if (result.nextStep) {
+      // Emitir tarefa atribuída para o próximo step
+      const nextAssignments = await this.prisma.stepAssignment.findMany({
+        where: { stepVersionId: result.nextStep.id, isActive: true },
+        select: { userId: true },
+      });
+      for (const assignment of nextAssignments) {
+        if (assignment.userId) {
+          this.eventEmitter.emit('task.assigned', {
+            userId: assignment.userId,
+            companyId,
+            processTitle,
+            stepName: result.nextStep.name,
+            processId,
+          });
+        }
+      }
+    }
+
+    return result.updatedExecution;
   }
 
   // Sincroniza o status do ChildProcessInstance quando o processo filho termina
@@ -1735,7 +1905,7 @@ export class ProcessesService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // Mesclar dados do formulário com formData do processo
       const currentFormData =
         (stepExecution.processInstance.formData as any) || {};
@@ -1826,8 +1996,48 @@ export class ProcessesService {
         await this.syncChildProcessStatusInTx(tx, stepExecution.processInstanceId, ProcessStatus.COMPLETED);
       }
 
-      return updatedExecution;
+      return { updatedExecution, nextStep: nextStep || null, hasNextStep: !!nextStep };
     });
+
+    // Emitir eventos após transação
+    const currentStep = stepExecution.stepVersion;
+    const allSteps = stepExecution.processInstance.processTypeVersion.steps;
+    const processTitle = stepExecution.processInstance.title || stepExecution.processInstance.code;
+    const processId = stepExecution.processInstanceId;
+    const companyId = stepExecution.processInstance.companyId;
+    const creatorId = stepExecution.processInstance.createdById;
+
+    this.eventEmitter.emit('step.completed', {
+      creatorId,
+      companyId,
+      processTitle,
+      processId,
+      stepName: currentStep.name,
+      currentStep: currentStep.order,
+      totalSteps: allSteps.length,
+    });
+
+    if (!result.hasNextStep) {
+      this.eventEmitter.emit('process.completed', { creatorId, companyId, processTitle, processId });
+    } else if (result.nextStep) {
+      const nextAssignments = await this.prisma.stepAssignment.findMany({
+        where: { stepVersionId: result.nextStep.id, isActive: true },
+        select: { userId: true },
+      });
+      for (const assignment of nextAssignments) {
+        if (assignment.userId) {
+          this.eventEmitter.emit('task.assigned', {
+            userId: assignment.userId,
+            companyId,
+            processTitle,
+            stepName: result.nextStep.name,
+            processId,
+          });
+        }
+      }
+    }
+
+    return result.updatedExecution;
   }
 
   async validateAndSign(
@@ -1909,6 +2119,7 @@ export class ProcessesService {
   private async checkViewPermission(
     instance: any,
     userId: string,
+    requestUser?: any,
   ): Promise<void> {
     const userCompany = await this.prisma.userCompany.findFirst({
       where: { userId, companyId: instance.companyId },
@@ -1917,41 +2128,104 @@ export class ProcessesService {
       throw new ForbiddenException(
         'Sem permissão para visualizar este processo',
       );
+
+    // Usuários com permissão processes:manage podem ver todos os processos
+    const canManage = requestUser
+      ? this.userHasPermission(requestUser, 'processes', 'manage')
+      : await this.userHasManagePermission(userId, instance.companyId);
+    if (canManage) return;
+
+    // Verificar se o usuário está envolvido no processo
+    const isCreator = instance.createdById === userId;
+    if (isCreator) return;
+
+    // Verificar se o usuário executou alguma etapa
+    const executedStep = await this.prisma.stepExecution.findFirst({
+      where: {
+        processInstanceId: instance.id,
+        executorId: userId,
+      },
+    });
+    if (executedStep) return;
+
+    // Verificar se o usuário está atribuído a alguma etapa (por usuário)
+    const userAssignedStep = await this.prisma.stepExecution.findFirst({
+      where: {
+        processInstanceId: instance.id,
+        stepVersion: {
+          assignments: {
+            some: {
+              type: 'USER',
+              userId: userId,
+              isActive: true,
+            },
+          },
+        },
+      },
+    });
+    if (userAssignedStep) return;
+
+    // Verificar se o setor do usuário está atribuído a alguma etapa
+    if (userCompany.sectorId) {
+      const sectorAssignedStep = await this.prisma.stepExecution.findFirst({
+        where: {
+          processInstanceId: instance.id,
+          stepVersion: {
+            assignments: {
+              some: {
+                type: 'SECTOR',
+                sectorId: userCompany.sectorId,
+                isActive: true,
+              },
+            },
+          },
+        },
+      });
+      if (sectorAssignedStep) return;
+    }
+
+    throw new ForbiddenException(
+      'Sem permissão para visualizar este processo',
+    );
   }
 
-  // INÍCIO DA SEÇÃO ATUALIZADA
   private async checkExecutePermission(
     stepExecution: any,
     userId: string,
+    requestUser?: any,
   ): Promise<void> {
     const userCompany = await this.prisma.userCompany.findFirst({
       where: { userId, companyId: stepExecution.processInstance.companyId },
     });
-    
+
     if (!userCompany) throw new ForbiddenException('Sem permissão');
-  
+
     // Verificar se é atribuída ao criador
     if (stepExecution.stepVersion.assignedToCreator) {
       if (stepExecution.processInstance.createdById === userId) {
-        return; // Permitir se o usuário é o criador
+        return;
       }
     }
-  
+
     // Verificar assignments normais
     const userAssignment = stepExecution.stepVersion.assignments?.find(
       (a: any) => a.type === 'USER' && a.userId === userId && a.isActive
     );
-    
+
     const sectorAssignment = stepExecution.stepVersion.assignments?.find(
       (a: any) => a.type === 'SECTOR' && a.sectorId === userCompany.sectorId && a.isActive
     );
-  
+
     if (userAssignment || sectorAssignment) return;
-    if (userCompany.role === 'ADMIN') return;
-  
+
+    // Usuários com permissão processes:manage podem executar qualquer etapa
+    const canManage = requestUser
+      ? this.userHasPermission(requestUser, 'processes', 'manage')
+      : await this.userHasManagePermission(userId, stepExecution.processInstance.companyId);
+    if (canManage) return;
+
     throw new ForbiddenException('Sem permissão para executar esta etapa');
   }
-  // FIM DA SEÇÃO ATUALIZADA
 
   private userHasPermission(user: any, resource: string, action: string): boolean {
     if (!user?.permissions || !Array.isArray(user.permissions)) {
@@ -1970,6 +2244,30 @@ export class ProcessesService {
         (permAction === '*' || permAction === normalizedAction)
       );
     });
+  }
+
+  /**
+   * Verifica se o usuário tem permissão processes:manage (ou *:*) via perfis no banco.
+   * Usado quando req.user não está disponível (chamadas internas).
+   */
+  private async userHasManagePermission(userId: string, companyId: string): Promise<boolean> {
+    const permission = await this.prisma.profile_permissions.findFirst({
+      where: {
+        profiles: {
+          user_profiles: {
+            some: {
+              userId,
+              companyId,
+            },
+          },
+        },
+        OR: [
+          { resource: '*', action: '*' },
+          { resource: 'processes', action: 'manage' },
+        ],
+      },
+    });
+    return !!permission;
   }
 
   private async validateFormData(

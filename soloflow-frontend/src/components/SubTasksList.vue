@@ -442,7 +442,6 @@ async function loadSubTasks() {
     const response = await api.get(`/sub-tasks/step-execution/${props.stepExecutionId}`)
     localSubTasks.value = response.data || []
   } catch (err) {
-    console.error('Erro ao carregar sub-etapas:', err)
     localSubTasks.value = []
   } finally {
     loading.value = false

@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
 import { Reflector } from '@nestjs/core';
 
@@ -10,7 +10,7 @@ async function bootstrap() {
   // Configurar CORS
   const allowedOrigins = process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173', 'http://localhost:3001'];
   app.enableCors({
-    origin: process.env.NODE_ENV === 'production' ? allowedOrigins : '*',
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -76,9 +76,10 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
 
-  console.log(`🚀 Servidor rodando na porta ${port}`);
-  console.log(`🔒 Headers de segurança LGPD habilitados`);
-  console.log(`⚡ Rate limiting ativo`);
+  const logger = new Logger('Bootstrap');
+  logger.log(`Servidor rodando na porta ${port}`);
+  logger.log('Headers de seguranca LGPD habilitados');
+  logger.log('Rate limiting ativo');
 }
 bootstrap();
 

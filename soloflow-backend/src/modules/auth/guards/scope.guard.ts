@@ -41,6 +41,14 @@ export class ScopeGuard implements CanActivate {
       user.companyId,
     );
 
+    // Usuários com permissão wildcard (*:*) têm acesso irrestrito
+    const hasWildcard = permissions.permissions.some(
+      (p) => p.resource === '*' && p.action === '*',
+    );
+    if (hasWildcard) {
+      return true;
+    }
+
     // Verifica se possui a permissão necessária
     const matchingPermission = permissions.permissions.find(
       (p) =>
@@ -83,8 +91,13 @@ export class ScopeGuard implements CanActivate {
       return true;
     }
 
-    // Se há scope mas não há scopeCheck, permite (assume que o scope será validado manualmente)
-    this.logger.debug(`User ${user.id} has scoped access to ${requirement.resource}:${requirement.action} (no check defined)`);
-    return true;
+    // FAIL-SECURE: Se há scope mas não há scopeCheck definido, NEGAR acesso
+    // Isso força que todo endpoint com scope tenha uma função de validação explícita
+    this.logger.warn(
+      `User ${user.id} denied: scope exists but no scopeCheck defined for ${requirement.resource}:${requirement.action}`,
+    );
+    throw new ForbiddenException(
+      'Configuração de permissão incompleta. Contate o administrador.',
+    );
   }
 }

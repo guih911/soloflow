@@ -255,7 +255,6 @@ function formatFileSize(bytes) {
 }
 
 function viewAttachment(attachment) {
-  console.log('ProcessHistory - viewAttachment called with:', attachment);
   selectedAttachment.value = attachment;
   showPreview.value = true;
 }

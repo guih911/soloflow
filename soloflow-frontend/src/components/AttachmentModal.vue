@@ -269,7 +269,6 @@ async function downloadAttachment(attachment) {
 
     window.showSnackbar?.(`Download de "${getDisplayName(attachment)}" iniciado`, 'success')
   } catch (error) {
-    console.error('Error downloading attachment:', error)
     window.showSnackbar?.('Erro ao baixar arquivo', 'error')
   }
 }
@@ -294,7 +293,6 @@ async function downloadAll() {
     
     window.showSnackbar?.('Download de todos os arquivos iniciado', 'success')
   } catch (error) {
-    console.error('Error downloading all attachments:', error)
     window.showSnackbar?.('Erro ao baixar arquivos', 'error')
   } finally {
     loadingDownloadAll.value = false

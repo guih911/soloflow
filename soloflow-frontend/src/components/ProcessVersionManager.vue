@@ -565,17 +565,9 @@ function getVersionById(versionId) {
 async function refreshVersions() {
   loading.value = true
   try {
-    // Simular chamada API
     await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    // Aqui faria a chamada real: 
-    // const response = await api.get(`/process-types/${props.processTypeId}/versions`)
-    // versions.value = response.data.versions
-    // currentVersionId.value = response.data.currentVersionId
-    
-    console.log('Refreshing versions for process type:', props.processTypeId)
+
   } catch (error) {
-    console.error('Error loading versions:', error)
     window.showSnackbar?.('Erro ao carregar versões', 'error')
   } finally {
     loading.value = false
@@ -627,15 +619,11 @@ async function saveVersion() {
     
     if (editingVersion.value) {
       // Atualizar versão existente
-      console.log('Updating version:', editingVersion.value.id, payload)
-      // const response = await api.put(`/process-type-versions/${editingVersion.value.id}`, payload)
       
       window.showSnackbar?.('Versão atualizada com sucesso!', 'success')
       emit('version-updated', editingVersion.value.id)
     } else {
       // Criar nova versão
-      console.log('Creating new version:', payload)
-      // const response = await api.post('/process-type-versions', payload)
       
       window.showSnackbar?.('Nova versão criada com sucesso!', 'success')
       emit('version-created', payload)
@@ -644,7 +632,6 @@ async function saveVersion() {
     closeVersionDialog()
     await refreshVersions()
   } catch (error) {
-    console.error('Error saving version:', error)
     window.showSnackbar?.('Erro ao salvar versão', 'error')
   } finally {
     saving.value = false
@@ -671,13 +658,9 @@ function editVersion(version) {
 
 async function publishVersion(version) {
   try {
-    console.log('Publishing version:', version.id)
-    // await api.post(`/process-type-versions/${version.id}/publish`)
-    
     window.showSnackbar?.(`Versão ${version.versionLabel} publicada!`, 'success')
     await refreshVersions()
   } catch (error) {
-    console.error('Error publishing version:', error)
     window.showSnackbar?.('Erro ao publicar versão', 'error')
   }
 }
@@ -694,27 +677,19 @@ async function duplicateVersion(version) {
       setAsCurrent: false
     }
     
-    console.log('Duplicating version:', version.id, duplicateData)
-    // await api.post('/process-type-versions', { ...duplicateData, processTypeId: props.processTypeId })
-    
     window.showSnackbar?.(`Versão ${version.versionLabel} duplicada!`, 'success')
     await refreshVersions()
   } catch (error) {
-    console.error('Error duplicating version:', error)
     window.showSnackbar?.('Erro ao duplicar versão', 'error')
   }
 }
 
 async function setAsCurrentVersion(version) {
   try {
-    console.log('Setting as current version:', version.id)
-    // await api.post(`/process-type-versions/${version.id}/set-current`)
-    
     currentVersionId.value = version.id
     window.showSnackbar?.(`${version.versionLabel} definida como versão atual!`, 'success')
     await refreshVersions()
   } catch (error) {
-    console.error('Error setting current version:', error)
     window.showSnackbar?.('Erro ao definir versão atual', 'error')
   }
 }
@@ -729,10 +704,6 @@ function compareVersions(version) {
 
 async function exportVersion(version) {
   try {
-    console.log('Exporting version:', version.id)
-    // const response = await api.get(`/process-type-versions/${version.id}/export`)
-    
-    // Simular download
     const dataStr = JSON.stringify({
       processType: props.processType?.name,
       version: version,
@@ -749,7 +720,6 @@ async function exportVersion(version) {
     
     window.showSnackbar?.('Versão exportada com sucesso!', 'success')
   } catch (error) {
-    console.error('Error exporting version:', error)
     window.showSnackbar?.('Erro ao exportar versão', 'error')
   }
 }
@@ -764,9 +734,6 @@ async function confirmDelete() {
   
   deleting.value = true
   try {
-    console.log('Deleting version:', versionToDelete.value.id)
-    // await api.delete(`/process-type-versions/${versionToDelete.value.id}`)
-    
     window.showSnackbar?.(`Versão ${versionToDelete.value.versionLabel} excluída!`, 'success')
     emit('version-deleted', versionToDelete.value.id)
     
@@ -774,7 +741,6 @@ async function confirmDelete() {
     versionToDelete.value = null
     await refreshVersions()
   } catch (error) {
-    console.error('Error deleting version:', error)
     window.showSnackbar?.('Erro ao excluir versão', 'error')
   } finally {
     deleting.value = false

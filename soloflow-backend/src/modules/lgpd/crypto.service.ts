@@ -1,5 +1,5 @@
 // src/modules/lgpd/crypto.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -9,13 +9,20 @@ export class CryptoService {
   private readonly keyLength = 32; // 256 bits
   private readonly ivLength = 16; // 128 bits
   private readonly authTagLength = 16; // 128 bits
+  private readonly logger = new Logger(CryptoService.name);
   private encryptionKey: Buffer;
 
   constructor(private configService: ConfigService) {
     const key = this.configService.get<string>('ENCRYPTION_KEY');
     if (!key) {
-      // Gerar uma chave aleatória se não existir (apenas para desenvolvimento)
-      console.warn('ENCRYPTION_KEY não definida. Usando chave temporária. DEFINA UMA CHAVE FIXA EM PRODUÇÃO!');
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          'ENCRYPTION_KEY não está definida. Esta variável é obrigatória em produção para conformidade LGPD.',
+        );
+      }
+      this.logger.warn(
+        'ENCRYPTION_KEY não definida. Usando chave temporária. DEFINA UMA CHAVE FIXA EM PRODUÇÃO!',
+      );
       this.encryptionKey = crypto.randomBytes(this.keyLength);
     } else {
       // Derivar chave a partir da string usando PBKDF2
@@ -74,7 +81,7 @@ export class CryptoService {
       return decrypted;
     } catch (error) {
       // Se falhar, retorna o texto original (pode ser não criptografado)
-      console.warn('Falha ao descriptografar:', error.message);
+      this.logger.warn(`Falha ao descriptografar: ${error.message}`);
       return encryptedText;
     }
   }

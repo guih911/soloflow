@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export interface AuditLogFilters {
@@ -26,6 +26,8 @@ export interface AuditLogCreateData {
 
 @Injectable()
 export class AuditService {
+  private readonly logger = new Logger(AuditService.name);
+
   constructor(private prisma: PrismaService) {}
 
   /**
@@ -47,7 +49,7 @@ export class AuditService {
       });
     } catch (error) {
       // Log error but don't throw - audit logging shouldn't break application flow
-      console.error('[AuditService] Erro ao registrar log de auditoria:', error);
+      this.logger.error('Erro ao registrar log de auditoria', error.stack);
       return null;
     }
   }

@@ -148,7 +148,7 @@ const emailRules = [
 
 const passwordRules = [
   v => !!v || 'A senha é obrigatória',
-  v => v.length >= 6 || 'A senha deve ter no mínimo 6 caracteres',
+  v => v.length >= 8 || 'A senha deve ter no mínimo 8 caracteres',
 ]
 
 async function handleLogin() {
@@ -162,14 +162,13 @@ async function handleLogin() {
     }
 
     await authStore.login(credentials)
-    window.showSnackbar('Login realizado com sucesso!', 'success')
   } catch (error) {
-    console.error('Erro no login:', error)
+    // Erro já tratado pelo authStore (mostra snackbar)
   }
 }
 
 function forgotPassword() {
-  window.showSnackbar('Funcionalidade em desenvolvimento', 'info')
+  router.push('/esqueci-senha')
 }
 </script>
 

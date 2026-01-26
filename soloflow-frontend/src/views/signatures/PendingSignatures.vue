@@ -493,34 +493,110 @@
                       </div>
                     </v-alert>
 
-                    <!-- Campo de senha (só mostra quando pode assinar) -->
+                    <!-- Fluxo de assinatura com OTP (só mostra quando pode assinar) -->
                     <template v-if="canSignCurrentDocument && !signedDocuments.includes(documentsToSign[currentDocumentIndex]?.id)">
-                      <v-text-field
-                        v-model="password"
-                        label="Senha de confirmação *"
-                        type="password"
-                        :rules="passwordRules"
-                        prepend-inner-icon="mdi-lock"
-                        variant="outlined"
-                        density="comfortable"
-                        required
-                        class="mb-3"
-                        hide-details="auto"
-                      />
+                      <!-- Etapa 1: Senha -->
+                      <template v-if="otpStep === 'password'">
+                        <v-text-field
+                          v-model="password"
+                          label="Senha de confirmação *"
+                          type="password"
+                          :rules="passwordRules"
+                          prepend-inner-icon="mdi-lock"
+                          variant="outlined"
+                          density="comfortable"
+                          required
+                          class="mb-3"
+                          hide-details="auto"
+                        />
 
-                      <v-btn
-                        block
-                        size="large"
-                        color="primary"
-                        variant="elevated"
-                        :loading="signing"
-                        :disabled="!password"
-                        @click="signCurrentDocument"
-                        class="mb-3"
-                      >
-                        <v-icon start>mdi-pen</v-icon>
-                        Assinar Documento
-                      </v-btn>
+                        <v-btn
+                          block
+                          size="large"
+                          color="primary"
+                          variant="elevated"
+                          :loading="signing"
+                          :disabled="!password"
+                          @click="requestOtpCode"
+                          class="mb-3"
+                        >
+                          <v-icon start>mdi-email-fast</v-icon>
+                          Enviar Código de Verificação
+                        </v-btn>
+                      </template>
+
+                      <!-- Etapa 2: Código OTP -->
+                      <template v-if="otpStep === 'otp'">
+                        <v-alert
+                          type="info"
+                          variant="tonal"
+                          density="compact"
+                          class="mb-3"
+                        >
+                          <div class="text-body-2">
+                            Um código de 6 dígitos foi enviado para o seu e-mail.
+                          </div>
+                        </v-alert>
+
+                        <v-text-field
+                          v-model="otpCode"
+                          label="Código de verificação *"
+                          placeholder="000000"
+                          prepend-inner-icon="mdi-numeric"
+                          variant="outlined"
+                          density="comfortable"
+                          maxlength="6"
+                          required
+                          class="mb-2"
+                          hide-details="auto"
+                          :rules="[v => !!v || 'Código obrigatório', v => v?.length === 6 || 'Código deve ter 6 dígitos']"
+                        />
+
+                        <!-- Countdown -->
+                        <div class="d-flex align-center justify-space-between mb-3">
+                          <span class="text-caption" :class="otpCountdown <= 60 ? 'text-error' : 'text-grey'">
+                            <v-icon size="14" class="mr-1">mdi-timer-outline</v-icon>
+                            {{ formatCountdown(otpCountdown) }}
+                          </span>
+                          <v-btn
+                            variant="text"
+                            size="small"
+                            color="primary"
+                            :disabled="otpCountdown > 240 || signing"
+                            @click="resendOtpCode"
+                            class="text-none"
+                          >
+                            <v-icon start size="16">mdi-refresh</v-icon>
+                            Reenviar código
+                          </v-btn>
+                        </div>
+
+                        <v-btn
+                          block
+                          size="large"
+                          color="primary"
+                          variant="elevated"
+                          :loading="signing"
+                          :disabled="!otpCode || otpCode.length !== 6 || otpCountdown <= 0"
+                          @click="verifyOtpAndSign"
+                          class="mb-3"
+                        >
+                          <v-icon start>mdi-pen</v-icon>
+                          Confirmar e Assinar
+                        </v-btn>
+
+                        <v-btn
+                          block
+                          variant="text"
+                          size="small"
+                          color="grey"
+                          @click="resetOtpFlow"
+                          :disabled="signing"
+                          class="text-none"
+                        >
+                          Voltar para senha
+                        </v-btn>
+                      </template>
                     </template>
 
                     <v-btn
@@ -575,6 +651,12 @@ const signingTasks = ref([])
 const currentDocumentIndex = ref(0)
 const signedDocuments = ref([])
 const currentDocumentUrl = ref(null)
+
+// Estados para fluxo OTP
+const otpStep = ref('password') // 'password' | 'otp'
+const otpCode = ref('')
+const otpCountdown = ref(0)
+let otpTimerInterval = null
 
 // Estado para status detalhado das assinaturas
 const signatureStatus = ref(null)
@@ -687,9 +769,9 @@ watch(currentDocumentIndex, async () => {
 // Watcher para resetar quando abre o dialog
 watch(signatureDialog, (newVal) => {
   if (newVal && selectedTask.value) {
-    currentDocumentIndex.value = 0
     signedDocuments.value = []
-    loadCurrentDocument()
+    // Setar index = 0 já dispara o watcher de currentDocumentIndex que chama loadCurrentDocument
+    currentDocumentIndex.value = 0
   } else {
     currentDocumentUrl.value = null
   }
@@ -823,7 +905,6 @@ async function loadCurrentDocument() {
     const token = localStorage.getItem('token')
 
     if (!token) {
-      console.error('No authentication token found')
       currentDocumentUrl.value = null
       return
     }
@@ -854,7 +935,6 @@ async function loadCurrentDocument() {
     // Criar URL do blob
     currentDocumentUrl.value = URL.createObjectURL(blob)
   } catch (error) {
-    console.error('Error loading document:', error)
     currentDocumentUrl.value = null
     window.showSnackbar?.('Erro ao carregar documento', 'error')
   }
@@ -867,7 +947,6 @@ async function loadSignatureStatus(attachmentId) {
     const response = await api.get(`/signatures/status/${attachmentId}`)
     signatureStatus.value = response.data
   } catch (error) {
-    console.error('Error loading signature status:', error)
     signatureStatus.value = null
   } finally {
     loadingStatus.value = false
@@ -976,14 +1055,9 @@ function nextDocument() {
 }
 
 function openSignatureDialog(task) {
-  console.log('📋 Opening signature dialog for task:', task)
-  console.log('   Full task object keys:', Object.keys(task))
-  console.log('   Task ID:', task.id)
-  console.log('   StepExecutionId?:', task.stepExecutionId)
-  console.log('   ExecutionId?:', task.executionId)
-  console.log('   Step:', task.step)
   selectedTask.value = task
   password.value = ''
+  resetOtpFlow()
   signatureDialog.value = true
 }
 
@@ -997,18 +1071,44 @@ function closeSignatureDialog() {
   selectedTask.value = null
   password.value = ''
   currentDocumentUrl.value = null
+  resetOtpFlow()
 }
 
-async function signCurrentDocument() {
-  console.log('🔐 signCurrentDocument chamada')
-  console.log('  selectedTask:', selectedTask.value?.id)
-  console.log('  password:', password.value ? '***preenchida***' : 'VAZIA')
+// Funções do fluxo OTP
+function formatCountdown(seconds) {
+  const min = Math.floor(seconds / 60)
+  const sec = seconds % 60
+  return `${min}:${sec.toString().padStart(2, '0')}`
+}
 
-  if (!selectedTask.value || !password.value) {
-    console.warn('❌ Retornando cedo: selectedTask ou password vazios')
-    if (!password.value) {
-      window.showSnackbar?.('Digite sua senha para assinar o documento', 'warning')
+function startOtpTimer() {
+  stopOtpTimer()
+  otpCountdown.value = 300 // 5 minutos
+  otpTimerInterval = setInterval(() => {
+    otpCountdown.value--
+    if (otpCountdown.value <= 0) {
+      stopOtpTimer()
+      window.showSnackbar?.('O código expirou. Solicite um novo.', 'warning')
     }
+  }, 1000)
+}
+
+function stopOtpTimer() {
+  if (otpTimerInterval) {
+    clearInterval(otpTimerInterval)
+    otpTimerInterval = null
+  }
+}
+
+function resetOtpFlow() {
+  otpStep.value = 'password'
+  otpCode.value = ''
+  stopOtpTimer()
+}
+
+async function requestOtpCode() {
+  if (!selectedTask.value || !password.value) {
+    window.showSnackbar?.('Digite sua senha para continuar', 'warning')
     return
   }
 
@@ -1018,81 +1118,91 @@ async function signCurrentDocument() {
     return
   }
 
-  // Verificar se já foi assinado
-  if (signedDocuments.value.includes(currentDoc.id)) {
-    window.showSnackbar?.('Este documento já foi assinado', 'info')
+  signing.value = true
+
+  try {
+    const { useSignaturesStore } = await import('@/stores/signatures')
+    const signaturesStore = useSignaturesStore()
+
+    // Validar permissão de assinatura
+    if (signatureStatus.value && !signatureStatus.value.canSign) {
+      window.showSnackbar?.(getWaitingMessage() || 'Você não pode assinar este documento no momento.', 'warning')
+      return
+    }
+
+    // Solicitar OTP (backend valida a senha e envia o código por e-mail)
+    await signaturesStore.requestOtp(currentDoc.id, password.value)
+
+    // Avançar para etapa do OTP
+    otpStep.value = 'otp'
+    otpCode.value = ''
+    startOtpTimer()
+
+    window.showSnackbar?.('Código de verificação enviado para seu e-mail!', 'success')
+  } catch (error) {
+    window.showSnackbar?.(
+      error.response?.data?.message || 'Erro ao solicitar código. Verifique sua senha.',
+      'error'
+    )
+  } finally {
+    signing.value = false
+  }
+}
+
+async function resendOtpCode() {
+  signing.value = true
+  try {
+    const currentDoc = documentsToSign.value[currentDocumentIndex.value]
+    const { useSignaturesStore } = await import('@/stores/signatures')
+    const signaturesStore = useSignaturesStore()
+
+    await signaturesStore.requestOtp(currentDoc.id, password.value)
+
+    otpCode.value = ''
+    startOtpTimer()
+
+    window.showSnackbar?.('Novo código enviado!', 'success')
+  } catch (error) {
+    window.showSnackbar?.(
+      error.response?.data?.message || 'Erro ao reenviar código.',
+      'error'
+    )
+  } finally {
+    signing.value = false
+  }
+}
+
+async function verifyOtpAndSign() {
+  if (!otpCode.value || otpCode.value.length !== 6) {
+    window.showSnackbar?.('Digite o código de 6 dígitos', 'warning')
     return
   }
+
+  const currentDoc = documentsToSign.value[currentDocumentIndex.value]
+  if (!currentDoc) return
 
   signing.value = true
 
   try {
-    console.log('Assinando documento:', currentDoc.originalName)
-
-    // Importar o store de assinaturas
     const { useSignaturesStore } = await import('@/stores/signatures')
     const signaturesStore = useSignaturesStore()
 
-    // Validar usando o signatureStatus que já foi carregado (considera userId E sectorId)
-    // Se signatureStatus existe e canSign é false, não permitir assinatura
-    if (signatureStatus.value && !signatureStatus.value.canSign) {
-      const waitingMsg = getWaitingMessage()
-      window.showSnackbar?.(waitingMsg || 'Você não pode assinar este documento no momento.', 'warning')
-      return
-    }
-
-    // Fallback: Se não temos signatureStatus, verificar requisitos diretamente
-    if (!signatureStatus.value) {
-      try {
-        const stepVersionId = selectedTask.value.step?.id || selectedTask.value.stepVersion?.id
-        if (!stepVersionId) {
-          console.warn('Step version ID não encontrado no task para checagem de requisitos de assinatura')
-        } else {
-          const requirements = await signaturesStore.fetchSignatureRequirements(stepVersionId)
-          const userSectorId = authStore.activeSectorId
-
-          // Verificar se o usuário está nos requisitos (por userId OU por sectorId)
-          const myRequirements = Array.isArray(requirements)
-            ? requirements.filter(r =>
-                r.userId === authStore.user?.id ||
-                (r.sectorId && r.sectorId === userSectorId)
-              )
-            : []
-
-          if (myRequirements.length === 0) {
-            window.showSnackbar?.('Você não está configurado como assinante para este documento.', 'warning')
-            return
-          }
-        }
-      } catch (e) {
-        console.warn('Não foi possível validar requisitos de assinatura antes de prosseguir:', e)
-        // Prossegue mesmo assim; backend ainda validará permissões
-      }
-    }
-
-    // Assinar o documento atual
-    const signatureData = {
+    const payload = {
       attachmentId: currentDoc.id,
+      otpCode: otpCode.value,
       stepExecutionId: selectedTask.value.stepExecutionId || selectedTask.value.id,
-      userPassword: password.value,
-      reason: 'Assinatura via Assinaturas Pendentes',
-      location: 'Sistema SoloFlow',
       contactInfo: null,
     }
 
-    console.log('Signing document:', currentDoc.originalName, signatureData)
+    await signaturesStore.verifyOtpAndSign(payload)
 
-    await signaturesStore.signDocument(signatureData)
-
-    // Adicionar documento à lista de assinados
+    // Sucesso
     signedDocuments.value.push(currentDoc.id)
-
-    // Limpar senha após assinatura bem-sucedida (segurança)
     password.value = ''
+    resetOtpFlow()
 
     window.showSnackbar?.(`Documento "${currentDoc.originalName}" assinado com sucesso!`, 'success')
 
-    // Se todos documentos foram assinados, atualizar lista e fechar
     if (allDocumentsSigned.value) {
       await refreshData()
       window.showSnackbar?.('Todos os documentos foram assinados!', 'success')
@@ -1100,18 +1210,16 @@ async function signCurrentDocument() {
         closeSignatureDialog()
       }, 1500)
     } else {
-      // Avançar para próximo documento não assinado
-      const nextUnsingedIndex = documentsToSign.value.findIndex(
+      const nextUnsignedIndex = documentsToSign.value.findIndex(
         (doc, idx) => idx > currentDocumentIndex.value && !signedDocuments.value.includes(doc.id)
       )
-      if (nextUnsingedIndex !== -1) {
-        currentDocumentIndex.value = nextUnsingedIndex
+      if (nextUnsignedIndex !== -1) {
+        currentDocumentIndex.value = nextUnsignedIndex
       }
     }
   } catch (error) {
-    console.error('Erro ao assinar documento:', error)
     window.showSnackbar?.(
-      error.response?.data?.message || error.message || 'Erro ao assinar documento. Verifique sua senha.',
+      error.response?.data?.message || 'Código inválido ou expirado.',
       'error'
     )
   } finally {

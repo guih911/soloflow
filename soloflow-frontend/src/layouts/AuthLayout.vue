@@ -11,9 +11,11 @@
       <v-container fluid class="auth-container">
         <v-row align="center" justify="center" class="fill-height">
           <v-col cols="12" sm="10" md="8" lg="5" xl="4">
-            <transition name="slide-up" mode="out-in">
-              <router-view />
-            </transition>
+            <router-view v-slot="{ Component }">
+              <transition name="slide-up" mode="out-in">
+                <component :is="Component" />
+              </transition>
+            </router-view>
           </v-col>
         </v-row>
       </v-container>

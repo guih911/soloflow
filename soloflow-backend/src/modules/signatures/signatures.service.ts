@@ -4,24 +4,34 @@ import {
   BadRequestException,
   ForbiddenException,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService, R2_FOLDERS } from '../storage/storage.service';
 import { SimpleSignatureService, SignatureMetadata } from './simple-signature.service';
 import { ModernSignatureService, SignatureMetadata as ModernSignatureMetadata } from './modern-signature.service';
+import { MailerService } from '../mailer/mailer.service';
 import { SignDocumentSimpleDto } from './dto/sign-document-simple.dto';
 import { CreateSignatureRequirementDto } from './dto/create-signature-requirement.dto';
+import { RequestSignatureOtpDto } from './dto/request-signature-otp.dto';
+import { VerifySignatureOtpDto } from './dto/verify-signature-otp.dto';
 import { join } from 'path';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
 import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
 
 @Injectable()
 export class SignaturesService {
+  private readonly logger = new Logger(SignaturesService.name);
+
   constructor(
     private prisma: PrismaService,
     private storageService: StorageService,
     private simpleSignatureService: SimpleSignatureService,
     private modernSignatureService: ModernSignatureService,
+    private eventEmitter: EventEmitter2,
+    private mailerService: MailerService,
   ) {}
 
   /**
@@ -106,40 +116,17 @@ export class SignaturesService {
       r => !r.attachmentId || r.attachmentId === dto.attachmentId // permitir requisitos globais da etapa
     );
 
-    console.log(`📋 Signature requirements found for this attachment:`, {
-      total: requirements.length,
-      forAttachment: requirements.filter(r => r.attachmentId === dto.attachmentId).length,
-      global: requirements.filter(r => !r.attachmentId).length,
-      requirements: requirements.map(r => ({
-        id: r.id,
-        userId: r.userId,
-        sectorId: r.sectorId,
-        attachmentId: r.attachmentId,
-        order: r.order,
-        type: r.type,
-      })),
-    });
-
-    // Extrair IDs dos setores do usuário
-    const userSectorIds = user.userCompanies.map(uc => uc.sectorId).filter(id => id !== null);
-
-    console.log(`👤 User info:`, {
-      userId: user.id,
-      userName: user.name,
-      sectorIds: userSectorIds,
-    });
+    // Extrair IDs dos setores do usuário APENAS da empresa do processo (segurança multi-tenant)
+    const processCompanyId = attachment.stepExecution.processInstance.companyId;
+    const userSectorIds = user.userCompanies
+      .filter(uc => uc.companyId === processCompanyId)
+      .map(uc => uc.sectorId)
+      .filter(id => id !== null);
 
     // Buscar requirement que corresponda ao usuário OU ao setor do usuário
     const requirement = requirements.find(
       r => r.userId === userId || (r.sectorId && userSectorIds.includes(r.sectorId)),
     );
-
-    console.log(`🔍 Matching requirement:`, requirement ? {
-      id: requirement.id,
-      userId: requirement.userId,
-      sectorId: requirement.sectorId,
-      matched: requirement.userId === userId ? 'by user' : 'by sector',
-    } : 'NOT FOUND');
 
     // Se não encontrou requirement específico para este usuário, não pode assinar
     if (!requirement) {
@@ -149,200 +136,227 @@ export class SignaturesService {
       );
     }
 
-    // 7. Verificar se já assinou
-    const existingSignature = await this.prisma.signatureRecord.findFirst({
-      where: {
-        requirementId: requirement.id,
-        signerId: userId,
-        attachmentId: dto.attachmentId,
-      },
-    });
+    // 7-13. Executar verificação de duplicata e criação do registro em transaction
+    // para prevenir race condition (double-signing)
+    const { signatureRecord, allSigned, existingSignaturesCount } = await this.prisma.$transaction(async (tx) => {
+      // 7. Verificar se já assinou (dentro da transaction para atomicidade)
+      const existingSignature = await tx.signatureRecord.findFirst({
+        where: {
+          requirementId: requirement.id,
+          signerId: userId,
+          attachmentId: dto.attachmentId,
+        },
+      });
 
-    if (existingSignature) {
-      throw new BadRequestException('Você já assinou este documento');
-    }
+      if (existingSignature) {
+        throw new BadRequestException('Você já assinou este documento');
+      }
 
-    // 8. Verificar ordem de assinatura (se SEQUENTIAL)
-    if (requirement.type === 'SEQUENTIAL') {
-      const previousRequirements = requirements.filter(r => r.order < requirement.order);
-      for (const prevReq of previousRequirements) {
-        const prevSignature = prevReq.signatureRecords.find(
-          s => s.status === 'COMPLETED',
-        );
-        if (!prevSignature) {
-          throw new BadRequestException(
-            `Aguardando assinatura de ${prevReq.user?.name || prevReq.sector?.name} (ordem ${prevReq.order})`,
-          );
+      // 8. Verificar ordem de assinatura (se SEQUENTIAL)
+      if (requirement.type === 'SEQUENTIAL') {
+        const previousRequirements = requirements.filter(r => r.order < requirement.order);
+        for (const prevReq of previousRequirements) {
+          const prevSignature = await tx.signatureRecord.findFirst({
+            where: {
+              requirementId: prevReq.id,
+              attachmentId: dto.attachmentId,
+              status: 'COMPLETED',
+            },
+          });
+          if (!prevSignature) {
+            throw new BadRequestException(
+              `Aguardando assinatura de ${prevReq.user?.name || prevReq.sector?.name} (ordem ${prevReq.order})`,
+            );
+          }
         }
       }
-    }
 
-    // 9. Preparar metadados da assinatura
-    // Obter empresa e setor principal do usuário
-    const primaryCompany = user.userCompanies?.[0];
-    const companyName = primaryCompany?.company?.name;
-    const sectorName = primaryCompany?.sector?.name;
-
-    const metadata: SignatureMetadata = {
-      signer: {
-        name: user.name,
-        cpf: user.cpf ?? undefined,
-        email: user.email,
-        company: companyName,
-        sector: sectorName,
-      },
-      reason: dto.reason || 'Assinatura Digital',
-      location: dto.location,
-      contactInfo: dto.contactInfo,
-      ipAddress: dto.ipAddress, // IP público capturado
-    };
-
-    // 10. Contar quantas assinaturas já existem NESTE ARQUIVO para determinar a posição
-    const existingSignaturesCount = await this.prisma.signatureRecord.count({
-      where: {
-        attachmentId: dto.attachmentId,
-        status: 'COMPLETED',
-      },
-    });
-
-    console.log(`📝 Assinando arquivo ${attachment.originalName} - Assinatura #${existingSignaturesCount + 1}`);
-
-    // 11. Baixar PDF do R2 para processamento local
-    const tempDir = join(process.cwd(), 'uploads', 'signatures');
-    if (!existsSync(tempDir)) {
-      mkdirSync(tempDir, { recursive: true });
-    }
-
-    const tempInputPath = join(tempDir, `input-${Date.now()}-${attachment.filename}`);
-    const tempSignedPath = join(tempDir, `signed-${Date.now()}-${attachment.filename}`);
-
-    // Baixar arquivo do R2
-    const pdfBuffer = await this.storageService.getBuffer(attachment.path);
-    writeFileSync(tempInputPath, pdfBuffer);
-
-    // Assinar PDF com design moderno, QR Code e página de validação
-    const signatureResult = await this.modernSignatureService.signPDF(
-      tempInputPath,
-      tempSignedPath,
-      metadata,
-      dto.userPassword,
-      existingSignaturesCount, // Passa a ordem para empilhar assinaturas verticalmente
-    );
-
-    // 11.5. Fazer upload do arquivo assinado de volta para R2 (substituindo o original)
-    console.log(`🔄 Fazendo upload do arquivo assinado para R2: ${attachment.path}`);
-    const signedBuffer = require('fs').readFileSync(tempSignedPath);
-    // Usar replaceBuffer para manter o mesmo key/path do arquivo original
-    await this.storageService.replaceBuffer(
-      signedBuffer,
-      attachment.path, // Usa o mesmo key existente
-      attachment.originalName,
-      'application/pdf',
-    );
-
-    // Limpar arquivos temporários
-    unlinkSync(tempInputPath);
-    unlinkSync(tempSignedPath);
-    console.log(`✅ Arquivo assinado enviado para R2 com sucesso`);
-
-    // 12. Criar registro de assinatura
-    const signatureRecord = await this.prisma.signatureRecord.create({
-      data: {
-        requirementId: requirement.id,
-        attachmentId: dto.attachmentId,
-        signerId: userId,
-        stepExecutionId: dto.stepExecutionId,
-        status: 'COMPLETED',
-
-        // Dados do assinante
-        signerName: user.name,
-        signerCPF: user.cpf,
-        signerEmail: user.email,
-
-        // Dados da assinatura
-        signedAt: new Date(),
-        signatureHash: signatureResult.signatureHash,
-        documentHash: signatureResult.documentHash,
-        signatureToken: signatureResult.signatureToken,
-        signatureReason: dto.reason,
-
-        // Metadados
-        ipAddress: dto.ipAddress,
-        userAgent: dto.userAgent,
-        metadata: {
-          contactInfo: dto.contactInfo,
-          geolocation: dto.geolocation,
+      // 10. Contar quantas assinaturas já existem NESTE ARQUIVO para determinar a posição
+      const txExistingSignaturesCount = await tx.signatureRecord.count({
+        where: {
+          attachmentId: dto.attachmentId,
+          status: 'COMPLETED',
         },
-      },
-      include: {
+      });
+
+      // 9. Preparar metadados da assinatura
+      // Obter empresa e setor do usuário na empresa do processo
+      const userCompanyForProcess = user.userCompanies.find(uc => uc.companyId === processCompanyId);
+      const primaryCompany = userCompanyForProcess || user.userCompanies?.[0];
+      const companyName = primaryCompany?.company?.name;
+      const sectorName = primaryCompany?.sector?.name;
+
+      const metadata: SignatureMetadata = {
         signer: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            cpf: true,
-          },
+          name: user.name,
+          cpf: user.cpf ?? undefined,
+          email: user.email,
+          company: companyName,
+          sector: sectorName,
         },
-        requirement: true,
-      },
-    });
+        reason: dto.reason || 'Assinatura Digital',
+        location: dto.location,
+        contactInfo: dto.contactInfo,
+        ipAddress: dto.ipAddress,
+      };
 
-    // 13. Verificar se todas as assinaturas DESTE ARQUIVO foram concluídas
-    // Nota: Não filtramos por isRequired pois todos os requisitos devem ser cumpridos
-    const allRequirements = await this.prisma.signatureRequirement.findMany({
-      where: {
-        attachmentId: dto.attachmentId, // APENAS REQUISITOS DESTE ANEXO
-      },
-      include: {
-        signatureRecords: {
-          where: {
-            attachmentId: dto.attachmentId,
-            status: 'COMPLETED',
-          },
-        },
-      },
-    });
+      // 11. Baixar PDF do R2 para processamento local
+      const tempDir = join(process.cwd(), 'uploads', 'signatures');
+      if (!existsSync(tempDir)) {
+        mkdirSync(tempDir, { recursive: true, mode: 0o700 }); // Permissões restritas
+      }
 
-    const allSigned = allRequirements.every(req => req.signatureRecords.length > 0);
+      const tempInputPath = join(tempDir, `input-${Date.now()}-${attachment.filename}`);
+      const tempSignedPath = join(tempDir, `signed-${Date.now()}-${attachment.filename}`);
 
-    console.log(`✅ Requisitos de assinatura para ${attachment.originalName}: ${allRequirements.length} total, ${allRequirements.filter(r => r.signatureRecords.length > 0).length} assinados`);
+      // Função auxiliar para cleanup seguro de arquivos temporários
+      const cleanupTempFiles = () => {
+        try {
+          if (existsSync(tempInputPath)) unlinkSync(tempInputPath);
+        } catch (e) {
+          this.logger.warn(`Falha ao remover arquivo temporário: ${tempInputPath}`);
+        }
+        try {
+          if (existsSync(tempSignedPath)) unlinkSync(tempSignedPath);
+        } catch (e) {
+          this.logger.warn(`Falha ao remover arquivo temporário: ${tempSignedPath}`);
+        }
+      };
 
-    // IMPORTANTE: Só marcar como assinado quando TODAS as assinaturas forem concluídas
-    if (allSigned) {
-      await this.prisma.attachment.update({
-        where: { id: dto.attachmentId },
+      let signatureResult;
+      try {
+        // Baixar arquivo do R2
+        const pdfBuffer = await this.storageService.getBuffer(attachment.path);
+        writeFileSync(tempInputPath, pdfBuffer, { mode: 0o600 }); // Permissões restritas
+
+        // Assinar PDF com design moderno, QR Code e página de validação
+        signatureResult = await this.modernSignatureService.signPDF(
+          tempInputPath,
+          tempSignedPath,
+          metadata,
+          dto.userPassword,
+          txExistingSignaturesCount,
+        );
+
+        // 11.5. Fazer upload do arquivo assinado de volta para R2 (substituindo o original)
+        const { readFileSync } = await import('fs');
+        const signedBuffer = readFileSync(tempSignedPath);
+        await this.storageService.replaceBuffer(
+          signedBuffer,
+          attachment.path,
+          attachment.originalName,
+          'application/pdf',
+        );
+      } finally {
+        // Garantir limpeza de arquivos temporários mesmo em caso de erro
+        cleanupTempFiles();
+      }
+
+      // 12. Criar registro de assinatura
+      const txSignatureRecord = await tx.signatureRecord.create({
         data: {
-          isSigned: true,
-        },
-      });
-      console.log('📝 Anexo marcado como totalmente assinado (todas as assinaturas concluídas)');
-    } else {
-      console.log(`📝 Anexo ainda aguardando mais assinaturas (${allRequirements.filter(r => r.signatureRecords.length === 0).length} pendentes)`);
-    }
+          requirementId: requirement.id,
+          attachmentId: dto.attachmentId,
+          signerId: userId,
+          stepExecutionId: dto.stepExecutionId,
+          status: 'COMPLETED',
 
-    // Apenas registrar que todas as assinaturas foram concluídas
-    // Não modificar status da etapa - a etapa já foi concluída quando o usuário clicou em "Concluir Etapa"
-    if (allSigned) {
-      await this.prisma.stepExecution.update({
-        where: { id: dto.stepExecutionId },
-        data: {
+          // Dados do assinante
+          signerName: user.name,
+          signerCPF: user.cpf,
+          signerEmail: user.email,
+
+          // Dados da assinatura
           signedAt: new Date(),
+          signatureHash: signatureResult.signatureHash,
+          documentHash: signatureResult.documentHash,
+          signatureToken: signatureResult.signatureToken,
+          signatureReason: dto.reason,
+
+          // Metadados
+          ipAddress: dto.ipAddress,
+          userAgent: dto.userAgent,
+          metadata: {
+            contactInfo: dto.contactInfo,
+            geolocation: dto.geolocation,
+          },
+        },
+        include: {
+          signer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              cpf: true,
+            },
+          },
+          requirement: true,
         },
       });
 
-      console.log('All signatures completed - step already marked as COMPLETED earlier');
-    }
+      // 13. Verificar se todas as assinaturas DESTE ARQUIVO foram concluídas
+      const txAllRequirements = await tx.signatureRequirement.findMany({
+        where: {
+          attachmentId: dto.attachmentId,
+        },
+        include: {
+          signatureRecords: {
+            where: {
+              attachmentId: dto.attachmentId,
+              status: 'COMPLETED',
+            },
+          },
+        },
+      });
 
-    // 14. Log do próximo assinante (para assinaturas sequenciais)
-    // Nota: Sistema de notificação pode ser implementado futuramente
+      const txAllSigned = txAllRequirements.every(req => req.signatureRecords.length > 0);
+
+      // IMPORTANTE: Só marcar como assinado quando TODAS as assinaturas forem concluídas
+      if (txAllSigned) {
+        await tx.attachment.update({
+          where: { id: dto.attachmentId },
+          data: {
+            isSigned: true,
+          },
+        });
+
+        await tx.stepExecution.update({
+          where: { id: dto.stepExecutionId },
+          data: {
+            signedAt: new Date(),
+          },
+        });
+      }
+
+      return {
+        signatureRecord: txSignatureRecord,
+        allSigned: txAllSigned,
+        existingSignaturesCount: txExistingSignaturesCount,
+      };
+    });
+
+    // 14. Notificar próximo assinante e emitir eventos (fora da transaction)
+    const processInstance = attachment.stepExecution.processInstance;
+    const sigCompanyId = processInstance.companyId;
+    const sigProcessTitle = processInstance.title || processInstance.code;
+    const sigProcessId = processInstance.id;
+
+    // Evento: assinatura concluída (notifica criador do processo)
+    this.eventEmitter.emit('signature.completed', {
+      creatorId: processInstance.createdBy.id,
+      companyId: sigCompanyId,
+      processTitle: sigProcessTitle,
+      processId: sigProcessId,
+      signerName: user.name,
+    });
+
     if (requirement.type === 'SEQUENTIAL') {
-      // Buscar requisitos deste anexo ordenados por ordem
       const attachmentRequirements = await this.prisma.signatureRequirement.findMany({
         where: {
           stepVersionId: attachment.stepExecution.stepVersionId,
           OR: [
             { attachmentId: dto.attachmentId },
-            { attachmentId: null }, // Requisitos globais
+            { attachmentId: null },
           ],
         },
         include: {
@@ -358,24 +372,27 @@ export class SignaturesService {
         orderBy: { order: 'asc' },
       });
 
-      // Encontrar o próximo assinante que ainda não assinou
       const nextRequirement = attachmentRequirements.find(req =>
         req.order > requirement.order && req.signatureRecords.length === 0
       );
 
-      if (nextRequirement) {
-        const nextSignerName = nextRequirement.user?.name || nextRequirement.sector?.name || 'N/A';
-        console.log(`📧 Próximo assinante disponível: ${nextSignerName} (ordem ${nextRequirement.order})`);
-      } else {
-        console.log('✅ Todas as assinaturas para este anexo foram concluídas');
+      if (nextRequirement?.user?.id) {
+        // Evento: assinatura pendente para o próximo assinante
+        this.eventEmitter.emit('signature.pending', {
+          userId: nextRequirement.user.id,
+          companyId: sigCompanyId,
+          processTitle: sigProcessTitle,
+          processId: sigProcessId,
+          documentName: attachment.originalName,
+        });
       }
     }
 
     return {
       success: true,
       signatureRecord,
-      signedPath: attachment.path, // Retorna o path original (que agora contém o PDF assinado)
-      signatureToken: signatureResult.signatureToken,
+      signedPath: attachment.path,
+      signatureToken: signatureRecord.requirement ? signatureRecord.signatureToken : undefined,
       allRequirementsMet: allSigned,
     };
   }
@@ -535,6 +552,11 @@ export class SignaturesService {
       },
     });
 
+    // Notificar o assinante
+    if (requirement.attachmentId) {
+      await this.notifySigners([requirement]);
+    }
+
     return requirement;
   }
 
@@ -588,7 +610,6 @@ export class SignaturesService {
         });
 
         if (existing) {
-          console.log(`⚠️  Requisito duplicado ignorado: ${dto.userId || dto.sectorId} já tem requisito para este anexo`);
           errors.push({
             dto,
             error: `Requisito de assinatura já existe para este usuário/setor neste anexo`,
@@ -634,6 +655,11 @@ export class SignaturesService {
       }
     }
 
+    // Emitir notificações para os assinantes após criar requisitos
+    if (created.length > 0) {
+      await this.notifySigners(created);
+    }
+
     return {
       success: errors.length === 0,
       created,
@@ -642,6 +668,80 @@ export class SignaturesService {
       createdCount: created.length,
       errorCount: errors.length,
     };
+  }
+
+  /**
+   * Notifica assinantes após criação de requisitos
+   */
+  private async notifySigners(createdRequirements: any[]) {
+    try {
+      // Agrupar por attachmentId para buscar contexto do processo
+      const byAttachment = new Map<string, any[]>();
+      for (const req of createdRequirements) {
+        const key = req.attachmentId || 'global';
+        if (!byAttachment.has(key)) byAttachment.set(key, []);
+        byAttachment.get(key)!.push(req);
+      }
+
+      for (const [attachmentId, reqs] of byAttachment) {
+        if (attachmentId === 'global') continue;
+
+        // Buscar contexto do processo via attachment
+        const attachment = await this.prisma.attachment.findUnique({
+          where: { id: attachmentId },
+          include: {
+            stepExecution: {
+              include: {
+                processInstance: {
+                  select: { id: true, title: true, code: true, companyId: true },
+                },
+              },
+            },
+          },
+        });
+
+        if (!attachment?.stepExecution?.processInstance) continue;
+
+        const processInstance = attachment.stepExecution.processInstance;
+        const processTitle = processInstance.title || processInstance.code;
+        const processId = processInstance.id;
+        const companyId = processInstance.companyId;
+        const documentName = attachment.originalName;
+
+        // Determinar tipo (todos os reqs de um mesmo attachment devem ter o mesmo tipo)
+        const signatureType = reqs[0].type || 'PARALLEL';
+
+        if (signatureType === 'SEQUENTIAL') {
+          // Notificar apenas o primeiro assinante (menor order)
+          const sorted = [...reqs].sort((a, b) => (a.order || 0) - (b.order || 0));
+          const first = sorted[0];
+          if (first?.user?.id) {
+            this.eventEmitter.emit('signature.pending', {
+              userId: first.user.id,
+              companyId,
+              processTitle,
+              processId,
+              documentName,
+            });
+          }
+        } else {
+          // PARALLEL: notificar todos os assinantes
+          for (const req of reqs) {
+            if (req.user?.id) {
+              this.eventEmitter.emit('signature.pending', {
+                userId: req.user.id,
+                companyId,
+                processTitle,
+                processId,
+                documentName,
+              });
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // Não bloquear o fluxo por erro de notificação
+    }
   }
 
   /**
@@ -1061,38 +1161,54 @@ export class SignaturesService {
     // 10. Baixar PDF do R2 para processamento local
     const tempDir = join(process.cwd(), 'uploads', 'signatures');
     if (!existsSync(tempDir)) {
-      mkdirSync(tempDir, { recursive: true });
+      mkdirSync(tempDir, { recursive: true, mode: 0o700 });
     }
 
     const tempInputPath = join(tempDir, `input-subtask-${Date.now()}-${subTask.attachmentName}`);
     const tempSignedPath = join(tempDir, `signed-subtask-${Date.now()}-${subTask.attachmentName}`);
 
-    // Baixar arquivo do R2
-    const pdfBuffer = await this.storageService.getBuffer(subTask.attachmentPath);
-    writeFileSync(tempInputPath, pdfBuffer);
+    // Função auxiliar para cleanup seguro de arquivos temporários
+    const cleanupTempFiles = () => {
+      try {
+        if (existsSync(tempInputPath)) unlinkSync(tempInputPath);
+      } catch (e) {
+        this.logger.warn(`Falha ao remover arquivo temporário: ${tempInputPath}`);
+      }
+      try {
+        if (existsSync(tempSignedPath)) unlinkSync(tempSignedPath);
+      } catch (e) {
+        this.logger.warn(`Falha ao remover arquivo temporário: ${tempSignedPath}`);
+      }
+    };
 
-    // Aplicar assinatura visual no PDF
-    const signatureResult = await this.modernSignatureService.signPDF(
-      tempInputPath,
-      tempSignedPath,
-      metadata,
-      dto.userPassword,
-      existingSignatures.length, // Ordem da assinatura
-    );
+    let signatureResult;
+    try {
+      // Baixar arquivo do R2
+      const pdfBuffer = await this.storageService.getBuffer(subTask.attachmentPath);
+      writeFileSync(tempInputPath, pdfBuffer, { mode: 0o600 });
 
-    // 11. Fazer upload do arquivo assinado de volta para R2 (substituindo o original)
-    const signedBuffer = require('fs').readFileSync(tempSignedPath);
-    // Usar replaceBuffer para manter o mesmo key/path do arquivo original
-    await this.storageService.replaceBuffer(
-      signedBuffer,
-      subTask.attachmentPath, // Usa o mesmo key existente
-      subTask.attachmentName,
-      'application/pdf',
-    );
+      // Aplicar assinatura visual no PDF
+      signatureResult = await this.modernSignatureService.signPDF(
+        tempInputPath,
+        tempSignedPath,
+        metadata,
+        dto.userPassword,
+        existingSignatures.length, // Ordem da assinatura
+      );
 
-    // Limpar arquivos temporários
-    unlinkSync(tempInputPath);
-    unlinkSync(tempSignedPath);
+      // 11. Fazer upload do arquivo assinado de volta para R2 (substituindo o original)
+      const { readFileSync } = await import('fs');
+      const signedBuffer = readFileSync(tempSignedPath);
+      await this.storageService.replaceBuffer(
+        signedBuffer,
+        subTask.attachmentPath,
+        subTask.attachmentName,
+        'application/pdf',
+      );
+    } finally {
+      // Garantir limpeza de arquivos temporários mesmo em caso de erro
+      cleanupTempFiles();
+    }
 
     // 12. Registrar assinatura nos metadados da sub-tarefa
     const newSignature = {
@@ -1131,6 +1247,461 @@ export class SignaturesService {
       allRequirementsMet: allSigned,
       totalSigners: signerIds.length,
       completedSignatures: existingSignatures.length,
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════════
+  // 2FA - OTP POR EMAIL PARA ASSINATURA DIGITAL
+  // ════════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Solicita um OTP por email para confirmar assinatura digital.
+   * Valida a senha do usuário antes de enviar o código.
+   */
+  async requestSignatureOtp(userId: string, dto: RequestSignatureOtpDto) {
+    // 1. Buscar e validar usuário
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    // 2. Validar senha do usuário
+    const isValidPassword = await bcrypt.compare(dto.userPassword, user.password);
+
+    if (!isValidPassword) {
+      throw new UnauthorizedException(
+        'Senha incorreta. Por favor, verifique sua senha e tente novamente. ' +
+        'A senha deve ser a mesma utilizada para acessar o sistema.'
+      );
+    }
+
+    // 3. Verificar se o anexo existe
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: dto.attachmentId },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Anexo não encontrado');
+    }
+
+    // 4. Invalidar OTPs anteriores para o mesmo usuário e anexo
+    await this.prisma.signatureOtp.updateMany({
+      where: {
+        userId,
+        attachmentId: dto.attachmentId,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(), // Marca como usado para invalidar
+      },
+    });
+
+    // 5. Gerar código OTP de 6 dígitos
+    const otpCode = String(randomInt(100000, 999999));
+
+    // 6. Salvar no banco com expiração de 5 minutos
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutos
+
+    await this.prisma.signatureOtp.create({
+      data: {
+        code: otpCode,
+        userId,
+        attachmentId: dto.attachmentId,
+        expiresAt,
+      },
+    });
+
+    // 7. Enviar email com o código OTP
+    try {
+      await this.mailerService.sendSignatureOtpEmail(
+        user.email,
+        user.name,
+        otpCode,
+      );
+    } catch (error) {
+      this.logger.error(`Falha ao enviar OTP por email para ${user.email}: ${error.message}`);
+      throw new BadRequestException(
+        'Não foi possível enviar o código de verificação por email. Tente novamente.'
+      );
+    }
+
+    this.logger.log(`OTP de assinatura gerado para usuário ${user.email}, anexo ${dto.attachmentId}`);
+
+    return {
+      success: true,
+      expiresIn: 300, // 5 minutos em segundos
+      message: 'Código de verificação enviado para seu email',
+    };
+  }
+
+  /**
+   * Verifica o OTP e realiza a assinatura do documento.
+   * Pula a validação de senha pois já foi validada no requestSignatureOtp.
+   */
+  async verifySignatureOtpAndSign(userId: string, dto: VerifySignatureOtpDto) {
+    // 1. Buscar o OTP válido para este usuário e anexo
+    const otpRecord = await this.prisma.signatureOtp.findFirst({
+      where: {
+        code: dto.otpCode,
+        userId,
+        attachmentId: dto.attachmentId,
+        usedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!otpRecord) {
+      throw new UnauthorizedException(
+        'Código de verificação inválido. Verifique o código recebido por email.'
+      );
+    }
+
+    // 2. Verificar expiração
+    if (new Date() > otpRecord.expiresAt) {
+      throw new UnauthorizedException(
+        'Código de verificação expirado. Solicite um novo código.'
+      );
+    }
+
+    // 3. Marcar OTP como usado
+    await this.prisma.signatureOtp.update({
+      where: { id: otpRecord.id },
+      data: { usedAt: new Date() },
+    });
+
+    // 4. Buscar usuário com suas empresas/setores
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        userCompanies: {
+          select: {
+            sectorId: true,
+            companyId: true,
+            company: { select: { id: true, name: true } },
+            sector: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    // 5. Buscar anexo com todas as relações necessárias
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: dto.attachmentId },
+      include: {
+        stepExecution: {
+          include: {
+            stepVersion: {
+              include: {
+                signatureRequirements: {
+                  include: {
+                    signatureRecords: true,
+                    user: { select: { id: true, name: true, email: true } },
+                    sector: { select: { id: true, name: true } },
+                  },
+                  orderBy: { order: 'asc' },
+                },
+              },
+            },
+            processInstance: {
+              include: {
+                createdBy: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Anexo não encontrado');
+    }
+
+    // 6. Verificar se etapa requer assinatura OU se há requisitos criados
+    const hasRequirements = attachment.stepExecution.stepVersion.signatureRequirements?.length > 0;
+
+    if (!attachment.stepExecution.stepVersion.requiresSignature && !hasRequirements) {
+      throw new BadRequestException('Esta etapa não requer assinatura');
+    }
+
+    // 7. Verificar se anexo é PDF
+    if (attachment.mimeType !== 'application/pdf') {
+      throw new BadRequestException('Apenas arquivos PDF podem ser assinados');
+    }
+
+    // 8. Encontrar requirement correspondente PARA ESTE ARQUIVO ESPECÍFICO
+    const requirements = attachment.stepExecution.stepVersion.signatureRequirements.filter(
+      r => !r.attachmentId || r.attachmentId === dto.attachmentId
+    );
+
+    // Extrair IDs dos setores do usuário
+    const userSectorIds = user.userCompanies.map(uc => uc.sectorId).filter(id => id !== null);
+
+    // Buscar requirement que corresponda ao usuário OU ao setor do usuário
+    const requirement = requirements.find(
+      r => r.userId === userId || (r.sectorId && userSectorIds.includes(r.sectorId)),
+    );
+
+    if (!requirement) {
+      throw new ForbiddenException(
+        'Você não está configurado como assinante deste documento. ' +
+        'Verifique se o documento foi configurado corretamente com seus dados como assinante.'
+      );
+    }
+
+    // 9. Verificar se já assinou
+    const existingSignature = await this.prisma.signatureRecord.findFirst({
+      where: {
+        requirementId: requirement.id,
+        signerId: userId,
+        attachmentId: dto.attachmentId,
+      },
+    });
+
+    if (existingSignature) {
+      throw new BadRequestException('Você já assinou este documento');
+    }
+
+    // 10. Verificar ordem de assinatura (se SEQUENTIAL)
+    if (requirement.type === 'SEQUENTIAL') {
+      const previousRequirements = requirements.filter(r => r.order < requirement.order);
+      for (const prevReq of previousRequirements) {
+        const prevSignature = prevReq.signatureRecords.find(
+          s => s.status === 'COMPLETED',
+        );
+        if (!prevSignature) {
+          throw new BadRequestException(
+            `Aguardando assinatura de ${prevReq.user?.name || prevReq.sector?.name} (ordem ${prevReq.order})`,
+          );
+        }
+      }
+    }
+
+    // 11. Preparar metadados da assinatura
+    const primaryCompany = user.userCompanies?.[0];
+    const companyName = primaryCompany?.company?.name;
+    const sectorName = primaryCompany?.sector?.name;
+
+    const metadata: SignatureMetadata = {
+      signer: {
+        name: user.name,
+        cpf: user.cpf ?? undefined,
+        email: user.email,
+        company: companyName,
+        sector: sectorName,
+      },
+      reason: 'Assinatura Digital',
+      location: undefined,
+      contactInfo: dto.contactInfo,
+      ipAddress: dto.ipAddress,
+    };
+
+    // 12. Contar quantas assinaturas já existem NESTE ARQUIVO para determinar a posição
+    const existingSignaturesCount = await this.prisma.signatureRecord.count({
+      where: {
+        attachmentId: dto.attachmentId,
+        status: 'COMPLETED',
+      },
+    });
+
+    // 13. Baixar PDF do R2 para processamento local
+    const tempDir = join(process.cwd(), 'uploads', 'signatures');
+    if (!existsSync(tempDir)) {
+      mkdirSync(tempDir, { recursive: true, mode: 0o700 });
+    }
+
+    const tempInputPath = join(tempDir, `input-${Date.now()}-${attachment.filename}`);
+    const tempSignedPath = join(tempDir, `signed-${Date.now()}-${attachment.filename}`);
+
+    // Função auxiliar para cleanup seguro de arquivos temporários
+    const cleanupTempFiles = () => {
+      try {
+        if (existsSync(tempInputPath)) unlinkSync(tempInputPath);
+      } catch (e) {
+        this.logger.warn(`Falha ao remover arquivo temporário: ${tempInputPath}`);
+      }
+      try {
+        if (existsSync(tempSignedPath)) unlinkSync(tempSignedPath);
+      } catch (e) {
+        this.logger.warn(`Falha ao remover arquivo temporário: ${tempSignedPath}`);
+      }
+    };
+
+    let signatureResult;
+    try {
+      // Baixar arquivo do R2
+      const pdfBuffer = await this.storageService.getBuffer(attachment.path);
+      writeFileSync(tempInputPath, pdfBuffer, { mode: 0o600 });
+
+      // Assinar PDF com design moderno, QR Code e página de validação
+      // Usar a senha dummy pois a validação de senha já ocorreu na etapa do OTP
+      signatureResult = await this.modernSignatureService.signPDF(
+        tempInputPath,
+        tempSignedPath,
+        metadata,
+        'otp-verified',
+        existingSignaturesCount,
+      );
+
+      // 14. Fazer upload do arquivo assinado de volta para R2
+      const { readFileSync } = await import('fs');
+      const signedBuffer = readFileSync(tempSignedPath);
+      await this.storageService.replaceBuffer(
+        signedBuffer,
+        attachment.path,
+        attachment.originalName,
+        'application/pdf',
+      );
+    } finally {
+      // Garantir limpeza de arquivos temporários mesmo em caso de erro
+      cleanupTempFiles();
+    }
+
+    // 15. Criar registro de assinatura com metadados do 2FA
+    const signatureRecord = await this.prisma.signatureRecord.create({
+      data: {
+        requirementId: requirement.id,
+        attachmentId: dto.attachmentId,
+        signerId: userId,
+        stepExecutionId: dto.stepExecutionId || attachment.stepExecution.id,
+        status: 'COMPLETED',
+
+        // Dados do assinante
+        signerName: user.name,
+        signerCPF: user.cpf,
+        signerEmail: user.email,
+
+        // Dados da assinatura
+        signedAt: new Date(),
+        signatureHash: signatureResult.signatureHash,
+        documentHash: signatureResult.documentHash,
+        signatureToken: signatureResult.signatureToken,
+        signatureReason: 'Assinatura Digital com verificação 2FA',
+
+        // Metadados
+        ipAddress: dto.ipAddress,
+        userAgent: dto.userAgent,
+        metadata: {
+          authMethod: 'password+email_otp',
+          otpVerifiedAt: new Date().toISOString(),
+          contactInfo: dto.contactInfo,
+          geolocation: dto.geolocation,
+        },
+      },
+      include: {
+        signer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            cpf: true,
+          },
+        },
+        requirement: true,
+      },
+    });
+
+    // 16. Verificar se todas as assinaturas DESTE ARQUIVO foram concluídas
+    const allRequirements = await this.prisma.signatureRequirement.findMany({
+      where: {
+        attachmentId: dto.attachmentId,
+      },
+      include: {
+        signatureRecords: {
+          where: {
+            attachmentId: dto.attachmentId,
+            status: 'COMPLETED',
+          },
+        },
+      },
+    });
+
+    const allSigned = allRequirements.every(req => req.signatureRecords.length > 0);
+
+    if (allSigned) {
+      await this.prisma.attachment.update({
+        where: { id: dto.attachmentId },
+        data: {
+          isSigned: true,
+        },
+      });
+    }
+
+    if (allSigned) {
+      const stepExecutionId = dto.stepExecutionId || attachment.stepExecution.id;
+      await this.prisma.stepExecution.update({
+        where: { id: stepExecutionId },
+        data: {
+          signedAt: new Date(),
+        },
+      });
+    }
+
+    // 17. Notificar próximo assinante e emitir eventos
+    const processInstance = attachment.stepExecution.processInstance;
+    const sigCompanyId = processInstance.companyId;
+    const sigProcessTitle = processInstance.title || processInstance.code;
+    const sigProcessId = processInstance.id;
+
+    this.eventEmitter.emit('signature.completed', {
+      creatorId: processInstance.createdBy.id,
+      companyId: sigCompanyId,
+      processTitle: sigProcessTitle,
+      processId: sigProcessId,
+      signerName: user.name,
+    });
+
+    if (requirement.type === 'SEQUENTIAL') {
+      const attachmentRequirements = await this.prisma.signatureRequirement.findMany({
+        where: {
+          stepVersionId: attachment.stepExecution.stepVersionId,
+          OR: [
+            { attachmentId: dto.attachmentId },
+            { attachmentId: null },
+          ],
+        },
+        include: {
+          user: { select: { id: true, name: true } },
+          sector: { select: { id: true, name: true } },
+          signatureRecords: {
+            where: {
+              attachmentId: dto.attachmentId,
+              status: 'COMPLETED',
+            },
+          },
+        },
+        orderBy: { order: 'asc' },
+      });
+
+      const nextRequirement = attachmentRequirements.find(req =>
+        req.order > requirement.order && req.signatureRecords.length === 0
+      );
+
+      if (nextRequirement?.user?.id) {
+        this.eventEmitter.emit('signature.pending', {
+          userId: nextRequirement.user.id,
+          companyId: sigCompanyId,
+          processTitle: sigProcessTitle,
+          processId: sigProcessId,
+          documentName: attachment.originalName,
+        });
+      }
+    }
+
+    this.logger.log(`Documento assinado com 2FA (OTP) pelo usuário ${user.email}, anexo ${dto.attachmentId}`);
+
+    return {
+      success: true,
+      signatureRecord,
+      signedPath: attachment.path,
+      signatureToken: signatureResult.signatureToken,
+      allRequirementsMet: allSigned,
     };
   }
 }

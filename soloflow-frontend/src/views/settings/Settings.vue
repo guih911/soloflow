@@ -533,7 +533,6 @@ async function updateCompany() {
     originalCompanyData.value = { ...companyData.value }
     window.showSnackbar?.('Dados da empresa atualizados com sucesso!', 'success')
   } catch (error) {
-    console.error('Error updating company:', error)
     window.showSnackbar?.('Erro ao atualizar dados da empresa', 'error')
   } finally {
     savingCompany.value = false
@@ -560,7 +559,6 @@ async function saveSystemSettings() {
     localStorage.setItem('systemSettings', JSON.stringify(systemSettings.value))
     window.showSnackbar?.('Configurações salvas com sucesso!', 'success')
   } catch (error) {
-    console.error('Error saving settings:', error)
     window.showSnackbar?.('Erro ao salvar configurações', 'error')
   } finally {
     savingSettings.value = false
@@ -574,7 +572,6 @@ async function exportData() {
     await new Promise(resolve => setTimeout(resolve, 2000)) // Simular delay
     window.showSnackbar?.('Dados exportados com sucesso!', 'success')
   } catch (error) {
-    console.error('Error exporting data:', error)
     window.showSnackbar?.('Erro ao exportar dados', 'error')
   } finally {
     exporting.value = false
@@ -599,7 +596,6 @@ async function refreshSystem() {
     await loadCompanyStats()
     window.showSnackbar?.('Sistema atualizado!', 'success')
   } catch (error) {
-    console.error('Error refreshing system:', error)
   } finally {
     refreshing.value = false
   }
@@ -628,7 +624,6 @@ async function loadCompanyStats() {
       sectors: 6
     }
   } catch (error) {
-    console.error('Error loading company stats:', error)
   }
 }
 
@@ -651,7 +646,6 @@ function loadSystemSettings() {
       systemSettings.value = { ...systemSettings.value, ...JSON.parse(stored) }
     }
   } catch (error) {
-    console.error('Error loading system settings:', error)
   }
 }
 

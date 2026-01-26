@@ -200,7 +200,6 @@ const isPdf = computed(() => {
 // Watch para carregar preview quando modal abre
 watch(() => props.modelValue, (newVal) => {
   if (newVal && props.fileData?.attachmentId && canPreview.value) {
-    console.log('ðŸ” FieldFileModal: Loading preview for field file')
     loadPreview()
   } else {
     cleanup()
@@ -215,18 +214,12 @@ async function loadPreview() {
   error.value = ''
   
   try {
-    console.log('ðŸ” Loading FIELD file preview:', {
-      fieldLabel: props.fieldInfo.label,
-      attachmentId: props.fileData.attachmentId,
-      mimeType: props.fileData.mimeType
-    })
     
     // Usar método blob para evitar problemas de autenticação
     const response = await api.get(`/processes/attachment/${props.fileData.attachmentId}/view`, {
       responseType: 'blob'
     })
     
-    console.log('âœ… Field file blob loaded successfully')
     
     // Limpar URL anterior se existir
     cleanup()
@@ -238,10 +231,8 @@ async function loadPreview() {
     
     previewUrl.value = URL.createObjectURL(blob)
     
-    console.log('ðŸŽ¯ Field file preview URL created:', previewUrl.value)
     
   } catch (err) {
-    console.error('âŒ Error loading field file preview:', err)
     error.value = 'Erro ao carregar visualização: ' + (err.response?.data?.message || err.message)
   } finally {
     loading.value = false
@@ -251,13 +242,11 @@ async function loadPreview() {
 function onLoad() {
   loading.value = false
   error.value = ''
-  console.log('âœ… Field file preview loaded successfully')
 }
 
 function onError() {
   loading.value = false
   error.value = 'Não foi possível carregar o arquivo'
-  console.error('âŒ Field file preview load error')
 }
 
 async function openPreviewInNewTab() {
@@ -278,7 +267,6 @@ async function openPreviewInNewTab() {
     }, 60000)
     
   } catch (error) {
-    console.error('Error opening field file in new tab:', error)
     window.showSnackbar?.('Erro ao abrir arquivo', 'error')
   }
 }
@@ -308,7 +296,6 @@ async function downloadFile() {
 
     window.showSnackbar?.(`Download de "${props.fieldInfo.label}" iniciado`, 'success')
   } catch (error) {
-    console.error('Error downloading field file:', error)
     window.showSnackbar?.('Erro ao baixar arquivo', 'error')
   } finally {
     downloading.value = false

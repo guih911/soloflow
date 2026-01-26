@@ -354,12 +354,8 @@ const isOverdue = computed(() => {
 })
 
 const parsedMetadata = computed(() => {
-  console.log('🔍 StepExecutionDetailDialog - execution:', props.execution)
-  console.log('🔍 StepExecutionDetailDialog - metadata:', props.execution?.metadata)
-  console.log('🔍 StepExecutionDetailDialog - stepType:', stepType.value)
   
   if (!props.execution?.metadata) {
-    console.log('❌ No metadata found')
     return {}
   }
   try {
@@ -370,7 +366,6 @@ const parsedMetadata = computed(() => {
       metadata = props.execution.metadata
     }
     
-    console.log('📦 Parsed metadata:', metadata)
     
     // Filtrar campos técnicos que não devem ser exibidos
     const filtered = {}
@@ -381,12 +376,9 @@ const parsedMetadata = computed(() => {
       }
     }
     
-    console.log('✅ Filtered metadata:', filtered)
-    console.log('📊 Has metadata:', Object.keys(filtered).length > 0)
     
     return filtered
   } catch (e) {
-    console.error('❌ Error parsing metadata:', e)
     return {}
   }
 })
@@ -709,7 +701,6 @@ async function loadPreviewContent(attachment) {
     const blob = new Blob([response.data], { type: mimeType })
     attachmentPreviewUrl.value = window.URL.createObjectURL(blob)
   } catch (error) {
-    console.error('Erro ao carregar preview:', error)
     window.showSnackbar?.('Erro ao carregar visualização', 'error')
   } finally {
     loadingPreview.value = false
@@ -741,7 +732,6 @@ async function downloadAttachment(attachment) {
     link.remove()
     window.URL.revokeObjectURL(url)
   } catch (error) {
-    console.error('Erro ao baixar anexo:', error)
     window.showSnackbar?.('Erro ao baixar anexo', 'error')
   }
 }

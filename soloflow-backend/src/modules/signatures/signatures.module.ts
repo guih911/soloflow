@@ -6,8 +6,10 @@ import { SimpleSignatureService } from './simple-signature.service';
 import { ModernSignatureService } from './modern-signature.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IpService } from '../../common/services/ip-service';
+import { MailerModule } from '../mailer/mailer.module';
 
 @Module({
+  imports: [MailerModule],
   controllers: [SignaturesController, SignaturesPublicController],
   providers: [
     SignaturesService,

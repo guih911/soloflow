@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
+import api from '@/services/api'
 import axios from 'axios'
-import { useAuthStore } from './auth'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -18,15 +18,7 @@ export const useSignaturesStore = defineStore('signatures', {
       this.error = null
 
       try {
-        const authStore = useAuthStore()
-        const response = await axios.post(
-          `${API_URL}/signatures/sign`,
-          signatureData,
-          {
-            headers: { 'Authorization': `Bearer ${authStore.token}` }
-          }
-        )
-
+        const response = await api.post('/signatures/sign', signatureData)
         return response.data
       } catch (error) {
         this.error = error.response?.data?.message || 'Erro ao assinar documento'
@@ -41,15 +33,7 @@ export const useSignaturesStore = defineStore('signatures', {
       this.error = null
 
       try {
-        const authStore = useAuthStore()
-        const response = await axios.post(
-          `${API_URL}/signatures/sign-subtask`,
-          signatureData,
-          {
-            headers: { 'Authorization': `Bearer ${authStore.token}` }
-          }
-        )
-
+        const response = await api.post('/signatures/sign-subtask', signatureData)
         return response.data
       } catch (error) {
         this.error = error.response?.data?.message || 'Erro ao assinar documento da sub-tarefa'
@@ -64,6 +48,7 @@ export const useSignaturesStore = defineStore('signatures', {
       this.error = null
 
       try {
+        // Endpoint público - não precisa de autenticação, usa axios direto
         const response = await axios.post(
           `${API_URL}/signatures/public/validate`,
           {
@@ -86,15 +71,7 @@ export const useSignaturesStore = defineStore('signatures', {
       this.error = null
 
       try {
-        const authStore = useAuthStore()
-        const response = await axios.post(
-          `${API_URL}/signatures/requirements`,
-          requirementData,
-          {
-            headers: { 'Authorization': `Bearer ${authStore.token}` }
-          }
-        )
-
+        const response = await api.post('/signatures/requirements', requirementData)
         return response.data
       } catch (error) {
         this.error = error.response?.data?.message || 'Erro ao criar requisito de assinatura'
@@ -109,29 +86,14 @@ export const useSignaturesStore = defineStore('signatures', {
       this.error = null
 
       try {
-        const authStore = useAuthStore()
-
-        console.log('Creating multiple signature requirements:', requirements)
-
-        // Usar endpoint batch para criar todos de uma vez
-        const response = await axios.post(
-          `${API_URL}/signatures/requirements/batch`,
-          requirements,
-          {
-            headers: { 'Authorization': `Bearer ${authStore.token}` }
-          }
-        )
-
-        console.log('Batch signature requirements response:', response.data)
+        const response = await api.post('/signatures/requirements/batch', requirements)
 
         if (response.data.errors && response.data.errors.length > 0) {
-          console.error('Some requirements failed:', response.data.errors)
         }
 
         return response.data
       } catch (error) {
         this.error = error.response?.data?.message || 'Erro ao criar requisitos de assinatura'
-        console.error('Error creating signature requirements:', error)
         throw error
       } finally {
         this.loading = false
@@ -143,14 +105,7 @@ export const useSignaturesStore = defineStore('signatures', {
       this.error = null
 
       try {
-        const authStore = useAuthStore()
-        const response = await axios.get(
-          `${API_URL}/signatures/requirements/step/${stepVersionId}`,
-          {
-            headers: { 'Authorization': `Bearer ${authStore.token}` }
-          }
-        )
-
+        const response = await api.get(`/signatures/requirements/step/${stepVersionId}`)
         this.signatureRequirements = response.data
         return response.data
       } catch (error) {
@@ -166,14 +121,7 @@ export const useSignaturesStore = defineStore('signatures', {
       this.error = null
 
       try {
-        const authStore = useAuthStore()
-        const response = await axios.get(
-          `${API_URL}/signatures/attachments/${attachmentId}`,
-          {
-            headers: { 'Authorization': `Bearer ${authStore.token}` }
-          }
-        )
-
+        const response = await api.get(`/signatures/attachments/${attachmentId}`)
         this.attachmentSignatures = response.data
         return response.data
       } catch (error) {
@@ -189,17 +137,43 @@ export const useSignaturesStore = defineStore('signatures', {
       this.error = null
 
       try {
-        const authStore = useAuthStore()
-        const response = await axios.get(
-          `${API_URL}/signatures/verify/${attachmentId}`,
-          {
-            headers: { 'Authorization': `Bearer ${authStore.token}` }
-          }
-        )
-
+        const response = await api.get(`/signatures/verify/${attachmentId}`)
         return response.data
       } catch (error) {
         this.error = error.response?.data?.message || 'Erro ao verificar assinaturas'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async requestOtp(attachmentId, userPassword) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const response = await api.post('/signatures/request-otp', {
+          attachmentId,
+          userPassword
+        })
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao solicitar código de verificação'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async verifyOtpAndSign(payload) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const response = await api.post('/signatures/verify-otp', payload)
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Erro ao verificar código e assinar documento'
         throw error
       } finally {
         this.loading = false

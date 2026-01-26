@@ -247,20 +247,87 @@
                       </div>
                     </template>
                     
-                    <!-- Campos normais -->
+                    <!-- Campo CPF com máscara -->
+                    <template v-else-if="field.type === 'CPF'">
+                      <v-text-field
+                        v-model="formData.metadata[field.name]"
+                        :label="getFieldLabel(field)"
+                        :placeholder="field.placeholder || '000.000.000-00'"
+                        v-mask="'###.###.###-##'"
+                        maxlength="14"
+                        :rules="getFieldRules(field)"
+                        :hint="field.helpText"
+                        :persistent-hint="!!field.helpText"
+                        variant="outlined"
+                        density="comfortable"
+                        prepend-inner-icon="mdi-card-account-details-outline"
+                      />
+                    </template>
+
+                    <!-- Campo CNPJ com máscara -->
+                    <template v-else-if="field.type === 'CNPJ'">
+                      <v-text-field
+                        v-model="formData.metadata[field.name]"
+                        :label="getFieldLabel(field)"
+                        :placeholder="field.placeholder || '00.000.000/0000-00'"
+                        v-mask="'##.###.###/####-##'"
+                        maxlength="18"
+                        :rules="getFieldRules(field)"
+                        :hint="field.helpText"
+                        :persistent-hint="!!field.helpText"
+                        variant="outlined"
+                        density="comfortable"
+                        prepend-inner-icon="mdi-domain"
+                      />
+                    </template>
+
+                    <!-- Campo Telefone com máscara -->
+                    <template v-else-if="field.type === 'PHONE'">
+                      <v-text-field
+                        v-model="formData.metadata[field.name]"
+                        :label="getFieldLabel(field)"
+                        :placeholder="field.placeholder || '(00) 00000-0000'"
+                        v-mask="['(##) ####-####', '(##) #####-####']"
+                        maxlength="15"
+                        :rules="getFieldRules(field)"
+                        :hint="field.helpText"
+                        :persistent-hint="!!field.helpText"
+                        variant="outlined"
+                        density="comfortable"
+                        prepend-inner-icon="mdi-phone-outline"
+                      />
+                    </template>
+
+                    <!-- Campo Moeda com formatação -->
+                    <template v-else-if="field.type === 'CURRENCY'">
+                      <v-text-field
+                        :model-value="formData.metadata[field.name]"
+                        @update:model-value="handleCurrencyInput(field.name, $event)"
+                        :label="getFieldLabel(field)"
+                        :placeholder="field.placeholder || 'R$ 0,00'"
+                        :rules="getFieldRules(field)"
+                        :hint="field.helpText"
+                        :persistent-hint="!!field.helpText"
+                        variant="outlined"
+                        density="comfortable"
+                        prepend-inner-icon="mdi-currency-brl"
+                      />
+                    </template>
+
+                    <!-- Campos normais (outros tipos) -->
                     <template v-else>
-                      <component 
-                        :is="getFieldComponent(field.type)" 
-                        v-model="formData.metadata[field.name]" 
-                        :label="getFieldLabel(field)" 
-                        :placeholder="field.placeholder" 
-                        :hint="field.helpText" 
-                        :persistent-hint="!!field.helpText" 
-                        :rules="getFieldRules(field)" 
-                        :items="getFieldOptions(field)" 
-                        :type="getFieldInputType(field.type)" 
-                        variant="outlined" 
-                        density="comfortable" 
+                      <component
+                        :is="getFieldComponent(field.type)"
+                        v-model="formData.metadata[field.name]"
+                        :label="getFieldLabel(field)"
+                        :placeholder="field.placeholder"
+                        :hint="field.helpText"
+                        :persistent-hint="!!field.helpText"
+                        :rules="getFieldRules(field)"
+                        :items="getFieldOptions(field)"
+                        :type="getFieldInputType(field.type)"
+                        variant="outlined"
+                        density="comfortable"
                       />
                     </template>
                   </v-col>
@@ -672,6 +739,7 @@ import ProcessHistory from '@/components/ProcessHistory.vue'
 import PreviousStepsInfo from '@/components/PreviousStepsInfo.vue'
 import AttachmentPreviewModal from '@/components/AttachmentPreviewModal.vue'
 import { VTextField, VTextarea, VSelect, VCheckbox, VSwitch } from 'vuetify/components'
+import { formatCurrency } from '@/utils/formatters'
 
 dayjs.extend(relativeTime)
 dayjs.extend(duration)
@@ -750,7 +818,6 @@ const stepFormFields = computed(() => {
     const parsed = typeof conditions === 'string' ? JSON.parse(conditions) : conditions
     return Array.isArray(parsed.fields) ? parsed.fields : []
   } catch (error) {
-    console.error('Error parsing step conditions:', error); return []
   }
 })
 
@@ -837,7 +904,6 @@ const processDocuments = computed(() => {
         })
       }
     } catch (error) {
-      console.error('Error parsing reuseData for processDocuments:', error)
     }
   }
 
@@ -1039,7 +1105,6 @@ const reuseDataFields = computed(() => {
                 }
               }
             } catch (e) {
-              console.error('Error parsing step conditions:', e)
             }
           }
           
@@ -1074,7 +1139,6 @@ const reuseDataFields = computed(() => {
     
     return fields
   } catch (error) {
-    console.error('Error parsing reuse data:', error)
     return []
   }
 })
@@ -1126,7 +1190,6 @@ const approvalContextData = computed(() => {
           })
         }
       } catch (e) {
-        console.error('Error parsing step conditions:', e)
       }
     } else {
       // Para outros tipos de etapa, mostrar todo o metadata
@@ -1148,11 +1211,9 @@ const isCommentRequired = computed(() => {
 
 const allowedFileTypes = computed(() => {
   const types = stepExecution.value?.step.allowedFileTypes
-  console.log('🔍 allowedFileTypes - raw types:', types)
 
   // Se não tem tipos definidos, retornar tipos padrão
   if (!types || types === '[]' || types === '' || types === 'null') {
-    console.log('✅ Sem tipos definidos, usando DEFAULT_FILE_TYPES')
     return DEFAULT_FILE_TYPES
   }
 
@@ -1161,29 +1222,22 @@ const allowedFileTypes = computed(() => {
       const parsed = JSON.parse(types)
       if (Array.isArray(parsed)) {
         if (parsed.length === 0) {
-          console.log('✅ Array vazio após parse, usando DEFAULT_FILE_TYPES')
           return DEFAULT_FILE_TYPES
         }
         const joined = parsed.join(',')
-        console.log('✅ Array parseado e juntado:', joined)
         return joined
       }
-      console.log('✅ String não-array retornada:', types)
       return types
     }
     if (Array.isArray(types)) {
       if (types.length === 0) {
-        console.log('✅ Array vazio direto, usando DEFAULT_FILE_TYPES')
         return DEFAULT_FILE_TYPES
       }
       const joined = types.join(',')
-      console.log('✅ Array direto juntado:', joined)
       return joined
     }
-    console.log('✅ Tipo não reconhecido, usando DEFAULT_FILE_TYPES')
     return DEFAULT_FILE_TYPES
   } catch (error) {
-    console.warn('⚠️ Erro ao processar allowedFileTypes:', error)
     return DEFAULT_FILE_TYPES
   }
 })
@@ -1191,11 +1245,6 @@ const allowedFileTypes = computed(() => {
 const availableSigners = computed(() => {
   // Retorna a lista de usuários da empresa para seleção como assinantes
   const users = userStore.users || []
-  console.log('📋 availableSigners computed:', {
-    totalUsers: users.length,
-    activeUsers: users.filter(u => u.isActive !== false).length,
-    allUsers: users,
-  })
   // Filtrar apenas usuários ativos (ou sem propriedade isActive definida)
   return users.filter(u => u.isActive !== false)
 })
@@ -1218,7 +1267,6 @@ const canSubmit = computed(() => {
     const pdfs = attachments.value.filter(f => f.type === 'application/pdf')
     // Verificar se todos os PDFs têm pelo menos 1 assinante configurado
     if (pdfs.length > 0 && !pdfs.every(f => f.signers && f.signers.length > 0)) {
-      console.warn('❌ Assinatura obrigatória: todos os PDFs precisam ter assinantes configurados')
       return false
     }
   }
@@ -1248,9 +1296,16 @@ function getFieldInputType(type) {
     NUMBER: 'number',
     DATE: 'date',
     EMAIL: 'email',
-    CURRENCY: 'number'
   }
   return typeMap[type] || 'text'
+}
+
+function handleCurrencyInput(fieldName, value) {
+  if (!value) {
+    formData.value.metadata[fieldName] = ''
+    return
+  }
+  formData.value.metadata[fieldName] = formatCurrency(value)
 }
 
 function getFieldCols(field) {
@@ -1301,8 +1356,10 @@ function getFieldRules(field) {
       rules.push(v => !v || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v) || 'CNPJ inválido')
       break
     case 'NUMBER':
-    case 'CURRENCY':
       rules.push(v => !v || !isNaN(Number(v)) || 'Deve ser um número válido')
+      break
+    case 'CURRENCY':
+      rules.push(v => !v || /^R\$\s?[\d.,]+$/.test(v) || 'Valor monetário inválido')
       break
   }
   if (field.validations) {
@@ -1321,7 +1378,6 @@ function getFieldRules(field) {
         rules.push(v => !v || Number(v) <= validations.max || `Valor máximo: ${validations.max}`)
       }
     } catch (e) {
-      console.error('Error parsing field validations:', e)
     }
   }
   return rules
@@ -1471,7 +1527,6 @@ async function downloadProcessDocument(doc) {
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   } catch (error) {
-    console.error('Erro ao baixar documento:', error)
     window.showSnackbar?.('Erro ao baixar documento', 'error')
   }
 }
@@ -1663,97 +1718,70 @@ function getFileTypeFromName(fileName) {
 
 function viewFileField(field) {
   try {
-    console.log('=== viewFileField DEBUG ===')
-    console.log('Field received:', field)
-    console.log('Field value:', field.value)
-    console.log('Field value type:', typeof field.value)
-    console.log('Field stepOrder:', field.stepOrder)
-    console.log('Field fieldName:', field.fieldName)
 
     // O field.value pode ser um objeto AttachmentMeta ou um ID de arquivo
     let attachmentId = null
 
     // Se o valor é um objeto com attachmentId
     if (typeof field.value === 'object' && field.value.attachmentId) {
-      console.log('Case 1: Object with attachmentId')
       attachmentId = field.value.attachmentId
     }
     // Se é um array (múltiplos arquivos), pegar o primeiro
     else if (Array.isArray(field.value) && field.value[0]?.attachmentId) {
-      console.log('Case 2: Array with attachmentId')
       attachmentId = field.value[0].attachmentId
     }
     // Se é uma string simples (ID ou nome de arquivo)
     else if (typeof field.value === 'string') {
-      console.log('Case 3: String value - searching in metadata')
       // Tentar encontrar o attachment nos dados da etapa
       const sourceStep = process.value?.stepExecutions.find(
         exec => exec.step.order === field.stepOrder
       )
-      console.log('Source step found:', sourceStep)
 
       if (sourceStep?.metadata) {
         const metadata = typeof sourceStep.metadata === 'string'
           ? JSON.parse(sourceStep.metadata)
           : sourceStep.metadata
 
-        console.log('Metadata:', metadata)
 
         // Procurar por field.fieldName_files que contém os IDs dos arquivos
         const fileIds = metadata[field.fieldName + '_files']
-        console.log(`Looking for ${field.fieldName}_files:`, fileIds)
 
         if (fileIds && fileIds.length > 0) {
           attachmentId = Array.isArray(fileIds) ? fileIds[0] : fileIds
-          console.log('Found attachmentId from metadata:', attachmentId)
         }
       }
     }
 
-    console.log('Final attachmentId:', attachmentId)
 
     if (attachmentId) {
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
       const url = `${baseUrl}/processes/attachment/${attachmentId}/view`
-      console.log('Opening URL:', url)
       window.open(url, '_blank')
     } else {
-      console.warn('Could not find attachment ID for field:', field)
       window.showSnackbar?.('ID do arquivo não encontrado. Verifique o console para detalhes.', 'warning')
     }
   } catch (error) {
-    console.error('Error viewing file field:', error)
     window.showSnackbar?.('Erro ao visualizar arquivo', 'error')
   }
 }
 
 async function handleFileSelect(event) {
-  console.log('📁 handleFileSelect chamado')
-  console.log('📁 event.target.files:', event.target.files)
 
   const files = Array.from(event.target.files)
-  console.log('📁 Total de arquivos:', files.length)
 
   for (const file of files) {
-    console.log('📁 Processando arquivo:', file.name, 'Tamanho:', file.size, 'Tipo:', file.type)
 
     if (file.size > 10 * 1024 * 1024) {
-      console.warn('⚠️ Arquivo muito grande:', file.name)
       window.showSnackbar?.(`Arquivo ${file.name} muito grande (máx: 10MB)`, 'error')
       continue
     }
 
-    console.log('📁 allowedFileTypes.value:', allowedFileTypes.value)
 
     if (allowedFileTypes.value !== '*') {
       const fileExt = '.' + file.name.split('.').pop().toLowerCase()
       const allowedExts = allowedFileTypes.value.split(',').map(t => t.trim())
-      console.log('📁 fileExt:', fileExt)
-      console.log('📁 allowedExts:', allowedExts)
-      console.log('📁 file.type:', file.type)
 
       if (!allowedExts.includes(file.type) && !allowedExts.includes(fileExt)) {
-        console.warn('⚠️ Tipo de arquivo não permitido:', file.name)
         window.showSnackbar?.(`Tipo de arquivo ${file.name} não permitido`, 'error')
         continue
       }
@@ -1772,9 +1800,7 @@ async function handleFileSelect(event) {
       signers: []
     }
 
-    console.log('✅ Adicionando arquivo:', newAttachment)
     attachments.value.push(newAttachment)
-    console.log('✅ Total de attachments:', attachments.value.length)
   }
 
   event.target.value = ''
@@ -1790,7 +1816,6 @@ function removeFile(index) {
 }
 
 function openSignatureDialog(file, index) {
-  console.log('Opening signature dialog for:', file.name)
 }
 
 // ============================================================
@@ -1934,12 +1959,9 @@ function groupReuseDataByStep(fields) {
 // Função para visualizar anexo
 async function viewAttachment(attachment) {
   try {
-    console.log('=== viewAttachment DEBUG ===')
-    console.log('Attachment received:', attachment)
     selectedAttachment.value = attachment
     showPreview.value = true
   } catch (error) {
-    console.error('Error viewing attachment:', error)
     window.showSnackbar?.('Erro ao visualizar anexo', 'error')
   }
 }
@@ -1972,13 +1994,11 @@ async function executeStep() {
     }
   }
   if (!stepExecution.value?.id) {
-    console.error('stepExecutionId is missing:', stepExecution.value)
     window.showSnackbar?.('Erro: ID da execução da etapa não encontrado', 'error')
     return
   }
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   if (!uuidRegex.test(stepExecution.value.id)) {
-    console.error('Invalid stepExecutionId format:', stepExecution.value.id)
     window.showSnackbar?.('Erro: ID da execução da etapa em formato inválido', 'error')
     return
   }
@@ -1990,9 +2010,7 @@ async function executeStep() {
         try {
           const uploaded = await processStore.uploadAttachment(attachment.file, stepExecution.value.id)
           uploadedAttachments.value.push(uploaded)
-          console.log('Attachment uploaded:', uploaded.id, uploaded.originalName)
         } catch (uploadError) {
-          console.error('Error uploading attachment:', uploadError)
           window.showSnackbar?.(`Erro ao enviar arquivo ${attachment.name}`, 'warning')
         }
       }
@@ -2019,7 +2037,6 @@ async function executeStep() {
                 type: fileObj.type
               })
             } catch (uploadError) {
-              console.error('Error uploading field file:', uploadError)
               window.showSnackbar?.(`Erro ao enviar arquivo ${fileObj.name} do campo ${field.label}`, 'warning')
             }
           }
@@ -2050,9 +2067,6 @@ async function executeStep() {
     // Funciona para qualquer tipo de etapa que tenha anexos com assinantes configurados
     if (uploadedAttachments.value.length > 0) {
       try {
-        console.log('🔍 Checking for signature requirements in uploaded attachments...')
-        console.log('📎 Uploaded attachments:', uploadedAttachments.value.map(a => ({ id: a.id, name: a.originalName })))
-        console.log('📋 Original attachments with configs:', attachments.value.map(a => ({ name: a.name, signers: a.signers?.length || 0 })))
 
         const requirements = []
         let totalSigners = 0
@@ -2061,32 +2075,16 @@ async function executeStep() {
         // IMPORTANTE: Usar índice em vez de busca por nome, pois podem existir arquivos com mesmo nome
         for (let uploadIndex = 0; uploadIndex < uploadedAttachments.value.length; uploadIndex++) {
           const uploadedAttachment = uploadedAttachments.value[uploadIndex]
-          console.log(`\n🔎 Processing uploaded file [${uploadIndex}]: ${uploadedAttachment.originalName} (ID: ${uploadedAttachment.id})`)
-          console.log(`   📎 Available original files:`, attachments.value.map((f, i) => ({
-            index: i,
-            name: f.name,
-            signatureType: f.signatureType,
-            signersCount: f.signers?.length || 0
-          })))
 
           // Usar índice correspondente - os arquivos são enviados na mesma ordem
           const originalFile = attachments.value[uploadIndex]
 
           if (!originalFile) {
-            console.log(`   ❌ No matching original file found at index ${uploadIndex}`)
             continue
           }
 
-          console.log(`   ✅ Found original file: ${originalFile.name}`)
-          console.log(`   📝 Signature type: ${originalFile.signatureType}`)
-          console.log(`   👥 Signers configured: ${originalFile.signers?.length || 0}`)
 
           if (originalFile.signers && originalFile.signers.length > 0) {
-            console.log(`   📝 Creating requirements for ${uploadedAttachment.originalName}:`, {
-              signers: originalFile.signers.length,
-              type: originalFile.signatureType,
-              uploadedId: uploadedAttachment.id
-            })
 
             // Criar um requisito para cada assinante deste arquivo
             for (let i = 0; i < originalFile.signers.length; i++) {
@@ -2100,26 +2098,20 @@ async function executeStep() {
                 description: `Assinatura de ${uploadedAttachment.originalName || uploadedAttachment.filename}`
               }
 
-              console.log(`      ${i + 1}. User: ${originalFile.signers[i]} - Attachment: ${uploadedAttachment.id}`)
               requirements.push(requirement)
             }
 
             totalSigners += originalFile.signers.length
           } else {
-            console.log(`   ⚠️  No signers configured for this file`)
           }
         }
 
         if (requirements.length > 0) {
-          console.log('\n✨ Creating signature requirements:', requirements)
           const result = await signaturesStore.createMultipleSignatureRequirements(requirements)
-          console.log('✅ Signature requirements created:', result)
           window.showSnackbar?.(`Requisitos de assinatura criados: ${requirements.length} assinatura(s) para ${totalSigners} pessoa(s)`, 'success')
         } else {
-          console.log('\n⚠️  No signature requirements to create')
         }
       } catch (signatureError) {
-        console.error('❌ Error creating signature requirements:', signatureError)
         window.showSnackbar?.('Etapa concluída, mas houve erro ao configurar as assinaturas', 'warning')
       }
     }
@@ -2130,9 +2122,8 @@ async function executeStep() {
       else if (formData.value.action === 'reprovar') successMessage = 'Processo reprovado.'
     }
     window.showSnackbar?.(successMessage, 'success')
-    setTimeout(() => { router.push(`/processos/${route.params.id}`) }, 1000)
+    setTimeout(() => { router.replace(`/processos/${route.params.id}`) }, 1000)
   } catch (error) {
-    console.error('Error executing step:', error)
     let errorMessage = 'Erro ao executar etapa'
     if (error.response?.status === 400) {
       if (error.response?.data?.message) {
@@ -2147,8 +2138,12 @@ async function executeStep() {
   }
 }
 
-function goBack() { 
-  router.push(`/processos/${route.params.id}`) 
+function goBack() {
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    router.replace(`/processos/${route.params.id}`)
+  }
 }
 
 onMounted(async () => {
@@ -2157,41 +2152,21 @@ onMounted(async () => {
     await processStore.fetchProcess(route.params.id)
 
     // Debug: Verificar configuração da etapa
-    console.log('=== Step Execution Debug ===')
-    console.log('Step type:', stepExecution.value?.step.type)
-    console.log('Allow attachment:', stepExecution.value?.step.allowAttachment)
-    console.log('Requires signature:', stepExecution.value?.step.requiresSignature)
-    console.log('Should show signature config:', stepExecution.value?.step.allowAttachment && stepExecution.value?.step.requiresSignature)
     
     // Debug para etapas de REVISÃO
     if (stepExecution.value?.step.type === 'REVIEW') {
-      console.log('=== REVIEW Step Debug ===')
-      console.log('reuseData raw:', stepExecution.value.step.reuseData)
-      console.log('reviewDataFields:', reviewDataFields.value)
-      console.log('processDocuments:', processDocuments.value)
-      console.log('reviewSettings:', reviewSettings.value)
-      console.log('Process executions:', process.value?.stepExecutions)
     }
 
     // Carregar usuários da empresa para seleção de assinantes
     const companyId = authStore.activeCompany?.companyId || authStore.currentCompany?.id
-    console.log('🔍 Loading users for company:', companyId)
-    console.log('Auth store state:', {
-      activeCompany: authStore.activeCompany,
-      currentCompany: authStore.currentCompany,
-    })
 
     if (companyId) {
       try {
         await userStore.fetchUsers(companyId)
-        console.log('✅ Available signers loaded:', userStore.users.length, 'users')
-        console.log('Users:', userStore.users)
       } catch (error) {
-        console.error('❌ Error loading users:', error)
         window.showSnackbar?.('Erro ao carregar lista de usuários para assinatura', 'warning')
       }
     } else {
-      console.error('❌ No company ID found to load users')
     }
 
     if (stepFormFields.value.length > 0) {
@@ -2204,7 +2179,6 @@ onMounted(async () => {
     }
     timer = setInterval(() => { now.value = dayjs() }, 1000)
   } catch (error) {
-    console.error('Error loading step execution:', error)
     window.showSnackbar?.('Erro ao carregar etapa', 'error')
   } finally {
     processStore.loading = false

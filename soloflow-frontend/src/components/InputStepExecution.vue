@@ -97,7 +97,8 @@
               v-model="formData[field.name]"
               :label="getFieldLabel(field)"
               :placeholder="field.placeholder || '000.000.000-00'"
-              @input="handleCPFInput(field.name, $event.target.value)"
+              v-mask="'###.###.###-##'"
+              maxlength="14"
               :required="isFieldRequired(field)"
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
@@ -113,7 +114,8 @@
               v-model="formData[field.name]"
               :label="getFieldLabel(field)"
               :placeholder="field.placeholder || '00.000.000/0000-00'"
-              @input="handleCNPJInput(field.name, $event.target.value)"
+              v-mask="'##.###.###/####-##'"
+              maxlength="18"
               :required="isFieldRequired(field)"
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
@@ -130,6 +132,7 @@
               :label="getFieldLabel(field)"
               :placeholder="field.placeholder || '(00) 00000-0000'"
               v-mask="['(##) ####-####', '(##) #####-####']"
+              maxlength="15"
               :required="isFieldRequired(field)"
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
@@ -142,10 +145,10 @@
             <!-- Campo de Moeda -->
             <v-text-field
               v-else-if="field.type === 'CURRENCY'"
-              v-model="formData[field.name]"
+              :model-value="formData[field.name]"
+              @update:model-value="handleCurrencyInput(field.name, $event)"
               :label="getFieldLabel(field)"
               :placeholder="field.placeholder || 'R$ 0,00'"
-              @input="handleCurrencyInput(field.name, $event.target.value)"
               :required="isFieldRequired(field)"
               :rules="getFieldRules(field)"
               :hint="getFieldHint(field)"
@@ -243,8 +246,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useProcessStore } from '@/stores/processes'
-import { 
-  formatCPF, formatCNPJ, formatCurrency,
+import {
+  formatCurrency,
   validateCPF, validateCNPJ, validateEmail, validateNumber, validatePhone
 } from '@/utils/formatters'
 
@@ -286,7 +289,6 @@ const stepConditions = computed(() => {
       ? JSON.parse(props.step.conditions)
       : props.step.conditions
   } catch (e) {
-    console.error('Error parsing step conditions:', e)
     return {}
   }
 })
@@ -438,23 +440,18 @@ function getFieldRules(field) {
           validations.customMessage || 'Formato inválido')
       }
     } catch (e) {
-      console.error('Error parsing validations:', e)
     }
   }
 
   return rules
 }
 
-// Métodos de formatação para campos
-function handleCPFInput(fieldName, value) {
-  formData.value[fieldName] = formatCPF(value)
-}
-
-function handleCNPJInput(fieldName, value) {
-  formData.value[fieldName] = formatCNPJ(value)
-}
-
+// Formatação de moeda (recebe valor diretamente do v-model update)
 function handleCurrencyInput(fieldName, value) {
+  if (!value) {
+    formData.value[fieldName] = ''
+    return
+  }
   formData.value[fieldName] = formatCurrency(value)
 }
 
@@ -510,7 +507,6 @@ async function executeStep() {
     window.showSnackbar?.('Etapa concluída com sucesso', 'success')
     emit('success')
   } catch (error) {
-    console.error('Error executing step:', error)
     window.showSnackbar?.(error.message || 'Erro ao executar etapa', 'error')
     emit('error', error)
   } finally {

@@ -80,4 +80,22 @@ export const SCREEN_CATALOG = [
       { id: 'sign', label: 'Assinar' },
     ],
   },
+  {
+    id: 'reports',
+    label: 'Relatórios',
+    icon: 'mdi-chart-bar',
+    actions: [
+      { id: 'view', label: 'Acesso básico (apenas seu setor)' },
+      { id: 'manage', label: 'Acesso completo (todos os setores)' },
+      { id: 'export', label: 'Exportar PDF' },
+    ],
+    reportTypes: [
+      { id: 'dashboard', label: 'Visão Geral', icon: 'mdi-view-dashboard-variant' },
+      { id: 'performance', label: 'Performance', icon: 'mdi-chart-timeline-variant-shimmer' },
+      { id: 'processes', label: 'Processos', icon: 'mdi-file-document-multiple' },
+      { id: 'tasks', label: 'Produtividade', icon: 'mdi-account-check' },
+      { id: 'sectors', label: 'Setores', icon: 'mdi-office-building' },
+      { id: 'audit', label: 'Auditoria', icon: 'mdi-shield-check' },
+    ],
+  },
 ]

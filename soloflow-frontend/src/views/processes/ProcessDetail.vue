@@ -238,7 +238,7 @@
                   </div>
                 </v-list-item-subtitle>
               </v-list-item>
-              
+
               <template v-else-if="Array.isArray(getFieldFileData(field))">
                 <v-list-item v-for="(fileItem, index) in getFieldFileData(field)" :key="`${field.name}-${index}`">
                   <v-list-item-title class="text-caption">
@@ -265,10 +265,30 @@
             </template>
 
           </v-list>
+
+          <!-- Tabelas dentro de Dados Informados -->
+          <div v-if="tablesData.length > 0" class="tables-inline-section">
+            <v-divider />
+            <div class="d-flex align-center flex-wrap ga-2 pa-4">
+              <v-icon size="20" color="indigo" class="mr-1">mdi-table-multiple</v-icon>
+              <span class="text-body-2 font-weight-medium text-medium-emphasis mr-2">Tabelas:</span>
+              <v-chip
+                v-for="table in tablesData"
+                :key="table.fieldName"
+                color="indigo"
+                variant="tonal"
+                size="small"
+                class="table-chip"
+                @click="openTableModal(table)"
+              >
+                <v-icon start size="16">mdi-table</v-icon>
+                {{ table.label }}
+                <span class="ml-1 text-caption">({{ table.rows.length }})</span>
+              </v-chip>
+            </div>
+          </div>
         </v-card>
 
-        <!-- Card de Tabelas Informadas -->
-        <ProcessTablesCard v-if="process" :process="process" class="mt-4" />
 
         <!-- Seção de Sub-Processos -->
         <v-card v-if="allowSubProcesses && childProcesses.length > 0" class="mt-4">
@@ -509,6 +529,66 @@
       :field-info="selectedField"
     />
 
+    <!-- Modal de Visualização da Tabela -->
+    <v-dialog v-model="tableModal" max-width="900" scrollable>
+      <v-card v-if="selectedTable">
+        <v-card-title class="d-flex align-center py-4 px-6" style="background: linear-gradient(135deg, #3f51b5, #3949ab);">
+          <v-avatar color="white" size="40" class="mr-3">
+            <v-icon color="indigo">mdi-table</v-icon>
+          </v-avatar>
+          <div class="flex-grow-1">
+            <div class="text-h6 text-white">{{ selectedTable.label }}</div>
+            <div class="text-caption text-white" style="opacity: 0.8;">
+              {{ selectedTable.rows.length }} linha(s) &bull; {{ selectedTable.columns.length }} coluna(s)
+            </div>
+          </div>
+          <v-btn icon variant="text" color="white" @click="tableModal = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+
+        <v-card-text class="pa-0">
+          <v-table class="full-table" fixed-header height="500">
+            <thead>
+              <tr>
+                <th class="text-center bg-grey-lighten-4" style="width: 60px;">#</th>
+                <th
+                  v-for="col in selectedTable.columns"
+                  :key="col.name || col.key"
+                  class="font-weight-bold bg-grey-lighten-4"
+                >
+                  {{ col.label || col.name || col.key }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, idx) in selectedTable.rows" :key="idx" class="table-data-row">
+                <td class="text-center">
+                  <v-chip size="x-small" color="indigo" variant="flat">{{ idx + 1 }}</v-chip>
+                </td>
+                <td v-for="col in selectedTable.columns" :key="`${idx}-${col.name || col.key}`">
+                  <span :class="getTableCellClass(row[col.name || col.key], col.type)">
+                    {{ formatTableCellValue(row[col.name || col.key], col.type) || '-' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-actions class="pa-4">
+          <v-chip size="small" color="indigo" variant="tonal">
+            <v-icon start size="16">mdi-information</v-icon>
+            Total: {{ selectedTable.rows.length }} linha(s)
+          </v-chip>
+          <v-spacer />
+          <v-btn variant="text" @click="tableModal = false">Fechar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Botão Flutuante para Abrir Documentos -->
     <button
       v-if="totalDocuments > 0"
@@ -599,7 +679,6 @@ import CreateChildProcessDialog from '@/components/CreateChildProcessDialog.vue'
 import SubTasksList from '@/components/SubTasksList.vue'
 import CreateSubTaskDialog from '@/components/CreateSubTaskDialog.vue'
 import StepExecutionDetailDialog from '@/components/StepExecutionDetailDialog.vue'
-import ProcessTablesCard from '@/components/ProcessTablesCard.vue'
 import { useChildProcessStore } from '@/stores/childProcesses'
 import { useSubTaskStore } from '@/stores/subTasks'
 
@@ -626,6 +705,8 @@ const stepUsers = ref([]) // Usuários para atribuição de sub-tarefas
 const subTasksReloadKey = ref(0) // Key para forçar reload do SubTasksList
 const stepDetailDialog = ref(false) // Modal de detalhes da etapa
 const selectedStepDetail = ref(null) // Etapa selecionada para visualizar detalhes
+const tableModal = ref(false) // Modal de visualização da tabela
+const selectedTable = ref(null) // Tabela selecionada para visualizar
 
 // Store para sub-processos e sub-tarefas
 const childProcessStore = useChildProcessStore()
@@ -680,10 +761,35 @@ const hasFormFieldFiles = computed(() => {
   return fileFields.value.some(field => getFieldFileData(field) !== null)
 })
 
+// Computed para extrair tabelas do formData
+const tablesData = computed(() => {
+  const result = []
+  if (!process.value?.formData) return result
+
+  const formData = process.value.formData
+  const formFields = process.value?.processType?.formFields || []
+
+  formFields.forEach(field => {
+    if (field.type === 'TABLE') {
+      const data = formData[field.name]
+      if (Array.isArray(data) && data.length > 0) {
+        result.push({
+          fieldName: field.name,
+          label: field.label || field.name,
+          columns: field.tableColumns || [],
+          rows: data,
+        })
+      }
+    }
+  })
+
+  return result
+})
+
 // Verificar se há dados do formulário para exibir
 const hasFormDataToShow = computed(() => {
   const hasTextData = Object.keys(formattedFormData.value).length > 0
-  return hasTextData || hasFormFieldFiles.value
+  return hasTextData || hasFormFieldFiles.value || tablesData.value.length > 0
 })
 
 // Computed para sub-processos
@@ -760,7 +866,6 @@ const formattedFormData = computed(() => {
             })
           }
         } catch (e) {
-          console.warn('Erro ao formatar data:', e)
         }
       }
 
@@ -775,7 +880,6 @@ const formattedFormData = computed(() => {
             })
           }
         } catch (e) {
-          console.warn('Erro ao formatar valor monetário:', e)
         }
       }
 
@@ -1194,7 +1298,6 @@ async function downloadFieldFile(field, index = 0) {
   
     window.showSnackbar?.(`Download de "${fileData.originalName}" iniciado`, 'success')
   } catch (error) {
-    console.error('Error downloading field file:', error)
     window.showSnackbar?.('Erro ao baixar arquivo', 'error')
   }
 }
@@ -1230,6 +1333,50 @@ function formatFileSize(bytes) {
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+// Métodos para tabelas
+function openTableModal(table) {
+  selectedTable.value = table
+  tableModal.value = true
+}
+
+function formatTableCellValue(value, type) {
+  if (value === null || value === undefined || value === '') return null
+  const t = type?.toString().toUpperCase()
+  switch (t) {
+    case 'DROPDOWN':
+    case 'SELECT':
+      if (typeof value === 'object' && value !== null) return value.label || value.value || JSON.stringify(value)
+      return value
+    case 'DATE':
+    case 'DATA':
+      try {
+        const date = new Date(value)
+        if (!isNaN(date.getTime())) return date.toLocaleDateString('pt-BR')
+      } catch (e) { /* ignora */ }
+      return value
+    case 'CURRENCY':
+    case 'DINHEIRO':
+      try {
+        const num = typeof value === 'string' ? parseFloat(value.replace(/[^\d.,]/g, '').replace(',', '.')) : value
+        if (!isNaN(num)) return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      } catch (e) { /* ignora */ }
+      return value
+    case 'NUMBER':
+      return typeof value === 'number' ? value.toLocaleString('pt-BR') : value
+    default:
+      return value
+  }
+}
+
+function getTableCellClass(value, type) {
+  if (!value) return 'text-medium-emphasis'
+  const t = type?.toString().toUpperCase()
+  if (t === 'CURRENCY' || t === 'DINHEIRO') return 'font-weight-medium text-success'
+  if (t === 'NUMBER') return 'font-weight-medium'
+  if (t === 'EMAIL') return 'text-primary'
+  return ''
 }
 
 // Métodos principais
@@ -1448,6 +1595,34 @@ onMounted(async () => {
 
 .file-link:hover {
   text-decoration-color: rgb(var(--v-theme-primary));
+}
+
+/* Tabelas inline dentro de Dados Informados */
+.tables-inline-section {
+  border-top: none;
+}
+
+.table-chip {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.table-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(63, 81, 181, 0.3);
+}
+
+.full-table thead th {
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.full-table tbody td {
+  font-size: 0.875rem;
+}
+
+.table-data-row:hover {
+  background: rgba(63, 81, 181, 0.04);
 }
 
 
@@ -1833,6 +2008,12 @@ onMounted(async () => {
 .documents-drawer {
   box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08) !important;
   border-left: 1px solid var(--color-neutral-200, #e2e8f0) !important;
+}
+
+.documents-drawer :deep(.v-navigation-drawer__content) {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 768px) {

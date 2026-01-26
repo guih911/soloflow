@@ -232,14 +232,15 @@
                     v-else-if="field.type === 'PHONE'"
                     v-model="formData[field.name]"
                     :label="field.label"
-                    :placeholder="field.placeholder || 'Digite apenas números'"
+                    :placeholder="field.placeholder || '(00) 00000-0000'"
+                    v-mask="['(##) ####-####', '(##) #####-####']"
+                    maxlength="15"
                     :required="field.required"
                     :rules="getFieldRules(field)"
                     :hint="field.helpText"
-                    @blur="formatPhoneField(field.name)"
-                    @input="onPhoneInput(field.name, $event)"
                     persistent-hint
                     variant="outlined"
+                    prepend-inner-icon="mdi-phone"
                   />
 
                   <!-- ✨ Campo de Moeda -->
@@ -619,10 +620,8 @@ const hasFormFields = computed(() => {
 // ✨ Métodos auxiliares aprimorados
 function getVisibleFormFields(processType) {
   if (!processType?.formFields) {
-    console.log('⚠️ No process type or formFields:', processType)
     return []
   }
-  console.log(`📋 Process type "${processType.name}" has ${processType.formFields.length} form fields:`, processType.formFields)
   // ✨ Incluir TODOS os campos, incluindo FILE
   return processType.formFields
 }
@@ -740,41 +739,12 @@ function getFieldRules(field) {
           validations.customMessage || 'Formato inválido')
       }
     } catch (e) {
-      console.error('Erro ao parsear validações:', e)
     }
   }
 
   return rules
 }
 
-// Funções para formatação de telefone
-function formatPhone(value) {
-  if (!value) return ''
-  const digits = value.replace(/\D/g, '')
-  if (digits.length === 0) return ''
-  if (digits.length <= 2) {
-    return `(${digits}`
-  } else if (digits.length <= 6) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
-  } else if (digits.length <= 10) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-  } else {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`
-  }
-}
-
-function formatPhoneField(fieldName) {
-  const value = formData.value[fieldName]
-  if (value) {
-    formData.value[fieldName] = formatPhone(value)
-  }
-}
-
-function onPhoneInput(fieldName, event) {
-  const value = event.target?.value || formData.value[fieldName] || ''
-  const digits = value.replace(/\D/g, '').slice(0, 11)
-  formData.value[fieldName] = digits
-}
 
 // ✨ Método para gerar título automaticamente
 function generateProcessTitle() {
@@ -962,7 +932,6 @@ function initializeFormData(processType) {
       } else if (field.type === 'TABLE') {
         // Criar novo array único para cada tabela para evitar compartilhamento de referências
         formData.value[field.name] = []
-        console.log(`✅ Inicializado campo TABLE: ${field.name} com array vazio`)
       }
     })
   }
@@ -1005,16 +974,13 @@ async function createProcess() {
       formData: hasFormFields.value ? processFormData : undefined
     }
 
-    console.log('✅ Creating process with FAST mode data:', data)
 
     const created = await processStore.createProcess(data)
     
-    console.log('🚀 Process created successfully in FAST mode:', created.code)
     
     emit('created', created)
     close()
   } catch (error) {
-    console.error('❌ Error creating process:', error)
     window.showSnackbar?.(error.message || 'Erro ao criar processo', 'error')
   } finally {
     creating.value = false
@@ -1044,7 +1010,6 @@ watch(() => props.modelValue, (newVal) => {
     
     // ✅ LÓGICA PRINCIPAL: Se há um tipo pré-selecionado
     if (props.selectedProcessType) {
-      console.log('🎯 FAST mode activated with pre-selected type:', props.selectedProcessType.name)
       selectedProcessTypeId.value = props.selectedProcessType.id
       initializeFormData(props.selectedProcessType)
       
@@ -1055,7 +1020,6 @@ watch(() => props.modelValue, (newVal) => {
         currentStep.value = 1 // Vai direto para observações
       }
     } else {
-      console.log('🔄 Standard mode - type selection required')
       currentStep.value = 1 // Começa na seleção de tipo
     }
   }
@@ -1063,7 +1027,6 @@ watch(() => props.modelValue, (newVal) => {
 
 watch(() => props.selectedProcessType, (newProcessType) => {
   if (newProcessType) {
-    console.log('🔄 Process type changed to:', newProcessType.name)
     selectedProcessTypeId.value = newProcessType.id
     initializeFormData(newProcessType)
   }

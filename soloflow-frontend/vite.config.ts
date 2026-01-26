@@ -13,9 +13,6 @@ export default defineConfig({
     minify: 'esbuild',
     target: 'esnext'
   },
-  // esbuild: {
-  //   drop: ['console', 'debugger']
-  // },
   server: {
     port: 5173,
     allowedHosts: ['.trycloudflare.com'],

@@ -13,10 +13,13 @@ import {
 import { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 import { SignaturesService } from './signatures.service';
 import { SignDocumentSimpleDto } from './dto/sign-document-simple.dto';
 import { SignSubTaskDocumentDto } from './dto/sign-subtask-document.dto';
 import { CreateSignatureRequirementDto } from './dto/create-signature-requirement.dto';
+import { RequestSignatureOtpDto } from './dto/request-signature-otp.dto';
+import { VerifySignatureOtpDto } from './dto/verify-signature-otp.dto';
 import { IpService } from '../../common/services/ip-service';
 
 @Controller('signatures')
@@ -31,32 +34,13 @@ export class SignaturesController {
    * Assina um documento (requer autenticação)
    */
   @Post('sign')
+  @UseGuards(RateLimitGuard)
   async signDocument(@Req() req, @Body() dto: SignDocumentSimpleDto) {
-    try {
-      // Capturar IP público real e User-Agent automaticamente
-      dto.ipAddress = this.ipService.getClientIp(req);
-      dto.userAgent = req.headers['user-agent'];
+    // Capturar IP público real e User-Agent automaticamente
+    dto.ipAddress = this.ipService.getClientIp(req);
+    dto.userAgent = req.headers['user-agent'];
 
-      console.log('📝 Signing document:', {
-        userId: req.user.id,
-        attachmentId: dto.attachmentId,
-        stepExecutionId: dto.stepExecutionId,
-      });
-
-      const result = await this.signaturesService.signDocument(req.user.id, dto);
-
-      console.log('✅ Document signed successfully:', result.signatureToken);
-
-      return result;
-    } catch (error) {
-      console.error('❌ Error signing document:', {
-        error: error.message,
-        status: error.status,
-        attachmentId: dto.attachmentId,
-        userId: req.user.id,
-      });
-      throw error;
-    }
+    return this.signaturesService.signDocument(req.user.id, dto);
   }
 
   /**
@@ -146,30 +130,36 @@ export class SignaturesController {
    * Sub-tarefas têm seu próprio sistema de anexos separado da tabela Attachment
    */
   @Post('sign-subtask')
+  @UseGuards(RateLimitGuard)
   async signSubTaskDocument(@Req() req, @Body() dto: SignSubTaskDocumentDto) {
-    try {
-      // Capturar IP público real e User-Agent automaticamente
-      dto.ipAddress = this.ipService.getClientIp(req);
-      dto.userAgent = req.headers['user-agent'];
+    // Capturar IP público real e User-Agent automaticamente
+    dto.ipAddress = this.ipService.getClientIp(req);
+    dto.userAgent = req.headers['user-agent'];
 
-      console.log('📝 Signing sub-task document:', {
-        userId: req.user.id,
-        subTaskId: dto.subTaskId,
-      });
+    return this.signaturesService.signSubTaskDocument(req.user.id, dto);
+  }
 
-      const result = await this.signaturesService.signSubTaskDocument(req.user.id, dto);
+  /**
+   * Solicita um código OTP por email para assinatura digital (2FA)
+   * Valida a senha do usuário antes de enviar o código
+   */
+  @Post('request-otp')
+  @UseGuards(RateLimitGuard)
+  async requestSignatureOtp(@Req() req, @Body() dto: RequestSignatureOtpDto) {
+    return this.signaturesService.requestSignatureOtp(req.user.id, dto);
+  }
 
-      console.log('✅ Sub-task document signed successfully:', result.signatureToken);
+  /**
+   * Verifica o código OTP e realiza a assinatura do documento (2FA)
+   * A senha já foi validada na etapa de solicitação do OTP
+   */
+  @Post('verify-otp')
+  @UseGuards(RateLimitGuard)
+  async verifySignatureOtp(@Req() req, @Body() dto: VerifySignatureOtpDto) {
+    // Capturar IP público real e User-Agent automaticamente
+    dto.ipAddress = this.ipService.getClientIp(req);
+    dto.userAgent = req.headers['user-agent'];
 
-      return result;
-    } catch (error) {
-      console.error('❌ Error signing sub-task document:', {
-        error: error.message,
-        status: error.status,
-        subTaskId: dto.subTaskId,
-        userId: req.user.id,
-      });
-      throw error;
-    }
+    return this.signaturesService.verifySignatureOtpAndSign(req.user.id, dto);
   }
 }

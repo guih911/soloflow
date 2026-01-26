@@ -171,7 +171,17 @@ const tabs = [
 ]
 
 // Types grouped under "update" tab
-const updateTypes = ['process_completed', 'process_cancelled', 'process_rejected', 'process_progress', 'signature_completed']
+const updateTypes = [
+  'process_completed', 'process_cancelled', 'process_rejected', 'process_progress',
+  'signature_completed', 'PROCESS_COMPLETED', 'PROCESS_CANCELLED', 'PROCESS_REJECTED',
+  'SIGNATURE_COMPLETED', 'STEP_COMPLETED', 'DEADLINE_APPROACHING',
+]
+
+// Types grouped under "task" tab
+const taskTypes = ['task', 'TASK_ASSIGNED']
+
+// Types grouped under "signature" tab
+const signatureTypes = ['signature', 'SIGNATURE_PENDING', 'SIGNATURE_COMPLETED', 'signature_completed']
 
 // Computed
 const notifications = computed(() => notificationsStore.items || [])
@@ -182,18 +192,17 @@ const filteredNotifications = computed(() => {
   let items = notifications.value
   if (activeTab.value === 'update') {
     items = items.filter(n => updateTypes.includes(getNotificationType(n)))
-  } else if (activeTab.value !== 'all') {
-    items = items.filter(n => getNotificationType(n) === activeTab.value)
+  } else if (activeTab.value === 'task') {
+    items = items.filter(n => taskTypes.includes(getNotificationType(n)))
+  } else if (activeTab.value === 'signature') {
+    items = items.filter(n => signatureTypes.includes(getNotificationType(n)))
   }
   return items.slice(0, maxVisible)
 })
 
 // Methods
 function getNotificationType(notification) {
-  if (notification.type) return notification.type
-  if (notification.icon === 'mdi-draw-pen') return 'signature'
-  if (notification.id?.startsWith('task-')) return 'task'
-  return 'info'
+  return notification.type || 'info'
 }
 
 function getTabCount(tabValue) {
@@ -201,54 +210,77 @@ function getTabCount(tabValue) {
   if (tabValue === 'update') {
     return notifications.value.filter(n => !isRead(n.id) && updateTypes.includes(getNotificationType(n))).length
   }
-  return notifications.value.filter(n => !isRead(n.id) && getNotificationType(n) === tabValue).length
+  if (tabValue === 'task') {
+    return notifications.value.filter(n => !isRead(n.id) && taskTypes.includes(getNotificationType(n))).length
+  }
+  if (tabValue === 'signature') {
+    return notifications.value.filter(n => !isRead(n.id) && signatureTypes.includes(getNotificationType(n))).length
+  }
+  return 0
 }
 
 function isRead(id) {
-  return notificationsStore.isRead(id)
+  const notification = notifications.value.find(n => n.id === id)
+  return notification?.isRead ?? false
 }
 
 function getNotificationColorClass(notification) {
   const type = getNotificationType(notification)
   const colors = {
     task: 'primary',
+    TASK_ASSIGNED: 'primary',
     signature: 'warning',
+    SIGNATURE_PENDING: 'warning',
     signature_completed: 'success',
+    SIGNATURE_COMPLETED: 'success',
     process_completed: 'success',
+    PROCESS_COMPLETED: 'success',
+    PROCESS_CREATED: 'info',
     process_progress: 'info',
+    STEP_COMPLETED: 'info',
     process_cancelled: 'error',
+    PROCESS_CANCELLED: 'error',
     process_rejected: 'error',
-    approval: 'success',
+    PROCESS_REJECTED: 'error',
+    DEADLINE_APPROACHING: 'warning',
     info: 'info',
-    warning: 'warning',
-    error: 'error',
   }
   return colors[type] || 'primary'
 }
 
 function getNotificationIcon(notification) {
-  if (notification.icon && notification.icon !== 'mdi-bell') return notification.icon
   const type = getNotificationType(notification)
   const icons = {
     task: 'mdi-play-circle-outline',
+    TASK_ASSIGNED: 'mdi-clipboard-arrow-right-outline',
     signature: 'mdi-draw-pen',
+    SIGNATURE_PENDING: 'mdi-draw-pen',
     signature_completed: 'mdi-check-decagram',
+    SIGNATURE_COMPLETED: 'mdi-check-decagram',
     process_completed: 'mdi-check-circle-outline',
+    PROCESS_COMPLETED: 'mdi-check-circle-outline',
+    PROCESS_CREATED: 'mdi-plus-circle-outline',
     process_progress: 'mdi-arrow-right-circle-outline',
+    STEP_COMPLETED: 'mdi-arrow-right-circle-outline',
     process_cancelled: 'mdi-cancel',
+    PROCESS_CANCELLED: 'mdi-cancel',
     process_rejected: 'mdi-close-circle-outline',
-    approval: 'mdi-check-decagram',
+    PROCESS_REJECTED: 'mdi-close-circle-outline',
+    DEADLINE_APPROACHING: 'mdi-clock-alert-outline',
     info: 'mdi-information-outline',
-    warning: 'mdi-alert-outline',
-    error: 'mdi-alert-circle-outline',
   }
   return icons[type] || 'mdi-bell-outline'
 }
 
 function getNotificationRoute(notification) {
+  // Tentar extrair processId dos dados da notificação
+  const processId = notification.data?.processId
+  if (processId) {
+    return { name: 'DetalhesDoProcesso', params: { id: processId } }
+  }
+  // Fallback para links antigos
   const link = notification.actionUrl || notification.link
   if (!link) return null
-  // Convert old paths to new routes
   const processMatch = link.match(/\/process(?:es|os)\/([^/]+)/)
   if (processMatch) {
     return { name: 'DetalhesDoProcesso', params: { id: processMatch[1] } }
@@ -258,13 +290,25 @@ function getNotificationRoute(notification) {
 
 function getActionLabel(notification) {
   const type = getNotificationType(notification)
-  if (type === 'signature') return 'Assinar documento'
-  if (type === 'signature_completed') return 'Ver assinatura'
-  if (type === 'task') return 'Executar etapa'
-  if (type === 'process_completed') return 'Ver processo'
-  if (type === 'process_progress') return 'Acompanhar'
-  if (type === 'process_cancelled' || type === 'process_rejected') return 'Ver processo'
-  return 'Ver detalhes'
+  const labels = {
+    signature: 'Assinar documento',
+    SIGNATURE_PENDING: 'Assinar documento',
+    signature_completed: 'Ver assinatura',
+    SIGNATURE_COMPLETED: 'Ver assinatura',
+    task: 'Executar etapa',
+    TASK_ASSIGNED: 'Executar etapa',
+    process_completed: 'Ver processo',
+    PROCESS_COMPLETED: 'Ver processo',
+    PROCESS_CREATED: 'Ver processo',
+    process_progress: 'Acompanhar',
+    STEP_COMPLETED: 'Acompanhar',
+    process_cancelled: 'Ver processo',
+    PROCESS_CANCELLED: 'Ver processo',
+    process_rejected: 'Ver processo',
+    PROCESS_REJECTED: 'Ver processo',
+    DEADLINE_APPROACHING: 'Ver tarefa',
+  }
+  return labels[type] || 'Ver detalhes'
 }
 
 function getTimeAgo(date) {
@@ -281,29 +325,25 @@ function getTimeAgo(date) {
 async function handleClick(notification) {
   try {
     if (!isRead(notification.id)) {
-      notificationsStore.markAsRead(notification.id)
+      await notificationsStore.markAsRead(notification.id)
     }
 
     const route = getNotificationRoute(notification)
     if (route) {
       menuOpen.value = false
-      if (typeof route === 'string') {
-        router.push(route)
-      } else {
-        router.push(route)
-      }
+      router.push(route)
     }
   } catch (e) {
-    console.error('Erro ao processar notificação:', e)
+    // Silent - não bloquear navegação
   }
 }
 
-function markAsRead(id) {
-  notificationsStore.markAsRead(id)
+async function markAsRead(id) {
+  await notificationsStore.markAsRead(id)
 }
 
 async function markAllAsRead() {
-  notificationsStore.markAllAsRead()
+  await notificationsStore.markAllAsRead()
 }
 
 function handleViewAll() {

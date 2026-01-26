@@ -205,7 +205,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProcessStore } from '@/stores/processes'
 import { useProcessTypeStore } from '@/stores/processTypes'
@@ -227,6 +227,8 @@ const filters = ref({
   processType: null,
   priority: null
 })
+const debouncedSearch = ref('')
+let searchDebounceTimer = null
 
 const currentPage = ref(1)
 const itemsPerPage = ref(12)
@@ -243,8 +245,8 @@ const hasFilters = computed(() =>
 const filteredTasks = computed(() => {
   let tasks = myTasks.value
 
-  if (filters.value.search) {
-    const search = filters.value.search.toLowerCase()
+  if (debouncedSearch.value) {
+    const search = debouncedSearch.value.toLowerCase()
     tasks = tasks.filter(t =>
       t.processInstance.code.toLowerCase().includes(search) ||
       t.processInstance.title?.toLowerCase().includes(search) ||
@@ -339,16 +341,33 @@ function executeTask(task) {
 }
 
 // Watchers
-watch(filters, () => {
+watch(() => filters.value.search, (newVal) => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+  searchDebounceTimer = setTimeout(() => {
+    debouncedSearch.value = newVal || ''
+    currentPage.value = 1
+  }, 300)
+})
+
+watch(() => [filters.value.processType, filters.value.priority], () => {
   currentPage.value = 1
-}, { deep: true })
+})
 
 watch(itemsPerPage, () => {
   currentPage.value = 1
 })
 
+onUnmounted(() => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+})
+
 // Lifecycle
 onMounted(() => {
+  processStore.clearError()
   refreshTasks()
 })
 </script>

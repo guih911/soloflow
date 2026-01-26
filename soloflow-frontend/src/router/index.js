@@ -7,6 +7,8 @@ import DashboardLayout from '@/layouts/DashboardLayout.vue'
 
 // Views - Auth
 import Login from '@/views/auth/Login.vue'
+import ForgotPassword from '@/views/auth/ForgotPassword.vue'
+import ResetPassword from '@/views/auth/ResetPassword.vue'
 
 
 // Views - Dashboard
@@ -45,6 +47,9 @@ import Profile from '@/views/users/Profile.vue'
 // Views - Signatures
 import PendingSignatures from '@/views/signatures/PendingSignatures.vue'
 
+// Views - Reports
+import Reports from '@/views/reports/Reports.vue'
+
 // Views - Public
 import ValidateSignature from '@/views/public/ValidateSignature.vue'
 
@@ -67,6 +72,7 @@ function findFirstAvailableRoute(authStore) {
     { path: '/minhas-tarefas', permission: { resource: 'tasks', action: 'view' } },
     { path: '/meus-processos', permission: { resource: 'processes', action: 'view' } },
     { path: '/assinaturas/pendentes', permission: { resource: 'signatures', action: 'view' } },
+    { path: '/relatorios', permission: { resource: 'reports', action: 'view' } },
     // === SEÇÃO CONFIGURAÇÕES ===
     { path: '/tipos-de-processo', permission: { resource: 'process_types', action: 'manage' } },
     { path: '/setores', permission: { resource: 'sectors', action: 'manage' } },
@@ -109,6 +115,56 @@ const routes = [
         name: 'Entrar',
         component: Login,
         meta: { requiresGuest: true },
+      },
+    ],
+  },
+  {
+    path: '/esqueci-senha',
+    component: AuthLayout,
+    children: [
+      {
+        path: '',
+        name: 'EsqueciSenha',
+        component: ForgotPassword,
+        meta: { requiresGuest: true, title: 'Esqueci Minha Senha' },
+      },
+    ],
+  },
+  {
+    path: '/redefinir-senha',
+    component: AuthLayout,
+    children: [
+      {
+        path: '',
+        name: 'RedefinirSenha',
+        component: ResetPassword,
+        meta: { requiresGuest: true, title: 'Redefinir Senha' },
+      },
+    ],
+  },
+
+  // ROTAS LEGAIS (sem autenticação)
+  {
+    path: '/politica-de-privacidade',
+    component: AuthLayout,
+    children: [
+      {
+        path: '',
+        name: 'PoliticaPrivacidade',
+        component: () => import('@/views/legal/PrivacyPolicy.vue'),
+        meta: { requiresAuth: false, title: 'Política de Privacidade' },
+      },
+    ],
+  },
+  {
+    path: '/termos-de-uso',
+    component: AuthLayout,
+    children: [
+      {
+        path: '',
+        name: 'TermosDeUso',
+        component: () => import('@/views/legal/TermsOfUse.vue'),
+        meta: { requiresAuth: false, title: 'Termos de Uso' },
       },
     ],
   },
@@ -333,6 +389,18 @@ const routes = [
         }
       },
 
+      // RELATÓRIOS
+      {
+        path: '/relatorios',
+        name: 'Relatorios',
+        component: Reports,
+        meta: {
+          requiresPermission: { resource: 'reports', action: 'view' },
+          title: 'Relatórios',
+          description: 'Análise e acompanhamento dos processos'
+        }
+      },
+
       // PERFIL DO USUÁRIO
       {
         path: '/meu-perfil',
@@ -400,7 +468,6 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
-  console.log('🔍 Navegando para:', to.path)
   const authStore = useAuthStore()
 
   // Inicializa auth se tiver token
@@ -408,7 +475,6 @@ router.beforeEach(async (to, from, next) => {
     try {
       authStore.initializeAuth()
     } catch (error) {
-      console.error('❌ Erro ao inicializar auth:', error)
       localStorage.clear()
     }
   }
@@ -416,11 +482,9 @@ router.beforeEach(async (to, from, next) => {
   const isAuthenticated = authStore.isAuthenticated
   const userRole = authStore.userRole
 
-  console.log('🔐 Autenticado:', isAuthenticated)
 
   // Permite rotas públicas
   if (to.meta.public === true || to.meta.requiresAuth === false) {
-    console.log('✅ Rota pública, permitindo acesso')
     next()
     return
   }
@@ -430,7 +494,6 @@ router.beforeEach(async (to, from, next) => {
   
   // Redireciona para login se rota requer autenticação e usuário não está autenticado
   if (requiresAuth && !isAuthenticated) {
-    console.log('🚫 Rota protegida sem autenticação, redirecionando para /entrar')
     sessionStorage.setItem('redirectAfterLogin', to.fullPath)
     next('/entrar')
     return

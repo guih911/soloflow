@@ -210,6 +210,46 @@
                       <span class="action-checkbox__label">{{ action.label }}</span>
                     </label>
                   </div>
+
+                  <!-- Seção especial para tipos de relatório -->
+                  <div v-if="screen.id === 'reports' && screen.reportTypes && hasAnyActionSelected('reports')" class="report-types-section">
+                    <div class="report-types-header">
+                      <v-icon size="16" color="primary" class="mr-2">mdi-file-chart</v-icon>
+                      <span class="report-types-title">Relatórios Disponíveis</span>
+                      <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">
+                        {{ selectedReportTypesCount }} de {{ screen.reportTypes.length }}
+                      </v-chip>
+                      <v-btn
+                        size="x-small"
+                        variant="text"
+                        :color="hasAllReportTypesSelected ? 'primary' : 'grey'"
+                        @click="toggleAllReportTypes"
+                        class="ml-auto"
+                      >
+                        {{ hasAllReportTypesSelected ? 'Desmarcar' : 'Marcar' }} Todos
+                      </v-btn>
+                    </div>
+                    <div class="report-types-grid">
+                      <label
+                        v-for="reportType in screen.reportTypes"
+                        :key="`report-${reportType.id}`"
+                        class="report-type-checkbox"
+                        :class="{ 'report-type-checkbox--checked': reportTypeStates[reportType.id] }"
+                      >
+                        <input
+                          type="checkbox"
+                          :checked="reportTypeStates[reportType.id]"
+                          @change="toggleReportType(reportType.id)"
+                          class="report-type-checkbox__input"
+                        />
+                        <span class="report-type-checkbox__box">
+                          <v-icon v-if="reportTypeStates[reportType.id]" size="12" color="white">mdi-check</v-icon>
+                        </span>
+                        <v-icon size="16" :color="reportTypeStates[reportType.id] ? 'primary' : 'grey'" class="mr-1">{{ reportType.icon }}</v-icon>
+                        <span class="report-type-checkbox__label">{{ reportType.label }}</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -417,6 +457,7 @@ const form = reactive({
 const screenCatalog = SCREEN_CATALOG
 const screenStates = reactive({})
 const processTypeSelections = reactive([])
+const reportTypeStates = reactive({})
 
 // Computed
 const isEditing = computed(() => !!route.params.id)
@@ -479,6 +520,18 @@ const isFormValid = computed(() => {
   return form.name?.trim()?.length >= 2
 })
 
+// Computed para tipos de relatório
+const reportsScreen = computed(() => screenCatalog.find(s => s.id === 'reports'))
+
+const selectedReportTypesCount = computed(() => {
+  return Object.values(reportTypeStates).filter(Boolean).length
+})
+
+const hasAllReportTypesSelected = computed(() => {
+  const reportTypes = reportsScreen.value?.reportTypes || []
+  return reportTypes.length > 0 && reportTypes.every(rt => reportTypeStates[rt.id])
+})
+
 // Métodos
 function resetScreenStates() {
   screenCatalog.forEach((screen) => {
@@ -486,6 +539,25 @@ function resetScreenStates() {
     screen.actions.forEach((action) => {
       screenStates[screen.id][action.id] = false
     })
+  })
+}
+
+function resetReportTypeStates() {
+  const reportTypes = reportsScreen.value?.reportTypes || []
+  reportTypes.forEach((rt) => {
+    reportTypeStates[rt.id] = false
+  })
+}
+
+function toggleReportType(reportTypeId) {
+  reportTypeStates[reportTypeId] = !reportTypeStates[reportTypeId]
+}
+
+function toggleAllReportTypes() {
+  const reportTypes = reportsScreen.value?.reportTypes || []
+  const allSelected = hasAllReportTypesSelected.value
+  reportTypes.forEach((rt) => {
+    reportTypeStates[rt.id] = !allSelected
   })
 }
 
@@ -531,7 +603,8 @@ function getScreenColor(screenId) {
     process_types: '#14b8a6',
     settings: '#64748b',
     tasks: '#3b82f6',
-    signatures: '#ef4444'
+    signatures: '#ef4444',
+    reports: '#7c3aed'
   }
   return colors[screenId] || '#3b82f6'
 }
@@ -582,6 +655,18 @@ function collectScreenPermissions() {
     })
   })
 
+  // Adicionar permissões de tipos de relatório
+  const reportTypes = reportsScreen.value?.reportTypes || []
+  reportTypes.forEach((rt) => {
+    if (reportTypeStates[rt.id]) {
+      output.push({
+        resource: 'reports',
+        action: `view_${rt.id}`,
+        scope: null
+      })
+    }
+  })
+
   return output
 }
 
@@ -604,6 +689,15 @@ async function loadProfile(profileId) {
       if (screen && actionExists) {
         screenStates[screen.id][permission.action] = true
       }
+
+      // Carregar permissões de tipos de relatório (formato: view_dashboard, view_performance, etc.)
+      if (permission.resource === 'reports' && permission.action?.startsWith('view_')) {
+        const reportTypeId = permission.action.replace('view_', '')
+        const reportTypes = reportsScreen.value?.reportTypes || []
+        if (reportTypes.some(rt => rt.id === reportTypeId)) {
+          reportTypeStates[reportTypeId] = true
+        }
+      }
     })
 
     // Carregar tipos de processo
@@ -615,7 +709,6 @@ async function loadProfile(profileId) {
       addProcessTypeSelection(item.processTypeId || '*')
     })
   } catch (error) {
-    console.error('Erro ao carregar perfil:', error)
     window.showSnackbar?.('Erro ao carregar dados do perfil.', 'error')
     router.push('/perfis')
   } finally {
@@ -669,6 +762,7 @@ function goBack() {
 // Inicialização
 onMounted(async () => {
   resetScreenStates()
+  resetReportTypeStates()
 
   await processTypeStore.fetchProcessTypes()
 
@@ -998,6 +1092,85 @@ onMounted(async () => {
 .action-checkbox__label {
   font-size: 0.8125rem;
   color: var(--color-neutral-700);
+}
+
+/* Report Types Section */
+.report-types-section {
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.04), rgba(59, 130, 246, 0.02));
+  border-top: 1px solid var(--color-surface-border);
+}
+
+.report-types-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.report-types-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+}
+
+.report-types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.report-type-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: white;
+  border: 1px solid var(--color-surface-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.report-type-checkbox:hover {
+  background: var(--color-neutral-50);
+  border-color: var(--color-primary-200);
+}
+
+.report-type-checkbox--checked {
+  background: var(--color-primary-50);
+  border-color: var(--color-primary-300);
+}
+
+.report-type-checkbox__input {
+  display: none;
+}
+
+.report-type-checkbox__box {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-neutral-300);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.report-type-checkbox--checked .report-type-checkbox__box {
+  background: var(--color-primary-500);
+  border-color: var(--color-primary-500);
+}
+
+.report-type-checkbox__label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-neutral-700);
+}
+
+.report-type-checkbox--checked .report-type-checkbox__label {
+  color: var(--color-primary-700);
 }
 
 /* Process Types Section */

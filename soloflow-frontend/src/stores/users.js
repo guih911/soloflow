@@ -14,16 +14,13 @@ export const useUserStore = defineStore('users', () => {
     error.value = null
     
     try {
-      console.log('Fetching users for company:', companyId)
       
       const params = companyId ? { companyId } : {}
       const response = await api.get('/users', { params })
       
-      console.log('Users fetched:', response.data)
       users.value = response.data
       return response.data
     } catch (err) {
-      console.error('Error fetching users:', err)
       error.value = err.response?.data?.message || 'Erro ao buscar usuários'
       
       if (err.response?.status === 400) {
@@ -57,7 +54,6 @@ export const useUserStore = defineStore('users', () => {
     error.value = null
     
     try {
-      console.log('Creating user with data:', data)
       
       // Validar dados antes de enviar
       if (!data.name || !data.email) {
@@ -93,18 +89,15 @@ export const useUserStore = defineStore('users', () => {
         }))
       }
       
-      console.log('Sending user data:', userData)
       
       const response = await api.post('/users', userData)
       
-      console.log('User created successfully:', response.data)
       
       // Atualizar lista local
       await fetchUsers()
       
       return response.data
     } catch (err) {
-      console.error('Error creating user:', err)
       
       let errorMessage = 'Erro ao criar usuário'
       
@@ -127,7 +120,6 @@ export const useUserStore = defineStore('users', () => {
       
       // Log detalhado do erro para debug
       if (err.response?.data) {
-        console.error('Server error details:', err.response.data)
       }
       
       throw new Error(errorMessage)
@@ -141,7 +133,6 @@ export const useUserStore = defineStore('users', () => {
     error.value = null
     
     try {
-      console.log('Updating user with data:', data)
       
       // Filtrar apenas campos que podem ser atualizados
       const updateData = {}
@@ -150,7 +141,6 @@ export const useUserStore = defineStore('users', () => {
       
       const response = await api.patch(`/users/${id}`, updateData)
       
-      console.log('User updated successfully:', response.data)
       
       // Atualizar na lista local
       const index = users.value.findIndex(u => u.id === id)
@@ -160,7 +150,6 @@ export const useUserStore = defineStore('users', () => {
       
       return response.data
     } catch (err) {
-      console.error('Error updating user:', err)
       
       let errorMessage = 'Erro ao atualizar usuário'
       if (err.response?.data?.message) {
@@ -179,7 +168,6 @@ export const useUserStore = defineStore('users', () => {
     error.value = null
     
     try {
-      console.log('Updating user companies:', { id, companiesData })
       
       // Validar dados
       if (!companiesData || companiesData.length === 0) {
@@ -203,14 +191,12 @@ export const useUserStore = defineStore('users', () => {
       
       const response = await api.patch(`/users/${id}/companies`, { companies })
       
-      console.log('User companies updated successfully:', response.data)
       
       // Atualizar lista completa
       await fetchUsers()
       
       return response.data
     } catch (err) {
-      console.error('Error updating user companies:', err)
       
       let errorMessage = 'Erro ao atualizar empresas do usuário'
       if (err.response?.data?.message) {
@@ -257,7 +243,6 @@ export const useUserStore = defineStore('users', () => {
       // Remover da lista local
       users.value = users.value.filter(u => u.id !== id)
       
-      console.log('User deleted successfully')
     } catch (err) {
       const errorMessage = err.response?.data?.message || 'Erro ao remover usuário'
       error.value = errorMessage
@@ -272,17 +257,14 @@ export const useUserStore = defineStore('users', () => {
     error.value = null
 
     try {
-      console.log('Resetting password for user:', userId)
 
-      if (!newPassword || newPassword.length < 6) {
-        throw new Error('Senha deve ter no mínimo 6 caracteres')
+      if (!newPassword || newPassword.length < 8) {
+        throw new Error('Senha deve ter no mínimo 8 caracteres')
       }
 
       await api.patch(`/users/${userId}/reset-password`, { newPassword })
 
-      console.log('Password reset successfully')
     } catch (err) {
-      console.error('Error resetting password:', err)
       const errorMessage = err.response?.data?.message || 'Erro ao resetar senha'
       error.value = errorMessage
       throw new Error(errorMessage)
