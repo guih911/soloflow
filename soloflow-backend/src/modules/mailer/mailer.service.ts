@@ -34,11 +34,8 @@ export class MailerService {
       return;
     }
 
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:5173');
-    const logoUrl = `${frontendUrl}/logo.png`;
     const from = this.configService.get<string>('SMTP_FROM') || this.configService.get<string>('SMTP_USER');
-
-    const html = signatureOtpTemplate(userName, otpCode, logoUrl);
+    const html = signatureOtpTemplate(userName, otpCode);
 
     try {
       await this.transporter.sendMail({
@@ -62,10 +59,8 @@ export class MailerService {
 
     const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:5173');
     const resetUrl = `${frontendUrl}/redefinir-senha?token=${token}`;
-    const logoUrl = `${frontendUrl}/logo.png`;
     const from = this.configService.get<string>('SMTP_FROM') || this.configService.get<string>('SMTP_USER');
-
-    const html = passwordResetTemplate(userName, resetUrl, logoUrl);
+    const html = passwordResetTemplate(userName, resetUrl);
 
     try {
       await this.transporter.sendMail({
