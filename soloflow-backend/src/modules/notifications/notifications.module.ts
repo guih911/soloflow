@@ -11,7 +11,7 @@ import { NotificationEventsListener } from './notification-events.listener';
     ConfigModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: process.env.JWT_EXPIRATION || '8h' },
+      signOptions: { expiresIn: (process.env.JWT_EXPIRATION || '8h') as any },
     }),
   ],
   controllers: [NotificationsController],
