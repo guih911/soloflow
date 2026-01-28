@@ -290,12 +290,32 @@ export class CacheService {
    */
   async isRedisAvailable(): Promise<boolean> {
     try {
+      // Método 1: Verificar via stores (cache-manager-redis-store v2)
       const stores = (this.cacheManager as any).stores;
       const redisClient = stores?.[0]?.client;
       if (redisClient && typeof redisClient.ping === 'function') {
         await redisClient.ping();
         return true;
       }
+
+      // Método 2: Verificar via store direto (cache-manager-redis-store v3+)
+      const store = (this.cacheManager as any).store;
+      if (store?.client && typeof store.client.ping === 'function') {
+        await store.client.ping();
+        return true;
+      }
+
+      // Método 3: Tentar uma operação de cache simples
+      const testKey = '__redis_test__';
+      await this.cacheManager.set(testKey, 'test', 1000);
+      const result = await this.cacheManager.get(testKey);
+      await this.cacheManager.del(testKey);
+
+      // Se a operação funcionar e o store tiver propriedades típicas de Redis, consideramos disponível
+      if (result === 'test' && (stores?.[0]?.name === 'redis' || store?.name === 'redis')) {
+        return true;
+      }
+
       return false;
     } catch {
       return false;
