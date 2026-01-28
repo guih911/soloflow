@@ -1187,23 +1187,34 @@ function getExecutionSlaStatus(execution) {
       overdueText: ''
     }
   }
-  
+
+  // Se a etapa já foi concluída, não mostrar alerta de atraso
+  if (execution.completedAt || execution.status === 'COMPLETED' || execution.status === 'REJECTED' || execution.status === 'SKIPPED') {
+    return {
+      hasDeadline: false,
+      isOverdue: false,
+      isNearDeadline: false,
+      remainingText: '',
+      overdueText: ''
+    }
+  }
+
   const now = dayjs()
   const dueAt = dayjs(execution.dueAt)
-  
+
   const isOverdue = now.isAfter(dueAt)
   const diffHours = Math.abs(dueAt.diff(now, 'hours'))
   const isNearDeadline = !isOverdue && diffHours <= 4
-  
+
   let remainingText = ''
   let overdueText = ''
-  
+
   if (isOverdue) {
     overdueText = dueAt.fromNow()
   } else {
     remainingText = dueAt.fromNow()
   }
-  
+
   return {
     hasDeadline: true,
     isOverdue,
